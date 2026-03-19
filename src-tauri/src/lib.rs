@@ -5,41 +5,42 @@ pub mod document;
 pub mod error;
 pub mod events;
 pub mod markdown;
+pub mod viewer;
 pub mod watcher;
-
-use std::path::PathBuf;
 
 use tauri::Manager;
 
 use app_state::AppState;
+use cli::StartupTarget;
 use document::service::DocumentService;
+use viewer::service::ViewerService;
 use watcher::service::WatcherService;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run(startup_path: PathBuf) -> Result<(), String> {
+pub fn run(startup_target: StartupTarget) -> Result<(), String> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let document_service = DocumentService::new();
+            let viewer_service = ViewerService::new();
             let watcher_service = WatcherService::new();
-
-            watcher_service.watch_active_document(
-                startup_path.clone(),
-                app_handle.clone(),
-                document_service.clone(),
-            )?;
+            let startup_context = viewer_service.startup_context(&startup_target)?;
 
             app.manage(AppState::new(
-                startup_path.clone(),
+                startup_context,
                 app_handle,
                 document_service,
+                viewer_service,
                 watcher_service,
             ));
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::document::get_startup_document_path,
+            commands::document::get_startup_context,
+            commands::document::list_directory,
+            commands::document::open_file_preview,
             commands::document::open_document,
             commands::document::save_document,
             commands::document::reload_document,

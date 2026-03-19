@@ -146,11 +146,18 @@ button {
 
 .workspace__body {
   display: grid;
-  grid-template-columns: minmax(14rem, 19rem) minmax(24rem, 1fr) minmax(18rem, 30rem);
   gap: 1rem;
   flex: 1;
   min-height: 0;
   padding: 1rem 1.25rem 1.25rem;
+}
+
+.workspace__body--markdown {
+  grid-template-columns: minmax(14rem, 19rem) minmax(24rem, 1fr) minmax(18rem, 30rem);
+}
+
+.workspace__body--file-view {
+  grid-template-columns: minmax(16rem, 22rem) minmax(28rem, 1fr);
 }
 
 .pane {
@@ -251,6 +258,17 @@ button {
   line-height: 1.7;
 }
 
+.preview img,
+.preview video {
+  max-width: 100%;
+  border-radius: 1rem;
+}
+
+.preview video {
+  width: 100%;
+  background: #0f1a1f;
+}
+
 .preview h1,
 .preview h2,
 .preview h3,
@@ -285,13 +303,87 @@ button {
   padding: 1rem;
 }
 
+.file-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 0.9rem;
+}
+
+.file-browser__path {
+  padding: 0.75rem 0.8rem;
+  border-radius: 0.9rem;
+  background: rgba(29, 97, 111, 0.08);
+  color: #274048;
+  font-family: "IBM Plex Mono", "Fira Code", monospace;
+  font-size: 0.84rem;
+  word-break: break-all;
+}
+
+.file-browser__list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-browser__button {
+  display: flex;
+  gap: 0.7rem;
+  width: 100%;
+  border: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.9rem;
+  background: transparent;
+  color: #243a41;
+  text-align: left;
+}
+
+.file-browser__button:hover,
+.file-browser__button--active {
+  background: rgba(29, 97, 111, 0.1);
+}
+
+.file-browser__kind {
+  min-width: 3.2rem;
+  color: #7a6d5c;
+  font-family: "IBM Plex Mono", "Fira Code", monospace;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.file-browser__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-preview {
+  margin: 0;
+}
+
+.file-preview--binary,
+.file-preview--text {
+  border-radius: 1rem;
+  background: #f3ede3;
+  padding: 1rem;
+}
+
+.file-preview__meta {
+  color: #6f6354;
+  font-size: 0.88rem;
+}
+
 .empty {
   padding: 1rem;
   color: #6f6354;
 }
 
 @media (max-width: 1080px) {
-  .workspace__body {
+  .workspace__body--markdown,
+  .workspace__body--file-view {
     grid-template-columns: 1fr;
   }
 

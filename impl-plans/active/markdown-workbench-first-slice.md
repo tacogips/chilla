@@ -335,6 +335,12 @@ Required repository outcomes:
 **Blockers**: `task dev` and live external-file watcher behavior still need an interactive desktop run
 **Notes**: Fixed the TOC jump-to-line editor effect so it only runs when the requested heading changes, fixed Mermaid hydration so preview updates re-render diagrams while the preview remains open, hardened Tauri event-listener cleanup during mount/unmount races, and reverified `bun run typecheck`, `bun run test`, `bun run build`, `CARGO_TERM_QUIET=true cargo test`, and `task test` via `nix develop`.
 
+### Session: 2026-03-19 15:20 JST
+**Tasks Completed**: Follow-up Markdown preview media and URL handling improvements
+**Tasks In Progress**: TASK-006 runtime smoke validation
+**Blockers**: External-link opening and local media rendering still need an interactive desktop smoke check in a real Tauri window
+**Notes**: Added Markdown autolinking, video-file rendering from Markdown media syntax, preview-side local asset URL rewriting relative to the open document, and default-browser opening for external links via the Tauri opener plugin. Added Rust renderer tests and Bun helper tests, with full mixed-stack verification to follow.
+
 ## Related Plans
 
 - **Previous**: None

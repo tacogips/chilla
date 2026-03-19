@@ -12,15 +12,16 @@ Command-line interface design decisions, including subcommands, flags, options, 
 
 ### Subcommands
 
-The first product slice defines no named subcommands. The command surface is a single binary invocation with an optional information flag or one required document path.
+The current command surface defines no named subcommands. The binary accepts an optional information flag or zero/one positional filesystem path.
 
 | Invocation | Arguments | Behavior |
 |------------|-----------|----------|
-| `marky <file_name>` | Path to a Markdown file | Open the file directly in the desktop editor workspace |
+| `marky` | None | Open the current working directory in file view mode |
+| `marky <path>` | Path to a file or directory | Open Markdown files in markdown mode, other files in file view mode, or directories in file view mode |
 | `marky --help` | None | Show CLI help |
 | `marky --version` | None | Show application version |
 
-The positional argument is named `file_name` in product messaging, but it should accept a relative or absolute filesystem path.
+The positional argument is named `path` in product messaging and accepts a relative or absolute filesystem path.
 
 ### Flags and Options
 
@@ -46,18 +47,18 @@ The positional argument is named `file_name` in product messaging, but it should
 
 ### Startup Contract
 
-- `marky <file_name>` is the only document-open entry point required for the first slice.
-- Invoking `marky` with no positional argument is invalid in the first slice and exits with code `2`.
-- The CLI validates that the path exists, is readable, and resolves to a supported Markdown-like file before initializing the desktop app.
-- Supported file extensions for the first slice are `.md`, `.markdown`, and `.mdown`.
-- The validated path is canonicalized as needed and forwarded into the Tauri application as initial document context.
-- Unsupported file types fail fast with a readable error before the desktop window opens.
+- `marky` with no positional argument starts in file view mode rooted at the current working directory.
+- `marky <dir_path>` starts in file view mode rooted at the requested directory.
+- `marky <markdown_file>` starts in markdown mode for that file.
+- `marky <other_file>` starts in file view mode rooted at the parent directory with that file selected for preview.
+- The CLI validates that the path exists and is readable before initializing the desktop app.
+- Canonicalized startup context is forwarded into the Tauri application, including both the initial mode and the initial directory/file selection.
+- Markdown mode still recognizes `.md`, `.markdown`, and `.mdown` as Markdown inputs.
 
 ### Future-Compatible Command Notes
 
 - The initial design does not require subcommands such as `open`, `watch`, or `export`.
-- Future additions should preserve `marky <file_name>` as the shortest open path because it is the primary interaction model.
-- Bare `marky` startup without an initial file is intentionally deferred until a no-document workspace or file-picker experience is designed.
+- Future additions should preserve direct `marky <path>` startup because it is the primary interaction model.
 - If recent-files or workspace-restoration support is added later, it should not break direct file open behavior.
 
 ---

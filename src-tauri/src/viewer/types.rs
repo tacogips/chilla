@@ -1,0 +1,71 @@
+use serde::Serialize;
+
+use crate::document::types::DocumentSnapshot;
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceMode {
+    Markdown,
+    FileView,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StartupContext {
+    pub initial_mode: WorkspaceMode,
+    pub current_directory_path: String,
+    pub selected_file_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DirectorySnapshot {
+    pub current_directory_path: String,
+    pub parent_directory_path: Option<String>,
+    pub entries: Vec<DirectoryEntry>,
+    pub selected_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DirectoryEntry {
+    pub path: String,
+    pub name: String,
+    pub is_directory: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FilePreview {
+    Markdown {
+        mime_type: String,
+        #[serde(flatten)]
+        snapshot: DocumentSnapshot,
+    },
+    Image {
+        path: String,
+        file_name: String,
+        mime_type: String,
+        html: String,
+        last_modified: String,
+    },
+    Video {
+        path: String,
+        file_name: String,
+        mime_type: String,
+        html: String,
+        last_modified: String,
+    },
+    Text {
+        path: String,
+        file_name: String,
+        mime_type: String,
+        html: String,
+        last_modified: String,
+    },
+    Binary {
+        path: String,
+        file_name: String,
+        mime_type: String,
+        html: String,
+        last_modified: String,
+        message: String,
+    },
+}

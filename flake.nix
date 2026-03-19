@@ -39,12 +39,7 @@
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rust-components;
 
-        # Common build inputs
-        commonBuildInputs = with pkgs; [
-          openssl
-          pkg-config
-        ]
-        ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
+        linuxGuiLibraries = with pkgs; [
           atk
           cairo
           gdk-pixbuf
@@ -53,7 +48,16 @@
           libsoup_3
           pango
           webkitgtk_4_1
+        ];
+
+        linuxRuntimeLibraryPath = pkgs.lib.makeLibraryPath linuxGuiLibraries;
+
+        # Common build inputs
+        commonBuildInputs = with pkgs; [
+          openssl
+          pkg-config
         ]
+        ++ pkgs.lib.optionals pkgs.stdenv.isLinux linuxGuiLibraries
         ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
           darwin.apple_sdk.frameworks.Security
           darwin.apple_sdk.frameworks.SystemConfiguration
@@ -126,6 +130,7 @@
           buildInputs = commonBuildInputs;
 
           shellHook = ''
+            export LD_LIBRARY_PATH="${pkgs.lib.optionalString pkgs.stdenv.isLinux "${linuxRuntimeLibraryPath}:$LD_LIBRARY_PATH"}"
             echo "Rust development environment ready"
             echo "Rust version: $(rustc --version)"
             echo "Cargo version: $(cargo --version)"

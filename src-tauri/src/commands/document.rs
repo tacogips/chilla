@@ -2,15 +2,42 @@ use std::path::{Path, PathBuf};
 
 use tauri::State;
 
-use crate::{app_state::AppState, document::types::DocumentSnapshot};
+use crate::{
+    app_state::AppState,
+    document::types::DocumentSnapshot,
+    viewer::types::{DirectorySnapshot, FilePreview, StartupContext},
+};
 
 fn format_command_error(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
 #[tauri::command]
-pub fn get_startup_document_path(state: State<'_, AppState>) -> Result<String, String> {
-    Ok(state.startup_path().display().to_string())
+pub fn get_startup_context(state: State<'_, AppState>) -> Result<StartupContext, String> {
+    Ok(state.startup_context())
+}
+
+#[tauri::command]
+pub fn list_directory(
+    path: String,
+    selected_path: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<DirectorySnapshot, String> {
+    state
+        .viewer_service()
+        .list_directory(
+            Path::new(&path),
+            selected_path.as_deref().map(Path::new),
+        )
+        .map_err(format_command_error)
+}
+
+#[tauri::command]
+pub fn open_file_preview(path: String, state: State<'_, AppState>) -> Result<FilePreview, String> {
+    state
+        .viewer_service()
+        .open_file_preview(Path::new(&path))
+        .map_err(format_command_error)
 }
 
 #[tauri::command]

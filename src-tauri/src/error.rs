@@ -8,6 +8,10 @@ pub enum AppError {
     UnsupportedExtension(String),
     #[error("path does not point to a regular file: {0}")]
     NotAFile(String),
+    #[error("path does not point to a directory: {0}")]
+    NotADirectory(String),
+    #[error("path is not a supported file or directory target: {0}")]
+    UnsupportedPathKind(String),
     #[error("failed to {action} `{path}`: {source}")]
     Io {
         action: &'static str,
@@ -34,7 +38,11 @@ impl AppError {
     pub fn exit_code(&self) -> i32 {
         match self {
             Self::CliUsage { exit_code, .. } => *exit_code,
-            Self::UnsupportedExtension(_) | Self::NotAFile(_) | Self::Io { .. } => 3,
+            Self::UnsupportedExtension(_)
+            | Self::NotAFile(_)
+            | Self::NotADirectory(_)
+            | Self::UnsupportedPathKind(_)
+            | Self::Io { .. } => 3,
             Self::Watcher(_) | Self::State(_) => 1,
         }
     }

@@ -26,11 +26,26 @@ Notable items that do not fit into architecture or client categories.
 - Mermaid support applies to fenced code blocks marked for Mermaid diagrams.
 - The first-slice file-type policy accepts `.md`, `.markdown`, and `.mdown` paths only.
 
+## File Viewer Mode Notes
+
+### Scope Additions
+
+- `marky` is no longer Markdown-file-only at startup; it must handle directories, Markdown files, other text files, and binary files.
+- File type parsing is a Rust responsibility and should use a dedicated library rather than frontend sniffing.
+- Binary files are previewable only as metadata/placeholders, not as rendered content.
+- File view mode uses a yazi-style flat current-directory list, not a recursive tree widget.
+
+### Interaction Assumptions
+
+- The flat file list still counts as the "file tree" for product language because directory navigation preserves filesystem hierarchy through current-directory replacement.
+- `Ctrl-M` should be treated as equivalent to Enter/confirm in the webview key handler.
+- Markdown mode remains the only editable mode in this feature slice; non-Markdown files are view-only.
+
 ### Verification Targets For Later Implementation
 
 - Bun typecheck and frontend tests for Solid.js workspace behavior
 - Cargo checks and tests for Markdown parsing, heading extraction, and file watcher behavior
-- Mixed-stack validation that Tauri events keep editor, TOC, and preview in sync
+- Mixed-stack validation that Tauri events keep editor, TOC, preview, and file-view selection in sync
 
 ### Implementation Follow-Up
 

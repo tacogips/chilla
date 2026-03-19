@@ -25,6 +25,20 @@ struct HeadingDraft {
     line_start: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EmbeddedMediaKind {
+    Image,
+    Video,
+}
+
+#[derive(Debug, Clone)]
+struct EmbeddedMediaDraft {
+    destination: String,
+    title: String,
+    alt_text: String,
+    kind: EmbeddedMediaKind,
+}
+
 pub fn render_markdown(source_text: &str) -> RenderedDocument {
     let parser = Parser::new_ext(source_text, parser_options());
     let line_starts = line_starts(source_text);
@@ -93,8 +107,29 @@ fn sanitize_event(event: Event<'_>) -> Event<'_> {
 fn render_html_with_heading_ids(events: Vec<Event<'_>>, flat_headings: &[FlatHeading]) -> String {
     let mut heading_index = 0usize;
     let mut output_events = Vec::with_capacity(events.len());
+    let mut current_media: Option<EmbeddedMediaDraft> = None;
+    let mut link_depth = 0usize;
+    let mut inside_code_block = false;
 
     for event in events {
+        if let Some(media) = current_media.as_mut() {
+            match event {
+                Event::End(TagEnd::Image) => {
+                    output_events.push(Event::Html(CowStr::from(render_embedded_media(media))));
+                    current_media = None;
+                }
+                Event::Text(text) | Event::Code(text) => {
+                    media.alt_text.push_str(text.as_ref());
+                }
+                Event::SoftBreak | Event::HardBreak => {
+                    media.alt_text.push(' ');
+                }
+                _ => {}
+            }
+
+            continue;
+        }
+
         match event {
             Event::Start(Tag::Heading { level, .. }) => {
                 let tag_name = heading_tag_name(level);
@@ -111,6 +146,35 @@ fn render_html_with_heading_ids(events: Vec<Event<'_>>, flat_headings: &[FlatHea
                 output_events.push(Event::Html(CowStr::from(format!("</{tag_name}>"))));
                 heading_index += 1;
             }
+            Event::Start(Tag::Image {
+                dest_url, title, ..
+            }) => {
+                current_media = Some(EmbeddedMediaDraft {
+                    destination: dest_url.to_string(),
+                    title: title.to_string(),
+                    alt_text: String::new(),
+                    kind: embedded_media_kind(dest_url.as_ref()),
+                });
+            }
+            Event::Start(Tag::Link { .. }) => {
+                link_depth += 1;
+                output_events.push(event);
+            }
+            Event::End(TagEnd::Link) => {
+                link_depth = link_depth.saturating_sub(1);
+                output_events.push(event);
+            }
+            Event::Start(Tag::CodeBlock(_)) => {
+                inside_code_block = true;
+                output_events.push(event);
+            }
+            Event::End(TagEnd::CodeBlock) => {
+                inside_code_block = false;
+                output_events.push(event);
+            }
+            Event::Text(text) if link_depth == 0 && !inside_code_block => {
+                push_linkified_text(&mut output_events, text.as_ref())
+            }
             other => output_events.push(other),
         }
     }
@@ -118,6 +182,164 @@ fn render_html_with_heading_ids(events: Vec<Event<'_>>, flat_headings: &[FlatHea
     let mut html = String::new();
     push_html(&mut html, output_events.into_iter());
     html
+}
+
+fn push_linkified_text(output_events: &mut Vec<Event<'_>>, text: &str) {
+    let mut cursor = 0usize;
+
+    while let Some((start, end)) = find_next_url(text, cursor) {
+        if start > cursor {
+            output_events.push(Event::Text(CowStr::from(text[cursor..start].to_string())));
+        }
+
+        let url = &text[start..end];
+        output_events.push(Event::Html(CowStr::from(format!(
+            "<a href=\"{}\">{}</a>",
+            escape_html_attribute(url),
+            escape_html_text(url),
+        ))));
+        cursor = end;
+    }
+
+    if cursor < text.len() {
+        output_events.push(Event::Text(CowStr::from(text[cursor..].to_string())));
+    }
+}
+
+fn find_next_url(text: &str, start_at: usize) -> Option<(usize, usize)> {
+    let prefixes = ["https://", "http://"];
+    let mut next_match: Option<(usize, &str)> = None;
+
+    for prefix in prefixes {
+        let mut search_from = start_at;
+
+        while let Some(offset) = text[search_from..].find(prefix) {
+            let absolute_offset = search_from + offset;
+            let is_word_boundary = absolute_offset == 0
+                || !text[..absolute_offset]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|character| character.is_alphanumeric());
+
+            if is_word_boundary {
+                match next_match {
+                    Some((current_offset, _)) if current_offset <= absolute_offset => {}
+                    _ => next_match = Some((absolute_offset, prefix)),
+                }
+                break;
+            }
+
+            search_from = absolute_offset + prefix.len();
+        }
+    }
+
+    let (match_start, prefix) = next_match?;
+    let mut match_end = match_start + prefix.len();
+
+    for (_, character) in text[match_end..].char_indices() {
+        if character.is_whitespace() || matches!(character, '<' | '>' | '"' | '\'') {
+            break;
+        }
+
+        match_end += character.len_utf8();
+    }
+
+    while let Some(character) = text[match_start..match_end].chars().next_back() {
+        let should_trim = matches!(character, '.' | ',' | '!' | '?' | ':' | ';')
+            || has_unbalanced_trailing_delimiter(&text[match_start..match_end], character);
+
+        if !should_trim {
+            break;
+        }
+
+        match_end -= character.len_utf8();
+    }
+
+    if match_end > match_start {
+        Some((match_start, match_end))
+    } else {
+        None
+    }
+}
+
+fn has_unbalanced_trailing_delimiter(candidate: &str, trailing_character: char) -> bool {
+    match trailing_character {
+        ')' => count_character(candidate, '(') < count_character(candidate, ')'),
+        ']' => count_character(candidate, '[') < count_character(candidate, ']'),
+        '}' => count_character(candidate, '{') < count_character(candidate, '}'),
+        _ => false,
+    }
+}
+
+fn count_character(value: &str, target: char) -> usize {
+    value.chars().filter(|character| *character == target).count()
+}
+
+fn render_embedded_media(media: &EmbeddedMediaDraft) -> String {
+    let source = escape_html_attribute(&media.destination);
+    let title_attribute = if media.title.trim().is_empty() {
+        String::new()
+    } else {
+        format!(" title=\"{}\"", escape_html_attribute(&media.title))
+    };
+    let alt_text = media.alt_text.trim();
+    let escaped_alt_text = escape_html_attribute(alt_text);
+
+    match media.kind {
+        EmbeddedMediaKind::Image => {
+            format!("<img src=\"{source}\" alt=\"{escaped_alt_text}\"{title_attribute} />")
+        }
+        EmbeddedMediaKind::Video => {
+            let caption = if alt_text.is_empty() {
+                String::new()
+            } else {
+                format!("<figcaption>{}</figcaption>", escape_html_text(alt_text))
+            };
+            let aria_attribute = if alt_text.is_empty() {
+                String::new()
+            } else {
+                format!(" aria-label=\"{escaped_alt_text}\"")
+            };
+
+            format!(
+                "<figure class=\"preview-media preview-media--video\"><video controls preload=\"metadata\" src=\"{source}\"{title_attribute}{aria_attribute}>{}</video>{caption}</figure>",
+                escape_html_text(alt_text),
+            )
+        }
+    }
+}
+
+fn embedded_media_kind(destination: &str) -> EmbeddedMediaKind {
+    if is_video_destination(destination) {
+        EmbeddedMediaKind::Video
+    } else {
+        EmbeddedMediaKind::Image
+    }
+}
+
+fn is_video_destination(destination: &str) -> bool {
+    let trimmed = destination
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(destination)
+        .to_ascii_lowercase();
+
+    ["mp4", "m4v", "mov", "webm", "ogv"]
+        .iter()
+        .any(|extension| trimmed.ends_with(&format!(".{extension}")))
+}
+
+fn escape_html_attribute(value: &str) -> String {
+    escape_html_text(value)
+        .replace('\"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+fn escape_html_text(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 fn heading_tag_name(level: HeadingLevel) -> &'static str {
@@ -259,5 +481,57 @@ mod tests {
 
         assert!(rendered.html.contains("language-mermaid"));
         assert!(rendered.html.contains("graph TD;"));
+    }
+
+    #[test]
+    fn autolinks_plain_urls() {
+        let rendered = render_markdown("Visit https://example.com/docs for details.");
+
+        assert!(rendered
+            .html
+            .contains("<a href=\"https://example.com/docs\">https://example.com/docs</a>"));
+    }
+
+    #[test]
+    fn autolinks_urls_without_trailing_parentheses_or_punctuation() {
+        let rendered = render_markdown("Visit (https://example.com/docs).");
+
+        assert!(rendered
+            .html
+            .contains("(<a href=\"https://example.com/docs\">https://example.com/docs</a>)."));
+    }
+
+    #[test]
+    fn autolinks_later_valid_urls_after_invalid_prefix_boundaries() {
+        let rendered =
+            render_markdown("skiphttps://invalid.example https://valid.example/docs");
+
+        assert!(rendered.html.contains(
+            "<a href=\"https://valid.example/docs\">https://valid.example/docs</a>"
+        ));
+        assert!(!rendered.html.contains(
+            "<a href=\"https://invalid.example\">https://invalid.example</a>"
+        ));
+    }
+
+    #[test]
+    fn renders_video_files_from_markdown_media_syntax() {
+        let rendered = render_markdown("![Demo clip](./fixtures/demo.mp4)");
+
+        assert!(rendered
+            .html
+            .contains("<video controls preload=\"metadata\""));
+        assert!(rendered.html.contains("src=\"./fixtures/demo.mp4\""));
+        assert!(rendered.html.contains("<figcaption>Demo clip</figcaption>"));
+        assert!(!rendered.html.contains("<img"));
+    }
+
+    #[test]
+    fn preserves_standard_image_rendering_for_image_files() {
+        let rendered = render_markdown("![Preview image](./fixtures/preview.png)");
+
+        assert!(rendered
+            .html
+            .contains("<img src=\"./fixtures/preview.png\" alt=\"Preview image\""));
     }
 }

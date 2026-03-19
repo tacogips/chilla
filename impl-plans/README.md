@@ -40,6 +40,7 @@ Large features are split into multiple related plans with cross-references.
 | Plan | Status | Design Reference | Last Updated |
 |------|--------|------------------|--------------|
 | `markdown-workbench-first-slice.md` | Ready | `design-docs/specs/design-markdown-workbench.md` | 2026-03-19 |
+| `file-viewer-mode.md` | In Progress | `design-docs/specs/design-file-viewer-mode.md` | 2026-03-19 |
 
 ## Completed Plans
 
@@ -66,6 +67,7 @@ Only plans from eligible phases should be read to minimize context loading.
 PHASE_TO_PLANS = {
   1: [
     "impl-plans/active/markdown-workbench-first-slice.md",
+    "impl-plans/active/file-viewer-mode.md",
   ],
   2: [
     # Add Phase 2 plan files here
