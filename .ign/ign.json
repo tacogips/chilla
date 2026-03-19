@@ -1,0 +1,15 @@
+{
+  "template": {
+    "url": "https://github.com/tacogips/ign-template/rust-v1",
+    "path": "rust-v1",
+    "ref": "main"
+  },
+  "hash": "542003fa28bb8a2f9c3dcb3dc75c9c19372dc6ed2468702f2ef402cc1c7e1d17",
+  "metadata": {
+    "generated_at": "2026-03-19T11:27:34.933907709+09:00",
+    "generated_by": "ign checkout",
+    "template_name": "rust-v1",
+    "template_version": "1.0.0",
+    "ign_version": "0.1.14"
+  }
+}

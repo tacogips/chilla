@@ -1,0 +1,57 @@
+# This .gitignore file is expanded to the directory where `ign checkout` is executed.
+# It is NOT for the ign-template repository itself.
+
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo lock (optional - uncomment if you want to ignore)
+# Cargo.lock
+
+## nix/git
+.pre-commit-config.yaml
+**/.direnv
+**/.env
+**/.envrc.private*
+**/*.private*
+
+## large files
+**/*.zip
+
+## ide's /meta infos
+**/.vscode
+**/.idea
+**/.~lock*
+**/.DS_Store
+
+## ts/js
+**/node_modules
+
+## zig
+**/zig-out
+**/.zig-cache
+
+## pythons
+**/.venv/
+**/venv/
+**/*.pkl
+**/*.pyc
+**/*.pyo
+**/*.ipynb
+**/__pycache__/
+**/.pytest_cache/
+**/.ipynb_checkpoints/
+**/.python-version
+**/.mypy_cache/
+**/notebook/
+**/.tox/
+
+## tmps
+result
+**/tmp
+
+## Coverage
+*.profraw
+*.profdata
+tarpaulin-report.html

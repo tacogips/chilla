@@ -1,0 +1,14 @@
+{
+  "variables": {
+    "AUTHOR_EMAIL": "",
+    "AUTHOR_NAME": "",
+    "DESCRIPTION": "A Rust project",
+    "EDITION": 2021,
+    "HAS_AUTHOR": false,
+    "HOMEPAGE": "https://github.com/user/repo",
+    "PROJECT_NAME": "marky",
+    "REPOSITORY": "https://github.com/user/repo",
+    "RUST_VERSION": "1.92.0",
+    "VERSION": "0.1.0"
+  }
+}
