@@ -9,6 +9,12 @@
       "source": "./plugins/lsp",
       "description": "Rust language server (rust-analyzer) support for Claude Code",
       "version": "1.0.0"
+    },
+    {
+      "name": "ts-lsp",
+      "source": "./plugins/lsp",
+      "description": "TypeScript language server support for Claude Code",
+      "version": "1.0.0"
     }
   ]
 }

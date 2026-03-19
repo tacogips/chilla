@@ -131,49 +131,86 @@ feat: implement user authentication system
 
 ## Project Overview
 
-This is marky - a Rust project with Nix flake development environment support.
+This is marky - a Tauri + Bun desktop application for viewing and editing Markdown.
+
+This repository was originally generated from `ign-template`'s `rust-v1` template, so some Rust-oriented scaffolding remains. Agent instructions in this repository must treat the project as a mixed Rust + TypeScript Tauri application, not as a Rust-only crate.
 
 ## Development Environment
-- **Language**: Rust
-- **Build Tool**: Cargo (with go-task for automation)
+- **Languages**: Rust for Tauri/backend work, TypeScript for frontend/app work
+- **Frontend Runtime / Package Manager**: Bun
+- **Desktop Framework**: Tauri
+- **Build Tools**: Cargo for Rust, Bun for frontend scripts, go-task for automation
 - **Environment Manager**: Nix flakes + direnv
 - **Development Shell**: Run `nix develop` or use direnv to activate
 - **Rust Toolchain**: Managed via rust-toolchain.toml and fenix
 
-## Project Structure
+## Expected Project Structure
 ```
 .
-├── flake.nix          # Nix flake configuration for Rust development
-├── flake.lock         # Locked flake dependencies
-├── Cargo.toml         # Rust package manifest
-├── Cargo.lock         # Locked Rust dependencies
-├── rust-toolchain.toml # Rust toolchain specification
-├── .envrc             # direnv configuration
-├── src/               # Source code
-│   ├── lib.rs         # Library root
-│   └── main.rs        # Binary entry point
-└── .gitignore         # Git ignore patterns
+├── flake.nix              # Nix flake configuration for mixed Rust/Bun development
+├── Cargo.toml             # Root Rust manifest if shared Rust code exists at repo root
+├── package.json           # Bun frontend package manifest
+├── bun.lockb / bun.lock   # Bun lock file
+├── rust-toolchain.toml    # Rust toolchain specification
+├── src/                   # Frontend TypeScript application code
+├── src-tauri/             # Tauri application and Rust desktop/backend code
+│   ├── Cargo.toml         # Tauri Rust manifest
+│   ├── tauri.conf.json    # Tauri app configuration
+│   └── src/               # Commands, state, and desktop integration
+├── design-docs/           # Design documents
+├── impl-plans/            # Implementation plans
+└── .agents/               # Agent skills, commands, scripts, and settings
 ```
 
 ## Development Tools Available
 - `cargo` - Rust build tool and package manager
 - `rustc` - Rust compiler
 - `rust-analyzer` - Rust language server (LSP)
+- `bun` - JavaScript/TypeScript runtime and package manager
+- `tsc` - TypeScript compiler
+- `typescript-language-server` - TypeScript language server (LSP)
+- `prettier` - Frontend code formatter
 - `clippy` - Rust linter
 - `rustfmt` - Rust formatter
 - `cargo-nextest` - Fast test runner
+- `tauri` - Tauri CLI, typically via `bunx tauri` or Cargo integration
 - `task` - Task runner (go-task)
 
 ## Rust Code Development
 
-**IMPORTANT**: When writing Rust code, you (the LLM model) MUST use the specialized agents:
+**IMPORTANT**: When writing Rust code, especially under `src-tauri/`, you (the LLM model) MUST use the specialized agents:
 
 1. **rust-coding agent** (`.agents/agents/rust-coding.md`): For writing, refactoring, and implementing Rust code
 2. **check-and-test-after-modify agent** (`.agents/agents/check-and-test-after-modify.md`): MUST be invoked automatically after ANY Rust file modifications
 
 **Coding Standards**: Refer to `.agents/skills/rust-coding-standards/` for Rust coding conventions, project layout, error handling, type safety, and async patterns.
 
-**Cargo Output Configuration**: When running cargo commands, use `CARGO_TERM_QUIET=true` to reduce noise. For nextest, use `NEXTEST_STATUS_LEVEL=fail NEXTEST_FAILURE_OUTPUT=immediate-final NEXTEST_HIDE_PROGRESS_BAR=1`.
+**Cargo Output Configuration**: When running Cargo commands, use `CARGO_TERM_QUIET=true` to reduce noise. For nextest, use `NEXTEST_STATUS_LEVEL=fail NEXTEST_FAILURE_OUTPUT=immediate-final NEXTEST_HIDE_PROGRESS_BAR=1`.
+
+## TypeScript Code Development
+
+**IMPORTANT**: When writing frontend or tooling code in TypeScript/TSX, you (the LLM model) MUST use the specialized agents:
+
+1. **ts-coding agent** (`.agents/agents/ts-coding.md`): For writing, refactoring, and implementing TypeScript code
+2. **check-and-test-after-modify agent** (`.agents/agents/check-and-test-after-modify.md`): MUST be invoked automatically after ANY TypeScript or TSX file modifications
+
+**Coding Standards**: Refer to `.agents/skills/ts-coding-standards/` for TypeScript coding conventions, project layout, error handling, type safety, and async patterns.
+
+**Formatting and Verification**:
+- Use Bun-oriented scripts when available (`bun run typecheck`, `bun run test`)
+- Use `.agents/scripts/format-ts.sh` for repository-local formatting automation
+- Prefer existing project scripts over ad-hoc frontend commands when both exist
+
+## Tauri Application Development
+
+**IMPORTANT**: When a task spans the frontend and `src-tauri/`, you (the LLM model) MUST treat it as Tauri application work rather than independent Rust or TypeScript work.
+
+**Skill Reference**: Refer to `.agents/skills/tauri-development/SKILL.md` for frontend/backend boundary rules, command contract guidance, and mixed-stack verification expectations.
+
+**Mixed-Stack Rules**:
+- Changes to Tauri commands, invoke payloads, events, or persisted document formats must update both Rust and TypeScript sides together
+- Cross-boundary changes should normally be implemented from an implementation plan
+- Verification for mixed Tauri features must cover both Cargo and Bun toolchains
 
 ## Design Documentation
 
@@ -194,8 +231,9 @@ This is marky - a Rust project with Nix flake development environment support.
 ```
 Design Document --> Implementation Plan --> Implementation --> Completion
      |                    |                      |               |
-design-docs/         impl-plans/            rust-coding      Progress
-specs/*.md          active/*.md              agent            Update
+design-docs/         impl-plans/         rust-coding /      Progress
+specs/*.md          active/*.md          ts-coding /        Update
+                                          tauri-development
 ```
 
 ### Creating Implementation Plans
@@ -215,7 +253,7 @@ Use the `/impl-plan` command or `impl-plan` agent to create implementation plans
 Each implementation plan includes:
 
 1. **Design Reference**: Link to specific design document section
-2. **Deliverables**: File paths, function signatures, trait definitions (NO CODE)
+2. **Deliverables**: File paths, function signatures, interface definitions, trait definitions (NO CODE)
 3. **Subtasks**: Parallelizable work units with dependencies
 4. **Completion Criteria**: Definition of done for each task
 5. **Progress Log**: Session-by-session tracking
@@ -252,7 +290,10 @@ When implementing from a plan:
 
 1. Read the implementation plan from `impl-plans/active/`
 2. Select a subtask (consider parallelization and dependencies)
-3. Use the `rust-coding` agent with the deliverable specifications
+3. Use the appropriate coding agent with the deliverable specifications:
+   - `rust-coding` for Rust / `src-tauri/` work
+   - `ts-coding` for frontend TypeScript work
+   - `tauri-development` skill for cross-boundary work
 4. Update the plan's progress log and completion criteria
 5. When all tasks complete, move plan to `impl-plans/completed/`
 
@@ -292,27 +333,31 @@ Each implementation plan tracks progress through:
 
 Example subtask format:
 ```markdown
-### TASK-001: Core Parser Implementation
+### TASK-001: Markdown Open Flow
 **Status**: In Progress
 **Parallelizable**: Yes
-**Deliverables**: src/parser/variable.rs
+**Deliverables**: src-tauri/src/commands/open_markdown.rs, src/lib/ipc/open-markdown.ts
 
 **Completion Criteria**:
-- [x] parse_variables function implemented
-- [x] Variable struct defined
-- [ ] Unit tests written and passing
-- [ ] cargo build passes
+- [x] Rust command implemented
+- [x] Frontend invoke wrapper updated
+- [ ] Bun typecheck and tests pass
+- [ ] Cargo checks pass
 
 ## Progress Log
 
 ### Session: 2025-01-04 10:00
 **Tasks Completed**: TASK-001 partially
-**Notes**: Implemented core parsing, tests pending
+**Notes**: Updated invoke contract, mixed-stack verification pending
 ```
 
 ## Notes
+- This repository is based on `https://github.com/tacogips/ign-template/tree/main/rust-v1`
+- TypeScript-oriented agent assets were imported and adapted from `https://github.com/tacogips/ign-template/tree/main/bun-ts-v1`
+- The application domain is a Tauri + Bun Markdown viewer/editor
 - This project uses Nix flakes for reproducible development environments
 - Use direnv for automatic environment activation
 - Private environment variables should be managed in `tacogips/kinko` and loaded via `kinko direnv export`; `.envrc.private` is not sourced by default
 - All development dependencies are managed through flake.nix
 - Rust toolchain is managed via rust-toolchain.toml and fenix
+- Frontend verification should prefer Bun scripts when available
