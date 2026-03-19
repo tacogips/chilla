@@ -27,6 +27,7 @@
 
 ## ts/js
 **/node_modules
+dist
 
 ## zig
 **/zig-out

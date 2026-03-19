@@ -39,7 +39,7 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan | Status | Design Reference | Last Updated |
 |------|--------|------------------|--------------|
-| (No active plans yet) | - | - | - |
+| `markdown-workbench-first-slice.md` | Ready | `design-docs/specs/design-markdown-workbench.md` | 2026-03-19 |
 
 ## Completed Plans
 
@@ -56,7 +56,7 @@ Only plans from eligible phases should be read to minimize context loading.
 
 | Phase | Status | Depends On |
 |-------|--------|------------|
-| 1 | NOT_STARTED | - |
+| 1 | READY | - |
 | 2 | BLOCKED | Phase 1 |
 | 3 | BLOCKED | Phase 2 |
 
@@ -65,7 +65,7 @@ Only plans from eligible phases should be read to minimize context loading.
 ```
 PHASE_TO_PLANS = {
   1: [
-    # Add Phase 1 plan files here
+    "impl-plans/active/markdown-workbench-first-slice.md",
   ],
   2: [
     # Add Phase 2 plan files here

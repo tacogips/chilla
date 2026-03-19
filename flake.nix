@@ -1,6 +1,6 @@
 {
 
-  description = "A Rust project";
+  description = "A Tauri + Bun Markdown workbench";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/release-24.11";
@@ -34,7 +34,7 @@
 
         rust-components = fenix.packages.${system}.fromToolchainFile {
           file = ./rust-toolchain.toml;
-          sha256 = pkgs.lib.fakeSha256;
+          sha256 = "sha256-sqSWJDUxc+zaz1nBWMAJKTAGBuGWP25GCftIOlCEAtA=";
         };
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rust-components;
@@ -43,7 +43,18 @@
         commonBuildInputs = with pkgs; [
           openssl
           pkg-config
-        ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+        ]
+        ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
+          atk
+          cairo
+          gdk-pixbuf
+          glib
+          gtk3
+          libsoup_3
+          pango
+          webkitgtk_4_1
+        ]
+        ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
           darwin.apple_sdk.frameworks.Security
           darwin.apple_sdk.frameworks.SystemConfiguration
         ];
@@ -53,12 +64,16 @@
           pname = "marky";
           version = "0.1.0";
           src = craneLib.cleanCargoSource ./.;
+          cargoExtraArgs = "--manifest-path src-tauri/Cargo.toml";
           buildInputs = commonBuildInputs;
           nativeBuildInputs = with pkgs; [ pkg-config ];
         };
 
         devPackages = with pkgs; [
+          bun
+          cargo-nextest
           fd
+          nodejs
           gnused
           rust-components
           rust-analyzer
@@ -80,15 +95,17 @@
             pname = "marky-clippy";
             version = "0.1.0";
             src = craneLib.cleanCargoSource ./.;
+            cargoExtraArgs = "--manifest-path src-tauri/Cargo.toml";
             buildInputs = commonBuildInputs;
             nativeBuildInputs = with pkgs; [ pkg-config ];
-            cargoClippyExtraArgs = "--all-targets -- -D warnings";
+            cargoClippyExtraArgs = "--manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings";
           };
 
           fmt = craneLib.cargoFmt {
             pname = "marky-fmt";
             version = "0.1.0";
             src = craneLib.cleanCargoSource ./.;
+            cargoFmtExtraArgs = "--manifest-path src-tauri/Cargo.toml";
           };
         };
 
@@ -105,7 +122,6 @@
         };
 
         devShells.default = craneLib.devShell {
-          checks = self.checks.${system};
           packages = devPackages;
           buildInputs = commonBuildInputs;
 
