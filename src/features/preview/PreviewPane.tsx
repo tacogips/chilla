@@ -208,11 +208,13 @@ export function PreviewPane(props: PreviewPaneProps) {
         <span class="pane__title">Preview</span>
         <span>Rendered HTML</span>
       </header>
-      <div
-        class="pane__body preview"
-        ref={containerRef}
-        innerHTML={props.html}
-      />
+      <div class="pane__body preview">
+        <div
+          class="preview preview__content"
+          ref={containerRef}
+          innerHTML={props.html}
+        />
+      </div>
     </section>
   );
 }

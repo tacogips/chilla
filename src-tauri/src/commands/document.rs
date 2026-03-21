@@ -7,7 +7,7 @@ use crate::{
     document::types::{DocumentSnapshot, HeadingNode},
     markdown::render_markdown,
     syntax_highlight::SyntaxUiTheme,
-    viewer::types::{DirectorySnapshot, FilePreview, StartupContext},
+    viewer::types::{DirectorySnapshot, DirectorySort, FilePreview, StartupContext},
 };
 
 fn format_command_error(error: impl std::fmt::Display) -> String {
@@ -48,12 +48,21 @@ pub fn get_startup_context(state: State<'_, AppState>) -> Result<StartupContext,
 #[tauri::command]
 pub fn list_directory(
     path: String,
-    selected_path: Option<String>,
+    offset: Option<usize>,
+    limit: Option<usize>,
+    query: Option<String>,
+    sort: Option<DirectorySort>,
     state: State<'_, AppState>,
 ) -> Result<DirectorySnapshot, String> {
     state
         .viewer_service()
-        .list_directory(Path::new(&path), selected_path.as_deref().map(Path::new))
+        .list_directory(
+            Path::new(&path),
+            offset,
+            limit,
+            query.as_deref(),
+            sort,
+        )
         .map_err(format_command_error)
 }
 

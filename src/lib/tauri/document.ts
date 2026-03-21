@@ -36,11 +36,23 @@ export interface DirectoryEntry {
   readonly modified_at_unix_ms: number;
 }
 
+export type DirectorySortField = "name" | "mtime" | "size" | "extension";
+export type DirectorySortDirection = "asc" | "desc";
+
+export interface DirectorySort {
+  readonly field: DirectorySortField;
+  readonly direction: DirectorySortDirection;
+}
+
 export interface DirectorySnapshot {
   readonly current_directory_path: string;
   readonly parent_directory_path: string | null;
   readonly entries: readonly DirectoryEntry[];
-  readonly selected_path: string | null;
+  readonly total_entries: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly query: string;
+  readonly sort: DirectorySort;
 }
 
 export type FilePreview =
@@ -115,12 +127,20 @@ export async function getStartupContext(): Promise<StartupContext> {
 
 export async function listDirectory(
   path: string,
-  selectedPath: string | null,
+  options?: {
+    readonly offset?: number | null;
+    readonly limit?: number | null;
+    readonly query?: string;
+    readonly sort?: DirectorySort;
+  },
 ): Promise<DirectorySnapshot> {
   try {
     return await invoke<DirectorySnapshot>("list_directory", {
       path,
-      selectedPath,
+      offset: options?.offset ?? null,
+      limit: options?.limit ?? null,
+      query: options?.query ?? null,
+      sort: options?.sort ?? null,
     });
   } catch (error: unknown) {
     throw new Error(toErrorMessage(error));

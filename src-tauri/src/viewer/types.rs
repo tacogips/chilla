@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::document::types::DocumentSnapshot;
 
@@ -21,7 +21,11 @@ pub struct DirectorySnapshot {
     pub current_directory_path: String,
     pub parent_directory_path: Option<String>,
     pub entries: Vec<DirectoryEntry>,
-    pub selected_path: Option<String>,
+    pub total_entries: usize,
+    pub offset: usize,
+    pub limit: usize,
+    pub query: String,
+    pub sort: DirectorySort,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -31,6 +35,28 @@ pub struct DirectoryEntry {
     pub is_directory: bool,
     pub size_bytes: u64,
     pub modified_at_unix_ms: u64,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DirectorySortField {
+    Name,
+    Mtime,
+    Size,
+    Extension,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DirectorySortDirection {
+    Asc,
+    Desc,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DirectorySort {
+    pub field: DirectorySortField,
+    pub direction: DirectorySortDirection,
 }
 
 #[derive(Debug, Clone, Serialize)]
