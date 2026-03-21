@@ -1,5 +1,7 @@
 # chilla
 
+![Pixel-art cat peeking in from the side](doc/empty-state-cat.png)
+
 `chilla` is a Tauri + Bun desktop file viewer with a Markdown-focused reading experience. It opens directories and files from the command line, shows a flat file tree, and renders Markdown, text, images, video, and PDF content inside a desktop UI built with Solid.js and Rust.
 
 ## Current Product Shape
