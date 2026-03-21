@@ -53,7 +53,7 @@ function FileGlyph() {
 }
 
 export interface FileBrowserSelectOptions {
-  /** Skip selection debounce and open the preview immediately (e.g. Ctrl+M from filter). */
+  /** Skip selection debounce and open the preview immediately (Enter / Ctrl+M from filter). */
   readonly immediatePreview?: boolean;
 }
 
@@ -129,12 +129,31 @@ function FileBrowserEntryName(props: { readonly name: string }) {
   );
 }
 
+/** Ctrl/Cmd+M when the file list (or filter field) handles the shortcut. */
+function isModifierM(event: KeyboardEvent): boolean {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
+    return false;
+  }
+
+  if (event.code === "KeyM") {
+    return true;
+  }
+
+  const key = event.key;
+
+  if (key === "m" || key === "M") {
+    return true;
+  }
+
+  return event.keyCode === 77;
+}
+
 function focusListButtonForPath(
   list: HTMLUListElement | undefined,
   selectedPath: string | null,
-) {
+): boolean {
   if (list === undefined) {
-    return;
+    return false;
   }
 
   const buttons = list.querySelectorAll<HTMLButtonElement>(
@@ -143,24 +162,47 @@ function focusListButtonForPath(
 
   if (selectedPath !== null) {
     for (const button of buttons) {
-      if (button.dataset["path"] === selectedPath) {
-        button.focus();
-        return;
+      if (button.getAttribute("data-path") === selectedPath) {
+        button.focus({ preventScroll: true });
+        return true;
       }
     }
   }
 
-  buttons.item(0)?.focus();
+  const first = buttons.item(0);
+
+  if (first !== null) {
+    first.focus({ preventScroll: true });
+    return true;
+  }
+
+  return false;
 }
 
 export function FileBrowserPane(props: FileBrowserPaneProps) {
-  let filterInputEl: HTMLInputElement | undefined;
   let listEl: HTMLUListElement | undefined;
   const filterInputId = createUniqueId();
   const [filterText, setFilterText] = createSignal("");
   const [nameTooltip, setNameTooltip] = createSignal<NameTooltipState | null>(
     null,
   );
+
+  const filterInputFromDom = (): HTMLInputElement | null =>
+    document.getElementById(filterInputId) as HTMLInputElement | null;
+
+  const blurFilterInput = (): void => {
+    filterInputFromDom()?.blur();
+  };
+
+  const resolveFileBrowserListEl = (): HTMLUListElement | undefined => {
+    return (
+      listEl ??
+      filterInputFromDom()
+        ?.closest(".file-browser")
+        ?.querySelector<HTMLUListElement>("ul.file-browser__list") ??
+      undefined
+    );
+  };
 
   const filteredEntries = createMemo(() => {
     const dir = props.directory;
@@ -204,15 +246,31 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
   ) => {
     const first = entries[0];
 
-    if (first !== undefined) {
-      props.onSelectEntry(first, options);
+    if (first === undefined) {
+      return;
+    }
+
+    const pathToFocus = first.path;
+
+    blurFilterInput();
+    props.onSelectEntry(first, options);
+
+    const tryFocus = () =>
+      focusListButtonForPath(resolveFileBrowserListEl(), pathToFocus);
+
+    if (tryFocus()) {
+      return;
     }
 
     queueMicrotask(() => {
+      if (tryFocus()) {
+        return;
+      }
+
       requestAnimationFrame(() => {
-        listEl
-          ?.querySelector<HTMLButtonElement>(".file-browser__button")
-          ?.focus();
+        if (!tryFocus()) {
+          blurFilterInput();
+        }
       });
     });
   };
@@ -225,13 +283,12 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
       setFilterText("");
     }
 
-    filterInputEl?.blur();
-
     const entries = clearFilter
       ? (props.directory?.entries ?? [])
       : filteredEntries();
 
     if (entries.length === 0) {
+      blurFilterInput();
       return;
     }
 
@@ -253,7 +310,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
         const path = props.selectedPath;
         queueMicrotask(() => {
           requestAnimationFrame(() => {
-            focusListButtonForPath(listEl, path);
+            focusListButtonForPath(resolveFileBrowserListEl(), path);
           });
         });
       },
@@ -272,8 +329,9 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
 
       if (event.key === "/") {
         event.preventDefault();
-        filterInputEl?.focus();
-        filterInputEl?.select();
+        const filterInput = filterInputFromDom();
+        filterInput?.focus();
+        filterInput?.select();
         return;
       }
 
@@ -323,7 +381,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
         key === "l" ||
         event.key === "ArrowRight" ||
         event.key === "Enter" ||
-        (event.ctrlKey && key === "m")
+        isModifierM(event)
       ) {
         const selectedEntry = entries[currentIndex];
 
@@ -404,14 +462,13 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
             Filter
           </label>
           <input
-            ref={(element) => {
-              filterInputEl = element;
-            }}
             id={filterInputId}
             class="file-browser__filter"
-            type="search"
+            type="text"
+            role="searchbox"
+            inputMode="search"
             placeholder="Filter by name..."
-            title="Focus filter: /   First row: Ctrl+M   Clear filter & first row: Esc"
+            title="Focus filter: /   First row: Enter or Ctrl+M   Clear filter & first row: Esc"
             autocomplete="off"
             spellcheck={false}
             value={filterText()}
@@ -426,10 +483,20 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
                 return;
               }
 
-              if (event.ctrlKey && event.key.toLowerCase() === "m") {
+              // Enter / Ctrl+M: same as "first row" when the list has focus (window
+              // handler ignores keys while typing in this field unless we handle here).
+              if (event.key === "Enter" && !event.isComposing) {
                 event.preventDefault();
                 event.stopPropagation();
                 leaveFilterForList(false, true);
+                return;
+              }
+
+              if (isModifierM(event)) {
+                event.preventDefault();
+                event.stopPropagation();
+                leaveFilterForList(false, true);
+                return;
               }
             }}
           />

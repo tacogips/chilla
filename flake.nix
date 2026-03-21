@@ -70,21 +70,35 @@
             webkitgtk_4_1
           ];
 
-          # WebKitGTK uses GStreamer for <video> / media; plugins must resolve libavcodec, pulse, etc.
-          linuxGStreamerPluginPackages = with pkgs.gst_all_1; [
-            gst-plugins-base
-            gst-plugins-good
-            gst-plugins-bad
-            gst-plugins-ugly
-            gst-libav
-          ];
+          # WebKitGTK uses GStreamer for <video> / media.
+          # Include:
+          # - gstreamer itself for coreelements like typefind/fakesink
+          # - base/good/bad/ugly/libav for container/codec support
+          # - pipewire so autoaudiosink can resolve a compatible pipewiresink
+          linuxGStreamerCorePackage = pkgs.gst_all_1.gstreamer.out;
+
+          linuxGStreamerPluginPackages =
+            (with pkgs.gst_all_1; [
+              gst-plugins-base
+              gst-plugins-good
+              gst-plugins-bad
+              gst-plugins-ugly
+              gst-libav
+            ])
+            ++ [
+              linuxGStreamerCorePackage
+              pkgs.pipewire
+            ];
 
           linuxGStreamerPluginPath = lib.makeSearchPath "lib/gstreamer-1.0" linuxGStreamerPluginPackages;
+          linuxGStreamerPluginScanner =
+            "${linuxGStreamerCorePackage}/libexec/gstreamer-1.0/gst-plugin-scanner";
 
           linuxWebkitMediaLibraries = with pkgs; [
             ffmpeg
             libpulseaudio
             alsa-lib
+            pipewire
           ];
 
           linuxRuntimeLibraryPath =
@@ -92,7 +106,7 @@
               lib.makeLibraryPath (
                 linuxGuiLibraries
                 ++ (with pkgs.gst_all_1; [
-                  gstreamer
+                  linuxGStreamerCorePackage
                   gst-plugins-base
                 ])
                 ++ linuxWebkitMediaLibraries
@@ -186,8 +200,11 @@
             postFixup = lib.optionalString pkgs.stdenv.isLinux ''
               wrapProgram $out/bin/chilla \
                 --prefix LD_LIBRARY_PATH : "${linuxRuntimeLibraryPath}" \
+                --set GST_PLUGIN_SCANNER "${linuxGStreamerPluginScanner}" \
+                --set GST_PLUGIN_SYSTEM_PATH "${linuxGStreamerPluginPath}" \
                 --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : "${linuxGStreamerPluginPath}" \
-                --prefix GST_PLUGIN_PATH : "${linuxGStreamerPluginPath}"
+                --set GST_PLUGIN_PATH "${linuxGStreamerPluginPath}" \
+                --set GST_PLUGIN_PATH_1_0 "${linuxGStreamerPluginPath}"
             '';
           };
 
@@ -255,9 +272,12 @@
                 export GIO_EXTRA_MODULES="${linuxGioModulePath}"
                 export XDG_DATA_DIRS="${linuxXdgDataDirs}"
                 export WEBKIT_DISABLE_DMABUF_RENDERER=1
-                export GST_PLUGIN_SYSTEM_PATH_1_0="${linuxGStreamerPluginPath}''${GST_PLUGIN_SYSTEM_PATH_1_0:+:$GST_PLUGIN_SYSTEM_PATH_1_0}"
-                # Some WebKit builds consult GST_PLUGIN_PATH as well as GST_PLUGIN_SYSTEM_PATH_1_0.
-                export GST_PLUGIN_PATH="${linuxGStreamerPluginPath}''${GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}"
+                export GST_PLUGIN_SCANNER="${linuxGStreamerPluginScanner}"
+                export GST_PLUGIN_SYSTEM_PATH="${linuxGStreamerPluginPath}"
+                export GST_PLUGIN_SYSTEM_PATH_1_0="${linuxGStreamerPluginPath}"
+                # Some builds consult GST_PLUGIN_PATH(_1_0), others GST_PLUGIN_SYSTEM_PATH(_1_0).
+                export GST_PLUGIN_PATH="${linuxGStreamerPluginPath}"
+                export GST_PLUGIN_PATH_1_0="${linuxGStreamerPluginPath}"
                 unset GTK_PATH
                 unset GI_TYPELIB_PATH
                 unset GTK_IM_MODULE

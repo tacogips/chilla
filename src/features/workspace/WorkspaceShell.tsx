@@ -120,9 +120,13 @@ const SHORTCUT_SECTIONS: readonly {
         description: "Clear filter and return to list (when filter focused)",
       },
       {
-        keys: ["Ctrl", "M"],
+        keys: ["Enter"],
         description:
-          "First list row (when filter focused); preview loads immediately (no debounce)",
+          "First filtered row when filter is focused (same as Ctrl+M); preview loads immediately (no debounce)",
+      },
+      {
+        keys: ["Ctrl", "M"],
+        description: "Same as Enter when the filter field is focused",
       },
       {
         keys: ["J", "↓"],
