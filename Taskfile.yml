@@ -15,7 +15,12 @@ tasks:
     desc: Build frontend assets and the desktop binary
     cmds:
       - bun run build
-      - CARGO_TERM_QUIET=true cargo build --manifest-path src-tauri/Cargo.toml
+      - CARGO_TERM_QUIET=true cargo build --release --manifest-path src-tauri/Cargo.toml
+
+  nix-build:
+    desc: Build the default flake package with Nix
+    cmds:
+      - nix build .#chilla
 
   test:
     desc: Run frontend and backend verification
