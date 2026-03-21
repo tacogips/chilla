@@ -8,6 +8,7 @@ import {
   onMount,
   startTransition,
 } from "solid-js";
+import { Portal } from "solid-js/web";
 import type {
   DirectoryEntry,
   DirectorySnapshot,
@@ -253,6 +254,7 @@ export function WorkspaceShell() {
   const [markdownPane, setMarkdownPane] = createSignal<MarkdownPane>("preview");
   const [isTocOpen, setTocOpen] = createSignal(false);
   const [isFileTreeOpen, setFileTreeOpen] = createSignal(true);
+  const [isShortcutsHelpOpen, setShortcutsHelpOpen] = createSignal(false);
   const [selection, setSelection] = createSignal<WorkspaceSelection>({
     anchorId: null,
     lineStart: null,
@@ -361,12 +363,22 @@ export function WorkspaceShell() {
     }
   };
 
+  const cycleColorScheme = () => {
+    const next = colorScheme() === "dark" ? "light" : "dark";
+    void (async () => {
+      await applyColorScheme(next);
+      setColorScheme(next);
+      await refreshSyntaxHighlights();
+    })();
+  };
+
   const handleInitialLoad = async () => {
     setLoading(true);
 
     try {
       const nextStartupContext = await getStartupContext();
       setStartupContext(nextStartupContext);
+      setFileTreeOpen(nextStartupContext.selected_file_path === null);
 
       await loadDirectoryState(
         nextStartupContext.current_directory_path,
@@ -534,7 +546,26 @@ export function WorkspaceShell() {
       });
 
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (isShortcutsHelpOpen()) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setShortcutsHelpOpen(false);
+        }
+        return;
+      }
+
       if (isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+
+      if (
+        event.key === "?" &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        setShortcutsHelpOpen(true);
         return;
       }
 
@@ -582,15 +613,30 @@ export function WorkspaceShell() {
           return;
         }
 
-        if (key === "t" && markdownDoc() !== null) {
+        if (
+          event.shiftKey &&
+          key === "t" &&
+          markdownDoc() !== null
+        ) {
           event.preventDefault();
           setTocOpen((value) => !value);
           return;
         }
 
-        if (key === "p" && markdownDoc() !== null) {
+        if (
+          event.shiftKey &&
+          key === "p" &&
+          markdownDoc() !== null
+        ) {
           event.preventDefault();
           setMarkdownPane((pane) => (pane === "preview" ? "raw" : "preview"));
+          return;
+        }
+
+        if (event.shiftKey && key === "s") {
+          event.preventDefault();
+          cycleColorScheme();
+          return;
         }
       }
     };
@@ -606,6 +652,175 @@ export function WorkspaceShell() {
 
   return (
     <main class="workspace">
+      <Portal>
+        <Show when={isShortcutsHelpOpen()}>
+          <div class="shortcuts-help-layer">
+            <div
+              class="shortcuts-help-backdrop"
+              role="presentation"
+              aria-hidden="true"
+            />
+            <div
+              class="shortcuts-help"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="shortcuts-help-title"
+              tabIndex={-1}
+              ref={(element) => {
+                queueMicrotask(() => {
+                  element?.focus();
+                });
+              }}
+            >
+            <h2 id="shortcuts-help-title" class="shortcuts-help__title">
+              Keyboard shortcuts
+            </h2>
+
+            <section class="shortcuts-help__section">
+              <h3 class="shortcuts-help__heading">Workspace</h3>
+              <ul class="shortcuts-help__list">
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>?</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">Show this help</span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>Esc</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">Close help</span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>Q</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">Quit application</span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>Ctrl</kbd>
+                    <span class="shortcuts-help__plus">+</span>
+                    <kbd>D</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">Scroll document down</span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>Ctrl</kbd>
+                    <span class="shortcuts-help__plus">+</span>
+                    <kbd>U</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">Scroll document up</span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>Shift</kbd>
+                    <span class="shortcuts-help__plus">+</span>
+                    <kbd>L</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">Toggle file tree</span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>R</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">Reload current file</span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>Shift</kbd>
+                    <span class="shortcuts-help__plus">+</span>
+                    <kbd>T</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">
+                    Toggle table of contents (Markdown)
+                  </span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>Shift</kbd>
+                    <span class="shortcuts-help__plus">+</span>
+                    <kbd>P</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">
+                    Toggle Raw / Preview (Markdown)
+                  </span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>Shift</kbd>
+                    <span class="shortcuts-help__plus">+</span>
+                    <kbd>S</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">
+                    Toggle light / dark theme
+                  </span>
+                </li>
+              </ul>
+            </section>
+
+            <section class="shortcuts-help__section">
+              <h3 class="shortcuts-help__heading">File tree</h3>
+              <ul class="shortcuts-help__list">
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>/</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">Focus filter</span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>Esc</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">
+                    Clear filter and return to list (when filter focused)
+                  </span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>Ctrl</kbd>
+                    <span class="shortcuts-help__plus">+</span>
+                    <kbd>M</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">
+                    First list row (when filter focused)
+                  </span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>J</kbd> / <kbd>↓</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">Move selection down</span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>K</kbd> / <kbd>↑</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">Move selection up</span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>H</kbd> / <kbd>←</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">Parent directory</span>
+                </li>
+                <li class="shortcuts-help__row">
+                  <span class="shortcuts-help__keys">
+                    <kbd>L</kbd> / <kbd>→</kbd> / <kbd>Enter</kbd>
+                  </span>
+                  <span class="shortcuts-help__desc">Open or confirm</span>
+                </li>
+              </ul>
+            </section>
+
+            <p class="shortcuts-help__footer">
+              Shortcuts are ignored while typing in a search field.
+            </p>
+            </div>
+          </div>
+        </Show>
+      </Portal>
       <div class="workspace__frame">
         <header class="workspace__header" data-tauri-drag-region="">
           <div class="workspace__actions" data-tauri-drag-region="false">
@@ -617,7 +832,7 @@ export function WorkspaceShell() {
                   }`}
                   type="button"
                   aria-label="Raw Markdown source"
-                  title="Raw source (P)"
+                  title="Raw source (Shift+P)"
                   onClick={() => setMarkdownPane("raw")}
                 >
                   <RawSourceGlyph />
@@ -630,7 +845,7 @@ export function WorkspaceShell() {
                   }`}
                   type="button"
                   aria-label="Markdown preview"
-                  title="Preview (P)"
+                  title="Preview (Shift+P)"
                   onClick={() => setMarkdownPane("preview")}
                 >
                   <PreviewGlyph />
@@ -642,7 +857,7 @@ export function WorkspaceShell() {
                 }`}
                 type="button"
                 aria-label="Toggle table of contents"
-                title="Toggle TOC (T)"
+                title="Toggle TOC (Shift+T)"
                 onClick={() => setTocOpen((value) => !value)}
               >
                 <TocGlyph />
@@ -669,15 +884,12 @@ export function WorkspaceShell() {
                   : "Switch to dark theme"
               }
               title={
-                colorScheme() === "dark" ? "Light theme" : "Dark theme"
+                colorScheme() === "dark"
+                  ? "Light theme (Shift+S)"
+                  : "Dark theme (Shift+S)"
               }
               onClick={() => {
-                const next = colorScheme() === "dark" ? "light" : "dark";
-                void (async () => {
-                  await applyColorScheme(next);
-                  setColorScheme(next);
-                  await refreshSyntaxHighlights();
-                })();
+                cycleColorScheme();
               }}
             >
               <Show when={colorScheme() === "dark"} fallback={<MoonGlyph />}>

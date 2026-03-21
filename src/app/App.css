@@ -86,10 +86,17 @@ html {
 }
 
 html,
-body,
+body {
+  margin: 0;
+  height: 100%;
+}
+
 #root {
   margin: 0;
-  min-height: 100vh;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 body {
@@ -106,10 +113,13 @@ button {
 }
 
 .workspace {
-  min-height: 100vh;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   margin: 0;
   padding: 0;
-  overflow: auto;
+  overflow: hidden;
   background: var(--bg-app);
 }
 
@@ -117,7 +127,8 @@ button {
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   border: 0;
   border-bottom: 1px solid var(--border);
@@ -150,6 +161,7 @@ button {
 
 .workspace__header {
   display: flex;
+  flex-shrink: 0;
   flex-wrap: wrap;
   gap: 0.25rem 0.5rem;
   align-items: center;
@@ -158,6 +170,10 @@ button {
   padding: 0.35rem 0.5rem;
   border-bottom: 1px solid var(--border);
   background: var(--bg-pane-head);
+}
+
+.workspace__frame > .banner {
+  flex-shrink: 0;
 }
 
 .workspace__actions,
@@ -372,6 +388,11 @@ button {
   min-width: calc(10rem + 14rem);
 }
 
+.workspace__body--viewer > .pane,
+.workspace__body--viewer > .workspace__document-column {
+  min-height: 0;
+}
+
 .workspace__document-column {
   display: flex;
   flex-direction: column;
@@ -477,6 +498,7 @@ button {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .toc {
@@ -844,6 +866,131 @@ button {
   border-bottom-color: rgba(248, 113, 113, 0.4);
   background: var(--danger-bg);
   color: var(--banner-error-fg);
+}
+
+.shortcuts-help-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.shortcuts-help-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="light"] .shortcuts-help-backdrop {
+  background: rgba(15, 23, 42, 0.3);
+}
+
+.shortcuts-help {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 26rem);
+  max-height: min(88vh, 36rem);
+  overflow: auto;
+  margin: 0;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  outline: none;
+}
+
+.shortcuts-help__title {
+  margin: 0 0 0.85rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.shortcuts-help__section {
+  margin: 0 0 1rem;
+}
+
+.shortcuts-help__section:last-of-type {
+  margin-bottom: 0.65rem;
+}
+
+.shortcuts-help__heading {
+  margin: 0 0 0.45rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.shortcuts-help__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shortcuts-help__row {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 44%) 1fr;
+  gap: 0.35rem 0.65rem;
+  align-items: baseline;
+  margin: 0;
+  padding: 0.28rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.shortcuts-help__row:last-child {
+  border-bottom: 0;
+}
+
+.shortcuts-help__keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.12rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.shortcuts-help__desc {
+  color: var(--text-subtle);
+}
+
+.shortcuts-help kbd {
+  display: inline-block;
+  padding: 0.1rem 0.32rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-app);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.shortcuts-help__plus {
+  margin: 0 0.05rem;
+  font-size: 0.65rem;
+  color: var(--text-subtle);
+  user-select: none;
+}
+
+.shortcuts-help__footer {
+  margin: 0.75rem 0 0;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: var(--text-subtle);
 }
 
 @media (max-width: 1080px) {
