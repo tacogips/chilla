@@ -3,7 +3,7 @@
 **Status**: In Progress
 **Design Reference**: `design-docs/specs/design-file-viewer-mode.md`
 **Created**: 2026-03-19
-**Last Updated**: 2026-03-19
+**Last Updated**: 2026-03-21
 
 ## Design Document Reference
 
@@ -216,3 +216,9 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-001 startup target and viewer contract
 **Blockers**: None
 **Notes**: The current app is centered on a single Markdown startup path. The feature will be implemented by adding startup context plus separate directory-listing/file-preview commands, while preserving the existing Markdown editor flow for Markdown mode. Image and video previews are part of the file-view contract.
+
+### Session: 2026-03-21 JST
+**Tasks Completed**: Extended the directory-entry contract with file size and modified-time metadata; added frontend file-tree sort modes and keyboard shortcuts for name, mtime, and size.
+**Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: Sort metadata remains Rust-owned via the directory listing contract, while the active sort mode is frontend-owned so `a/A`, `m/M`, and `s/S` can reorder the current list without extra IPC calls.

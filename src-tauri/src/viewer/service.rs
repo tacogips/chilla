@@ -30,7 +30,17 @@ const TEXTUAL_APPLICATION_MIME_TYPES: [&str; 10] = [
 ];
 /// When magic(1) reports `application/octet-stream` but the path is a known text config/data suffix.
 const TEXT_PREVIEW_EXTENSIONS: [&str; 11] = [
-    "toml", "json", "jsonc", "yaml", "yml", "xml", "lock", "svg", "csv", "webmanifest", "gradle",
+    "toml",
+    "json",
+    "jsonc",
+    "yaml",
+    "yml",
+    "xml",
+    "lock",
+    "svg",
+    "csv",
+    "webmanifest",
+    "gradle",
 ];
 const IMAGE_EXTENSION_MIME_TYPES: [(&str, &str); 6] = [
     ("apng", "image/apng"),
@@ -99,6 +109,10 @@ impl ViewerService {
                     .metadata()
                     .map_err(|source| AppError::io("read metadata for", &entry_path, source))?;
                 let entry_name = entry.file_name().to_string_lossy().to_string();
+                let modified_at_unix_ms =
+                    metadata_modified_at_unix_ms(&entry_metadata).map_err(|source| {
+                        AppError::io("read modified time for", &entry_path, source)
+                    })?;
 
                 Ok(DirectoryEntry {
                     // Use the directory listing path (symlink name), not the canonical target, so
@@ -106,6 +120,8 @@ impl ViewerService {
                     path: display_path(&entry_path),
                     name: entry_name,
                     is_directory: entry_metadata.is_dir(),
+                    size_bytes: entry_metadata.len(),
+                    modified_at_unix_ms,
                 })
             })
             .collect::<AppResult<Vec<_>>>()?;
@@ -122,11 +138,8 @@ impl ViewerService {
                 .then_with(|| left.name.cmp(&right.name))
         });
 
-        let selected_path = resolve_directory_selected_path(
-            &current_directory_path,
-            &entries,
-            selected_path,
-        );
+        let selected_path =
+            resolve_directory_selected_path(&current_directory_path, &entries, selected_path);
 
         Ok(DirectorySnapshot {
             current_directory_path: display_path(&current_directory_path),
@@ -136,7 +149,11 @@ impl ViewerService {
         })
     }
 
-    pub fn open_file_preview(&self, path: &Path, ui_theme: SyntaxUiTheme) -> AppResult<FilePreview> {
+    pub fn open_file_preview(
+        &self,
+        path: &Path,
+        ui_theme: SyntaxUiTheme,
+    ) -> AppResult<FilePreview> {
         let file_path = canonicalize_file_path(path)?;
 
         if is_markdown_path(&file_path) {
@@ -172,7 +189,11 @@ impl ViewerService {
         self.open_binary_preview(&file_path, mime_type)
     }
 
-    fn open_markdown_preview(&self, path: &Path, ui_theme: SyntaxUiTheme) -> AppResult<FilePreview> {
+    fn open_markdown_preview(
+        &self,
+        path: &Path,
+        ui_theme: SyntaxUiTheme,
+    ) -> AppResult<FilePreview> {
         let snapshot = DocumentService::new().open(path, ui_theme)?;
 
         Ok(FilePreview::Markdown {
@@ -429,18 +450,23 @@ fn display_path(path: &Path) -> String {
     path.display().to_string()
 }
 
+fn metadata_modified_at_unix_ms(metadata: &fs::Metadata) -> std::io::Result<u64> {
+    let modified_time = metadata.modified()?;
+    let millis = modified_time
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    Ok(u64::try_from(millis).unwrap_or(u64::MAX))
+}
+
 fn last_modified_string(path: &Path) -> AppResult<String> {
     let metadata =
         fs::metadata(path).map_err(|source| AppError::io("read metadata for", path, source))?;
-    let modified_time = metadata
-        .modified()
+    let modified_at_unix_ms = metadata_modified_at_unix_ms(&metadata)
         .map_err(|source| AppError::io("read modified time for", path, source))?;
 
-    Ok(modified_time
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .to_string())
+    Ok(modified_at_unix_ms.to_string())
 }
 
 fn escape_html_text(value: &str) -> String {
@@ -547,6 +573,16 @@ mod tests {
             Some(bravo_logical.display().to_string()),
             "default selection is first file after directories",
         );
+
+        let bravo_entry = snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.name == "Bravo.txt")
+            .expect("bravo entry");
+        let bravo_metadata =
+            fs::metadata(bravo_logical).expect("metadata for bravo logical file path");
+        assert_eq!(bravo_entry.size_bytes, bravo_metadata.len());
+        assert!(bravo_entry.modified_at_unix_ms > 0);
     }
 
     #[test]

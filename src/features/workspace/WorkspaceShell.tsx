@@ -23,6 +23,7 @@ import {
   getColorScheme,
   type ColorScheme,
 } from "../../lib/theme";
+import { writeTextToClipboard } from "../../lib/clipboard";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import {
   getStartupContext,
@@ -43,6 +44,7 @@ import { TocPane } from "../toc/TocPane";
 import type { WorkspaceSelection } from "./state";
 
 const appWindow = getCurrentWindow();
+const EMPTY_STATE_IMAGE_PATH = "/empty-state-cat.png";
 
 /** Delay before opening a file from keyboard selection alone (j-k); confirm opens immediately. */
 const SELECTION_PREVIEW_DEBOUNCE_MS = 500;
@@ -72,6 +74,7 @@ type ShortcutDefinition = {
 };
 
 const SHORTCUT_LABELS = {
+  copyPath: "Y",
   reload: "R",
   toggleToc: "Shift+T",
   toggleMarkdownPane: "Shift+P",
@@ -101,6 +104,7 @@ const SHORTCUT_SECTIONS: readonly {
         keys: ["Shift", "L"],
         description: "Toggle file tree",
       },
+      { keys: ["Y"], description: "Copy current file absolute path" },
       { keys: ["R"], description: "Reload current file" },
       {
         keys: ["Shift", "T"],
@@ -140,6 +144,26 @@ const SHORTCUT_SECTIONS: readonly {
       {
         keys: ["K", "↑"],
         description: "Move selection up",
+      },
+      {
+        keys: ["0"],
+        description: "Reset sort to default (name ascending)",
+      },
+      {
+        keys: ["a", "A"],
+        description: "Sort by name ascending / descending",
+      },
+      {
+        keys: ["e", "E"],
+        description: "Sort by extension ascending / descending",
+      },
+      {
+        keys: ["m", "M"],
+        description: "Sort by modified time ascending / descending",
+      },
+      {
+        keys: ["s", "S"],
+        description: "Sort by size ascending / descending",
       },
       {
         keys: ["H", "←"],
@@ -626,6 +650,25 @@ export function WorkspaceShell() {
     }
   };
 
+  const handleCopyCurrentPath = async () => {
+    const path = currentOpenPath();
+
+    if (path === null) {
+      return;
+    }
+
+    try {
+      await writeTextToClipboard(path);
+      setErrorMessage(null);
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to copy the current file path",
+      );
+    }
+  };
+
   const handleSelectEntry = (
     entry: DirectoryEntry,
     options?: FileBrowserSelectOptions,
@@ -714,6 +757,7 @@ export function WorkspaceShell() {
 
   const md = () => markdownDoc();
   const fp = () => filePreview();
+  const currentOpenPath = () => md()?.path ?? previewPath(fp());
   const hasOpenDocument = () => md() !== null || fp() !== null;
 
   const viewerGridClassName = createMemo(() => {
@@ -816,6 +860,15 @@ export function WorkspaceShell() {
         }
         event.preventDefault();
         void handleReloadCurrent();
+        return;
+      }
+
+      if (matchesShortcut(event, "y")) {
+        if (!hasOpenDocument()) {
+          return;
+        }
+        event.preventDefault();
+        void handleCopyCurrentPath();
         return;
       }
 
@@ -1040,7 +1093,9 @@ export function WorkspaceShell() {
               active={true}
               directory={directorySnapshot()}
               selectedPath={selectedBrowserPath()}
-              onConfirmEntry={(entry) => void handleConfirmEntry(entry)}
+              onConfirmEntry={(entry, options) =>
+                void handleConfirmEntry(entry, options)
+              }
               onNavigateToParent={() => void handleNavigateToParent()}
               onSelectEntry={handleSelectEntry}
             />
@@ -1122,24 +1177,41 @@ export function WorkspaceShell() {
                 </header>
                 <div class="pane__body preview">
                   <section class="file-preview-empty">
-                    <p class="file-preview-empty__title">Nothing to show yet</p>
-                    <p class="file-preview-empty__hint">
-                      <Show
-                        when={isFileTreeOpen()}
-                        fallback={
-                          <>
-                            Press <kbd>{SHORTCUT_LABELS.toggleFileTree}</kbd> to
-                            show the file tree. Markdown files support Raw and
-                            Preview; other files open in the preview pane.
-                          </>
-                        }
-                      >
-                        Choose a file in the tree. Markdown files support Raw
-                        and Preview; other files open in the preview pane. Press{" "}
-                        <kbd>{SHORTCUT_LABELS.toggleFileTree}</kbd> to hide the
-                        tree.
-                      </Show>
+                    <p class="file-preview-empty__app-name">chilla</p>
+                    <p class="file-preview-empty__app-tagline">file viewer</p>
+                    <img
+                      class="file-preview-empty__image"
+                      src={EMPTY_STATE_IMAGE_PATH}
+                      alt="Pixel-art cat peeking in from the side"
+                    />
+                    <p class="file-preview-empty__title">
+                      Please select a file.
                     </p>
+                    <div class="file-preview-empty__shortcuts">
+                      <For each={SHORTCUT_SECTIONS}>
+                        {(section) => (
+                          <section class="shortcuts-help__section">
+                            <h3 class="shortcuts-help__heading">
+                              {section.title}
+                            </h3>
+                            <ul class="shortcuts-help__list">
+                              <For each={section.shortcuts}>
+                                {(shortcut) => (
+                                  <li class="shortcuts-help__row">
+                                    <span class="shortcuts-help__keys">
+                                      {renderShortcutKeys(shortcut.keys)}
+                                    </span>
+                                    <span class="shortcuts-help__desc">
+                                      {shortcut.description}
+                                    </span>
+                                  </li>
+                                )}
+                              </For>
+                            </ul>
+                          </section>
+                        )}
+                      </For>
+                    </div>
                   </section>
                 </div>
               </section>

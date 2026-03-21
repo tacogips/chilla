@@ -12,7 +12,9 @@ interface VideoFilePreviewPaneProps {
 export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
   const isLinuxDesktop = isLinuxWebKitDesktop();
   const [playbackFailed, setPlaybackFailed] = createSignal(false);
+  const [showPlayOverlay, setShowPlayOverlay] = createSignal(true);
   const [videoSrc, setVideoSrc] = createSignal(convertFileSrc(props.path));
+  let playButtonElement: HTMLButtonElement | undefined;
   let videoElement: HTMLVideoElement | undefined;
   let activeBlobUrl: string | null = null;
   let loadGeneration = 0;
@@ -46,8 +48,8 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
     blobFallbackRequestedForPath = null;
     clearBlobUrl();
     setPlaybackFailed(false);
+    setShowPlayOverlay(true);
     setVideoSrc(convertFileSrc(props.path));
-    playRequested = false;
 
     onCleanup(() => {
       loadGeneration += 1;
@@ -60,7 +62,11 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
       return;
     }
 
-    requestPlayback();
+    queueMicrotask(() => {
+      requestAnimationFrame(() => {
+        playButtonElement?.focus();
+      });
+    });
   });
 
   const switchToBlobFallback = async () => {
@@ -170,12 +176,28 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
         class={`pane__body preview preview--embedded-video${isLinuxDesktop ? " preview--video-external-linux" : ""}`}
       >
         <figure class="preview-media preview-media--video">
+          <Show when={showPlayOverlay() && !playbackFailed()}>
+            <div class="preview-video__overlay">
+              <button
+                ref={(element) => {
+                  playButtonElement = element ?? undefined;
+                }}
+                type="button"
+                class="button preview-video__play-button"
+                onClick={() => {
+                  requestPlayback();
+                }}
+              >
+                Play
+              </button>
+            </div>
+          </Show>
           <video
             ref={(element) => {
               videoElement = element ?? undefined;
             }}
             controls
-            preload="none"
+            preload="auto"
             playsinline
             src={videoSrc()}
             aria-label={props.fileName}
@@ -192,6 +214,7 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
             }}
             onPlay={() => {
               playRequested = false;
+              setShowPlayOverlay(false);
             }}
             onPause={() => {
               const video = videoElement;
@@ -199,10 +222,17 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
               if (video !== undefined && video.ended) {
                 playRequested = false;
               }
+
+              if (video !== undefined && !video.ended) {
+                setShowPlayOverlay(true);
+              }
+            }}
+            onEnded={() => {
+              playRequested = false;
+              setShowPlayOverlay(true);
             }}
             onError={() => {
               const video = videoElement;
-              playRequested = false;
 
               if (
                 isLinuxDesktop &&
@@ -220,6 +250,8 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
                 video.load();
               }
 
+              playRequested = false;
+              setShowPlayOverlay(true);
               setPlaybackFailed(true);
             }}
           >

@@ -32,6 +32,8 @@ export interface DirectoryEntry {
   readonly path: string;
   readonly name: string;
   readonly is_directory: boolean;
+  readonly size_bytes: number;
+  readonly modified_at_unix_ms: number;
 }
 
 export interface DirectorySnapshot {

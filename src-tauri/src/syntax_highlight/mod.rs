@@ -106,7 +106,11 @@ pub fn highlight_file_source(source: &str, path: &Path, ui: SyntaxUiTheme) -> St
 }
 
 /// Markdown fenced block: `lang_token` is the first word of the info string (e.g. `rust`).
-pub fn highlight_markdown_fence(source: &str, lang_token: Option<&str>, ui: SyntaxUiTheme) -> String {
+pub fn highlight_markdown_fence(
+    source: &str,
+    lang_token: Option<&str>,
+    ui: SyntaxUiTheme,
+) -> String {
     let ss = syntax_set();
     let syntax = resolve_syntax(ss, lang_token, None);
     highlighted_html_for_string(source, ss, syntax, syntect_theme(ui))

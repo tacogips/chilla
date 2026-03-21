@@ -593,6 +593,7 @@ button {
   display: flex;
   flex-direction: column;
   margin: 0;
+  position: relative;
 }
 
 .pane__body.preview.preview--embedded-video video {
@@ -624,6 +625,26 @@ button {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.5rem;
+}
+
+.preview-video__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.35),
+    rgb(0 0 0 / 0.2)
+  );
+  pointer-events: none;
+}
+
+.preview-video__play-button {
+  pointer-events: auto;
+  min-width: 8rem;
 }
 
 .preview-video__error {
@@ -911,14 +932,42 @@ button {
 
 .file-preview-empty {
   margin: 0;
-  padding: 0.65rem 0.35rem;
-  text-align: center;
+  padding: 0.75rem 0.35rem 1rem;
+  text-align: left;
   color: var(--text-muted);
 }
 
+.file-preview-empty__image {
+  display: block;
+  width: min(100%, 240px);
+  max-height: 42vh;
+  margin: 0 auto 0.65rem;
+  object-fit: contain;
+}
+
+.file-preview-empty__app-name {
+  margin: 0 0 0.1rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.file-preview-empty__app-tagline {
+  margin: 0 0 0.55rem;
+  text-align: center;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
 .file-preview-empty__title {
-  margin: 0 0 0.25rem;
-  font-size: 0.84rem;
+  margin: 0 0 0.75rem;
+  text-align: center;
+  font-size: 0.92rem;
   font-weight: 600;
   color: var(--text);
 }
@@ -937,6 +986,15 @@ button {
   background: var(--bg-elevated);
   font-family: var(--font-mono);
   font-size: 0.88em;
+}
+
+.file-preview-empty__shortcuts {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
 }
 
 .banner {

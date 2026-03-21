@@ -16,6 +16,12 @@ import type {
   DirectorySnapshot,
 } from "../../lib/tauri/document";
 import { middleEllipsisForWidth } from "./middleEllipsis";
+import {
+  DEFAULT_FILE_TREE_SORT,
+  describeFileTreeSort,
+  sortDirectoryEntries,
+  type FileTreeSortState,
+} from "./sort";
 
 function FolderGlyph() {
   return (
@@ -190,6 +196,9 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
   let listEl: HTMLUListElement | undefined;
   const filterInputId = createUniqueId();
   const [filterText, setFilterText] = createSignal("");
+  const [sortState, setSortState] = createSignal<FileTreeSortState>(
+    DEFAULT_FILE_TREE_SORT,
+  );
   const [nameTooltip, setNameTooltip] = createSignal<NameTooltipState | null>(
     null,
   );
@@ -212,19 +221,16 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
   };
 
   const filteredEntries = createMemo(() => {
-    const dir = props.directory;
-
-    if (dir === null) {
-      return [];
-    }
+    const entries = props.directory?.entries ?? [];
 
     const q = filterText().trim().toLowerCase();
+    const sorted = sortDirectoryEntries(entries, sortState());
 
     if (q === "") {
-      return dir.entries;
+      return sorted;
     }
 
-    return dir.entries.filter((entry) => entry.name.toLowerCase().includes(q));
+    return sorted.filter((entry) => entry.name.toLowerCase().includes(q));
   });
 
   const totalEntryCount = createMemo(
@@ -246,6 +252,27 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
 
     return `${shown} of ${total} ${total === 1 ? "entry" : "entries"}`;
   });
+
+  const sortSummary = createMemo(() => describeFileTreeSort(sortState()));
+
+  const isFileBrowserShortcutTarget = (target: EventTarget | null): boolean => {
+    return (
+      target instanceof HTMLElement && target.closest(".file-browser") !== null
+    );
+  };
+
+  const applySort = (
+    event: KeyboardEvent,
+    nextSort: FileTreeSortState,
+  ): boolean => {
+    if (!isFileBrowserShortcutTarget(event.target)) {
+      return false;
+    }
+
+    event.preventDefault();
+    setSortState(nextSort);
+    return true;
+  };
 
   const focusFirstListButton = (
     entries: readonly DirectoryEntry[],
@@ -355,12 +382,66 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
         return;
       }
 
+      if (event.key === "a") {
+        if (applySort(event, { field: "name", direction: "asc" })) {
+          return;
+        }
+      }
+
+      if (event.key === "A") {
+        if (applySort(event, { field: "name", direction: "desc" })) {
+          return;
+        }
+      }
+
+      if (event.key === "m") {
+        if (applySort(event, { field: "mtime", direction: "asc" })) {
+          return;
+        }
+      }
+
+      if (event.key === "M") {
+        if (applySort(event, { field: "mtime", direction: "desc" })) {
+          return;
+        }
+      }
+
+      if (event.key === "s") {
+        if (applySort(event, { field: "size", direction: "asc" })) {
+          return;
+        }
+      }
+
+      if (event.key === "S") {
+        if (applySort(event, { field: "size", direction: "desc" })) {
+          return;
+        }
+      }
+
+      if (event.key === "e") {
+        if (applySort(event, { field: "extension", direction: "asc" })) {
+          return;
+        }
+      }
+
+      if (event.key === "E") {
+        if (applySort(event, { field: "extension", direction: "desc" })) {
+          return;
+        }
+      }
+
       if (event.key === "/") {
         event.preventDefault();
         const filterInput = filterInputFromDom();
         filterInput?.focus();
         filterInput?.select();
         return;
+      }
+
+      if (event.key === "0") {
+        if (applySort(event, DEFAULT_FILE_TREE_SORT)) {
+          return;
+        }
       }
 
       const key = event.key.toLowerCase();
@@ -485,7 +566,9 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
       </Portal>
       <header class="pane__header">
         <span class="pane__title">File View</span>
-        <span>{filterSummary()}</span>
+        <span>
+          {filterSummary()} | {sortSummary()}
+        </span>
       </header>
       <div class="pane__body file-browser">
         <div
@@ -509,7 +592,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
             role="searchbox"
             inputMode="search"
             placeholder="Filter by name..."
-            title="Focus filter: /   First row: Enter or Ctrl+M   Clear filter & first row: Esc"
+            title="Focus filter: /   First row: Enter or Ctrl+M   Clear filter & first row: Esc   Sort: a/A name, e/E extension, m/M mtime, s/S size"
             autocomplete="off"
             spellcheck={false}
             value={filterText()}
@@ -581,7 +664,17 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
                           : ""
                       }`}
                       aria-label={entry.name}
-                      onClick={() => props.onConfirmEntry(entry)}
+                      onClick={(event) => {
+                        if (event.detail === 0) {
+                          props.onConfirmEntry(entry, {
+                            immediatePreview: true,
+                            playVideo: true,
+                          });
+                          return;
+                        }
+
+                        props.onConfirmEntry(entry);
+                      }}
                       onKeyDown={(event) => {
                         if (
                           event.key === " " ||

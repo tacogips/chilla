@@ -519,11 +519,10 @@ mod tests {
 
     #[test]
     fn renders_heading_ids_and_nested_headings() {
-        let rendered =
-            render_markdown(
-                "# Intro\n\n## Child Topic\n\n### Deep Topic\n\n## Child Topic\n",
-                SyntaxUiTheme::Dark,
-            );
+        let rendered = render_markdown(
+            "# Intro\n\n## Child Topic\n\n### Deep Topic\n\n## Child Topic\n",
+            SyntaxUiTheme::Dark,
+        );
 
         assert!(rendered.html.contains("<h1 id=\"intro\">Intro</h1>"));
         assert!(rendered
@@ -542,10 +541,7 @@ mod tests {
 
     #[test]
     fn preserves_mermaid_code_blocks_in_html_output() {
-        let rendered = render_markdown(
-            "```mermaid\ngraph TD;\nA-->B;\n```",
-            SyntaxUiTheme::Dark,
-        );
+        let rendered = render_markdown("```mermaid\ngraph TD;\nA-->B;\n```", SyntaxUiTheme::Dark);
 
         assert!(rendered.html.contains("language-mermaid"));
         assert!(rendered.html.contains("graph TD;"));
@@ -555,8 +551,16 @@ mod tests {
     fn highlights_fenced_rust_with_syntect() {
         let rendered = render_markdown("```rust\nlet x: u32 = 1;\n```", SyntaxUiTheme::Dark);
 
-        assert!(rendered.html.contains("let</span>"), "body missing in: {}", rendered.html);
-        assert!(rendered.html.contains("u32"), "body missing in: {}", rendered.html);
+        assert!(
+            rendered.html.contains("let</span>"),
+            "body missing in: {}",
+            rendered.html
+        );
+        assert!(
+            rendered.html.contains("u32"),
+            "body missing in: {}",
+            rendered.html
+        );
         assert!(
             rendered.html.contains("style=") && rendered.html.contains("<span"),
             "expected syntect HTML, got: {}",
@@ -602,14 +606,9 @@ mod tests {
 
     #[test]
     fn renders_video_files_from_markdown_media_syntax() {
-        let rendered = render_markdown(
-            "![Demo clip](./fixtures/demo.mp4)",
-            SyntaxUiTheme::Dark,
-        );
+        let rendered = render_markdown("![Demo clip](./fixtures/demo.mp4)", SyntaxUiTheme::Dark);
 
-        assert!(rendered
-            .html
-            .contains("<video controls preload=\"none\""));
+        assert!(rendered.html.contains("<video controls preload=\"none\""));
         assert!(rendered.html.contains("src=\"./fixtures/demo.mp4\""));
         assert!(rendered.html.contains("<figcaption>Demo clip</figcaption>"));
         assert!(!rendered.html.contains("<img"));

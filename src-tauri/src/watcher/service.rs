@@ -82,8 +82,8 @@ impl WatcherService {
                     .map(|guard| *guard)
                     .unwrap_or_default();
 
-                if let Ok(snapshot) = document_service_for_callback
-                    .reload(&watched_path_for_callback, ui_theme)
+                if let Ok(snapshot) =
+                    document_service_for_callback.reload(&watched_path_for_callback, ui_theme)
                 {
                     let _ = app_handle_for_callback.emit(DOCUMENT_REFRESHED_EVENT, snapshot);
                 }

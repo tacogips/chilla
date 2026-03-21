@@ -68,10 +68,7 @@ pub fn open_file_preview(path: String, state: State<'_, AppState>) -> Result<Fil
 
 #[tauri::command]
 pub fn stop_document_watch(state: State<'_, AppState>) -> Result<(), String> {
-    state
-        .watcher_service()
-        .stop()
-        .map_err(format_command_error)
+    state.watcher_service().stop().map_err(format_command_error)
 }
 
 #[tauri::command]

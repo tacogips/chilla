@@ -29,6 +29,8 @@ pub struct DirectoryEntry {
     pub path: String,
     pub name: String,
     pub is_directory: bool,
+    pub size_bytes: u64,
+    pub modified_at_unix_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
