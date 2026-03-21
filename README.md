@@ -47,7 +47,7 @@ Global shortcuts:
 - `J` or `ArrowDown`: scroll the active file view down one line when the file tree is hidden
 - `K` or `ArrowUp`: scroll the active file view up one line when the file tree is hidden
 - `Shift+L`: toggle file tree
-- `Y`: copy the current file's absolute path
+- `Y`: copy the selected file or directory absolute path
 - `R`: reload the current file
 - `Shift+T`: toggle table of contents for Markdown
 - `Shift+P`: switch Markdown raw/preview pane
@@ -134,6 +134,7 @@ nix develop
 ```bash
 task dev
 task build
+task nix-build
 task test
 task check
 task clippy
@@ -149,6 +150,9 @@ bun run typecheck
 bun run test
 CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml
 ```
+
+`task build` compiles the Tauri backend with Cargo `--release`.
+`task nix-build` builds the default flake package via `nix build .#chilla`, which also uses crane's release-profile Cargo path for the packaged desktop binary.
 
 ## Running the App
 

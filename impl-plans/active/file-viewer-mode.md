@@ -228,3 +228,9 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
 **Notes**: The play overlay remains keyboard reachable, and the autoplay request id is now consumed once per preview load so repeated reactive updates do not retrigger stale playback requests.
+
+### Session: 2026-03-21 JST
+**Tasks Completed**: Aligned packaged-build behavior with the Tauri custom-protocol requirement used by this repository's Cargo/Nix path; adjusted the global `Y` shortcut to copy the currently selected file-browser path; tightened preview/raw-pane layout with shared inner-width wrappers; updated README to match the shipped shortcut and build behavior.
+**Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: `task nix-build` was reverified after the packaged-build fix. The current implementation now treats the selected browser entry, not only the open document, as the source of truth for copy-path behavior in file view mode.
