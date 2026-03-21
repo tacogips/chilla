@@ -35,6 +35,7 @@ import {
   stopDocumentWatch,
 } from "../../lib/tauri/document";
 import { FileBrowserPane } from "../file-view/FileBrowserPane";
+import type { FileBrowserSelectOptions } from "../file-view/FileBrowserPane";
 import { PreviewPane } from "../preview/PreviewPane";
 import { PdfFilePreviewPane } from "../preview/PdfFilePreviewPane";
 import { VideoFilePreviewPane } from "../preview/VideoFilePreviewPane";
@@ -43,7 +44,7 @@ import type { WorkspaceSelection } from "./state";
 
 const appWindow = getCurrentWindow();
 
-/** Delay before opening a file from tree selection alone (click / j-k); confirm opens immediately. */
+/** Delay before opening a file from keyboard selection alone (j-k); confirm opens immediately. */
 const SELECTION_PREVIEW_DEBOUNCE_MS = 500;
 /** Binary / media previews: shorter wait while keeping debounce for text and Markdown. */
 const SELECTION_PREVIEW_DEBOUNCE_FAST_MS = 120;
@@ -58,6 +59,10 @@ function selectionPreviewDebounceMsForPath(filePath: string): number {
   }
 
   return SELECTION_PREVIEW_DEBOUNCE_MS;
+}
+
+function isVideoPath(filePath: string): boolean {
+  return /\.(mp4|m4v|mov|webm|ogv)$/i.test(filePath);
 }
 
 type MarkdownPane = "raw" | "preview";
@@ -420,6 +425,7 @@ export function WorkspaceShell() {
     string | null
   >(null);
   const [filePreview, setFilePreview] = createSignal<FilePreview | null>(null);
+  const [videoAutoplayRequestId, setVideoAutoplayRequestId] = createSignal(0);
   const [markdownDoc, setMarkdownDoc] = createSignal<DocumentSnapshot | null>(
     null,
   );
@@ -622,7 +628,7 @@ export function WorkspaceShell() {
 
   const handleSelectEntry = (
     entry: DirectoryEntry,
-    options?: { readonly immediatePreview?: boolean },
+    options?: FileBrowserSelectOptions,
   ) => {
     setSelectedBrowserPath(entry.path);
 
@@ -635,6 +641,9 @@ export function WorkspaceShell() {
 
     if (options?.immediatePreview === true) {
       clearSelectionPreviewDebounce();
+      if (options.playVideo === true && isVideoPath(entry.path)) {
+        setVideoAutoplayRequestId((value) => value + 1);
+      }
       void previewSelectedFile(entry.path);
       return;
     }
@@ -642,7 +651,10 @@ export function WorkspaceShell() {
     scheduleSelectionPreviewFromTree(entry.path);
   };
 
-  const handleConfirmEntry = async (entry: DirectoryEntry) => {
+  const handleConfirmEntry = async (
+    entry: DirectoryEntry,
+    options?: FileBrowserSelectOptions,
+  ) => {
     if (entry.is_directory) {
       try {
         stopWatchingCurrentDocument();
@@ -660,6 +672,9 @@ export function WorkspaceShell() {
     try {
       clearSelectionPreviewDebounce();
       setSelectedBrowserPath(entry.path);
+      if (options?.playVideo === true && isVideoPath(entry.path)) {
+        setVideoAutoplayRequestId((value) => value + 1);
+      }
       await previewSelectedFile(entry.path);
     } catch (error: unknown) {
       setErrorMessage(
@@ -1095,6 +1110,7 @@ export function WorkspaceShell() {
               <VideoFilePreviewPane
                 path={fp()!.path}
                 fileName={fp()!.file_name}
+                autoplayRequestId={videoAutoplayRequestId()}
               />
             </Show>
 

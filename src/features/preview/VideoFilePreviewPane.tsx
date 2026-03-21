@@ -1,5 +1,4 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import { isLinuxWebKitDesktop } from "../../lib/platform";
@@ -7,17 +6,18 @@ import { isLinuxWebKitDesktop } from "../../lib/platform";
 interface VideoFilePreviewPaneProps {
   readonly path: string;
   readonly fileName: string;
+  readonly autoplayRequestId: number;
 }
 
 export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
   const isLinuxDesktop = isLinuxWebKitDesktop();
   const [playbackFailed, setPlaybackFailed] = createSignal(false);
-  const [openFailed, setOpenFailed] = createSignal<string | null>(null);
   const [videoSrc, setVideoSrc] = createSignal(convertFileSrc(props.path));
   let videoElement: HTMLVideoElement | undefined;
   let activeBlobUrl: string | null = null;
   let loadGeneration = 0;
   let blobFallbackRequestedForPath: string | null = null;
+  let playRequested = false;
 
   const clearBlobUrl = () => {
     if (activeBlobUrl !== null) {
@@ -26,13 +26,17 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
     }
   };
 
-  const openInDefaultPlayer = () => {
-    setOpenFailed(null);
-    void openPath(props.path).catch((error: unknown) => {
-      const message =
-        error instanceof Error ? error.message : "Failed to open the file.";
-      console.error("Failed to open video in default player.", error);
-      setOpenFailed(message);
+  const requestPlayback = () => {
+    const video = videoElement;
+
+    playRequested = true;
+
+    if (video === undefined) {
+      return;
+    }
+
+    void video.play().catch(() => {
+      // If media is still loading, onCanPlay will honor the pending request.
     });
   };
 
@@ -42,13 +46,21 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
     blobFallbackRequestedForPath = null;
     clearBlobUrl();
     setPlaybackFailed(false);
-    setOpenFailed(null);
     setVideoSrc(convertFileSrc(props.path));
+    playRequested = false;
 
     onCleanup(() => {
       loadGeneration += 1;
       clearBlobUrl();
     });
+  });
+
+  createEffect(() => {
+    if (props.autoplayRequestId <= 0) {
+      return;
+    }
+
+    requestPlayback();
   });
 
   const switchToBlobFallback = async () => {
@@ -78,6 +90,13 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
       activeBlobUrl = objectUrl;
       setPlaybackFailed(false);
       setVideoSrc(objectUrl);
+
+      const video = videoElement;
+      if (playRequested && video !== undefined) {
+        void video.play().catch(() => {
+          // Wait for canplay if the element is still not ready.
+        });
+      }
     } catch (error: unknown) {
       if (generation !== loadGeneration) {
         return;
@@ -127,10 +146,9 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
       event.preventDefault();
 
       if (video.paused) {
-        void video.play().catch(() => {
-          // Codec or autoplay policy blocked playback.
-        });
+        requestPlayback();
       } else {
+        playRequested = false;
         video.pause();
       }
     };
@@ -146,11 +164,7 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
     <section class="pane">
       <header class="pane__header">
         <span class="pane__title">Preview</span>
-        <span>
-          {isLinuxDesktop
-            ? "Video (Space: play / pause, fallback: system player)"
-            : "Video (Space: play / pause)"}
-        </span>
+        <span>Video (Space: play / pause)</span>
       </header>
       <div
         class={`pane__body preview preview--embedded-video${isLinuxDesktop ? " preview--video-external-linux" : ""}`}
@@ -165,8 +179,30 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
             playsinline
             src={videoSrc()}
             aria-label={props.fileName}
+            onCanPlay={() => {
+              const video = videoElement;
+
+              if (!playRequested || video === undefined || !video.paused) {
+                return;
+              }
+
+              void video.play().catch(() => {
+                // Keep the request pending until playback succeeds or errors.
+              });
+            }}
+            onPlay={() => {
+              playRequested = false;
+            }}
+            onPause={() => {
+              const video = videoElement;
+
+              if (video !== undefined && video.ended) {
+                playRequested = false;
+              }
+            }}
             onError={() => {
               const video = videoElement;
+              playRequested = false;
 
               if (
                 isLinuxDesktop &&
@@ -193,24 +229,9 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
         <div class="preview-video__actions">
           <Show when={playbackFailed()}>
             <p class="preview-video__error">
-              Inline playback failed in the Linux WebView. Open the file in your
-              system player instead.
+              Inline playback failed in the Linux WebView.
             </p>
           </Show>
-          <Show when={openFailed() !== null}>
-            <p class="preview-video__error">{openFailed()}</p>
-          </Show>
-          {isLinuxDesktop || playbackFailed() ? (
-            <button
-              type="button"
-              class="button button--ghost preview-video__open-default"
-              onClick={() => {
-                openInDefaultPlayer();
-              }}
-            >
-              Open {props.fileName}
-            </button>
-          ) : null}
         </div>
       </div>
     </section>

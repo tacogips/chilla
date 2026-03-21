@@ -55,6 +55,8 @@ function FileGlyph() {
 export interface FileBrowserSelectOptions {
   /** Skip selection debounce and open the preview immediately (Enter / Ctrl+M from filter). */
   readonly immediatePreview?: boolean;
+  /** Request playback after the preview opens when the selected entry is a video file. */
+  readonly playVideo?: boolean;
 }
 
 interface FileBrowserPaneProps {
@@ -65,7 +67,10 @@ interface FileBrowserPaneProps {
     entry: DirectoryEntry,
     options?: FileBrowserSelectOptions,
   ) => void;
-  readonly onConfirmEntry: (entry: DirectoryEntry) => void;
+  readonly onConfirmEntry: (
+    entry: DirectoryEntry,
+    options?: FileBrowserSelectOptions,
+  ) => void;
   readonly onNavigateToParent: () => void;
 }
 
@@ -164,6 +169,7 @@ function focusListButtonForPath(
     for (const button of buttons) {
       if (button.getAttribute("data-path") === selectedPath) {
         button.focus({ preventScroll: true });
+        button.scrollIntoView({ block: "nearest" });
         return true;
       }
     }
@@ -173,6 +179,7 @@ function focusListButtonForPath(
 
   if (first !== null) {
     first.focus({ preventScroll: true });
+    first.scrollIntoView({ block: "nearest" });
     return true;
   }
 
@@ -294,23 +301,44 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
 
     focusFirstListButton(
       entries,
-      immediatePreview === true ? { immediatePreview: true } : undefined,
+      immediatePreview === true
+        ? { immediatePreview: true, playVideo: true }
+        : undefined,
     );
   };
 
   createEffect(
     on(
+      () => props.directory?.current_directory_path ?? null,
+      (cwd, previousCwd) => {
+        if (previousCwd !== undefined && cwd !== previousCwd) {
+          setFilterText("");
+        }
+      },
+    ),
+  );
+
+  createEffect(
+    on(
       () =>
-        props.active ? (props.directory?.current_directory_path ?? null) : null,
-      (cwd) => {
-        if (cwd === null) {
+        props.active
+          ? {
+              cwd: props.directory?.current_directory_path ?? null,
+              selectedPath: props.selectedPath,
+              filteredCount: filteredEntries().length,
+            }
+          : null,
+      (state) => {
+        if (state === null || state.cwd === null) {
           return;
         }
 
-        const path = props.selectedPath;
         queueMicrotask(() => {
           requestAnimationFrame(() => {
-            focusListButtonForPath(resolveFileBrowserListEl(), path);
+            focusListButtonForPath(
+              resolveFileBrowserListEl(),
+              state.selectedPath,
+            );
           });
         });
       },
@@ -353,6 +381,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
         (entry) => entry.path === props.selectedPath,
       );
       const currentIndex = selectedIndex === -1 ? 0 : selectedIndex;
+      const selectedEntry = entries[currentIndex];
 
       const moveSelection = (nextIndex: number) => {
         const nextEntry = entries[nextIndex];
@@ -377,17 +406,29 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
         return;
       }
 
+      if (event.key === " " || event.code === "Space") {
+        if (selectedEntry !== undefined && !selectedEntry.is_directory) {
+          event.preventDefault();
+          props.onConfirmEntry(selectedEntry, {
+            immediatePreview: true,
+            playVideo: true,
+          });
+        }
+        return;
+      }
+
       if (
         key === "l" ||
         event.key === "ArrowRight" ||
         event.key === "Enter" ||
         isModifierM(event)
       ) {
-        const selectedEntry = entries[currentIndex];
-
         if (selectedEntry !== undefined) {
           event.preventDefault();
-          props.onConfirmEntry(selectedEntry);
+          props.onConfirmEntry(selectedEntry, {
+            immediatePreview: true,
+            playVideo: true,
+          });
         }
       }
     };
@@ -540,8 +581,22 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
                           : ""
                       }`}
                       aria-label={entry.name}
-                      onClick={() => props.onSelectEntry(entry)}
-                      onDblClick={() => props.onConfirmEntry(entry)}
+                      onClick={() => props.onConfirmEntry(entry)}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key === " " ||
+                          event.code === "Space" ||
+                          event.key === "Enter" ||
+                          isModifierM(event)
+                        ) {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          props.onConfirmEntry(entry, {
+                            immediatePreview: true,
+                            playVideo: true,
+                          });
+                        }
+                      }}
                       onFocusIn={(event) => {
                         updateNameTooltipFromButton(
                           event.currentTarget,
