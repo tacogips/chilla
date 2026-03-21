@@ -47,7 +47,7 @@ Global shortcuts:
 - `J` or `ArrowDown`: scroll the active file view down one line when the file tree is hidden
 - `K` or `ArrowUp`: scroll the active file view up one line when the file tree is hidden
 - `Shift+L`: toggle file tree
-- `Y`: copy the current file's absolute path
+- `Y`: copy the current file's absolute path when the file tree is hidden
 - `R`: reload the current file
 - `Shift+T`: toggle table of contents for Markdown
 - `Shift+P`: switch Markdown raw/preview pane
@@ -69,6 +69,7 @@ File tree shortcuts:
 - `S`: sort by size descending
 - `H` or `ArrowLeft`: go to parent directory
 - `L`, `ArrowRight`, `Enter`: open or confirm selection
+- `Y`: copy the selected file or directory absolute path, or the current directory path when no row is selected
 - `Ctrl+M`: same as `Enter` in the filter field
 
 Video preview:
@@ -128,6 +129,17 @@ The repository is set up for `nix develop`, which provides Bun, Cargo, Tauri-rel
 ```bash
 nix develop
 ```
+
+### Linux GDK / GTK environment constraints
+
+On Linux, `chilla` depends on the GTK/WebKitGTK runtime prepared by `flake.nix`. In practice, that means:
+
+- Prefer running the app from `nix develop`, `task dev`, or `nix run .` so the wrapped GTK/GIO/GStreamer environment is applied.
+- Do not mix host GTK-related overrides into the dev shell. In particular, `GTK_PATH`, `GI_TYPELIB_PATH`, `GTK_IM_MODULE`, `QT_IM_MODULE`, and `XMODIFIERS` are intentionally unset to avoid loading incompatible host modules.
+- The Linux WebKitGTK renderer is currently run with `WEBKIT_DISABLE_DMABUF_RENDERER=1` because DMA-BUF rendering is not treated as stable for this app's environment.
+- If Linux media playback behaves differently from macOS, assume the Linux path is constrained by the WebKitGTK + GStreamer stack rather than the frontend alone.
+
+If you launch Tauri commands outside the Nix shell, you are responsible for providing a compatible GTK/WebKitGTK/GStreamer runtime yourself.
 
 ### Common commands
 

@@ -12,6 +12,7 @@ import {
 import { Portal } from "solid-js/web";
 import type {
   DirectoryEntry,
+  DirectorySort,
   DirectorySnapshot,
   DocumentSnapshot,
   FilePreview,
@@ -37,6 +38,7 @@ import {
 } from "../../lib/tauri/document";
 import { FileBrowserPane } from "../file-view/FileBrowserPane";
 import type { FileBrowserSelectOptions } from "../file-view/FileBrowserPane";
+import { DEFAULT_FILE_TREE_SORT } from "../file-view/sort";
 import { PreviewPane } from "../preview/PreviewPane";
 import { PdfFilePreviewPane } from "../preview/PdfFilePreviewPane";
 import { VideoFilePreviewPane } from "../preview/VideoFilePreviewPane";
@@ -50,6 +52,7 @@ const EMPTY_STATE_IMAGE_PATH = "/empty-state-cat.png";
 const SELECTION_PREVIEW_DEBOUNCE_MS = 500;
 /** Binary / media previews: shorter wait while keeping debounce for text and Markdown. */
 const SELECTION_PREVIEW_DEBOUNCE_FAST_MS = 120;
+const DIRECTORY_PAGE_LIMIT = 100;
 
 function selectionPreviewDebounceMsForPath(filePath: string): number {
   if (/\.(pdf|png|apng|jpe?g|gif|webp)$/i.test(filePath)) {
@@ -112,7 +115,10 @@ const SHORTCUT_SECTIONS: readonly {
         keys: ["Shift", "L"],
         description: "Toggle file tree",
       },
-      { keys: ["Y"], description: "Copy current file absolute path" },
+      {
+        keys: ["Y"],
+        description: "Copy current file absolute path when the file tree is hidden",
+      },
       { keys: ["R"], description: "Reload current file" },
       {
         keys: ["Shift", "T"],
@@ -180,6 +186,11 @@ const SHORTCUT_SECTIONS: readonly {
       {
         keys: ["L", "→", "Enter"],
         description: "Open or confirm",
+      },
+      {
+        keys: ["Y"],
+        description:
+          "Copy the selected file or directory absolute path (or the current directory path when no row is selected)",
       },
     ],
   },
@@ -468,8 +479,14 @@ export function WorkspaceShell() {
     createSignal<StartupContext | null>(null);
   const [directorySnapshot, setDirectorySnapshot] =
     createSignal<DirectorySnapshot | null>(null);
+  const [directoryQuery, setDirectoryQuery] = createSignal("");
+  const [directorySort, setDirectorySort] =
+    createSignal<DirectorySort>(DEFAULT_FILE_TREE_SORT);
   const [selectedBrowserPath, setSelectedBrowserPath] = createSignal<
     string | null
+  >(null);
+  const [selectedBrowserIndex, setSelectedBrowserIndex] = createSignal<
+    number | null
   >(null);
   const [filePreview, setFilePreview] = createSignal<FilePreview | null>(null);
   const [videoAutoplayRequestId, setVideoAutoplayRequestId] = createSignal(0);
@@ -486,13 +503,101 @@ export function WorkspaceShell() {
   });
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
   const [isLoading, setLoading] = createSignal(true);
+  const [isDirectoryLoading, setDirectoryLoading] = createSignal(false);
   const [colorScheme, setColorScheme] =
     createSignal<ColorScheme>(getColorScheme());
 
-  const applyDirectorySnapshot = (nextSnapshot: DirectorySnapshot) => {
+  interface DirectorySelection {
+    readonly path: string;
+    readonly index: number;
+  }
+
+  type DirectorySelectionMode =
+    | "default"
+    | "none"
+    | "preserve"
+    | "preserve_or_default";
+
+  const resolveLoadedSelection = (
+    snapshot: DirectorySnapshot,
+    selectedPath: string | null,
+    selectedIndex: number | null,
+  ): DirectorySelection | null => {
+    if (selectedPath !== null) {
+      const localIndex = snapshot.entries.findIndex((entry) =>
+        entry.path === selectedPath
+      );
+
+      if (localIndex !== -1) {
+        const entry = snapshot.entries[localIndex];
+
+        if (entry === undefined) {
+          return null;
+        }
+
+        return {
+          path: entry.path,
+          index: snapshot.offset + localIndex,
+        };
+      }
+    }
+
+    if (selectedIndex !== null) {
+      const localIndex = selectedIndex - snapshot.offset;
+      const entry = snapshot.entries[localIndex];
+
+      if (entry !== undefined) {
+        return {
+          path: entry.path,
+          index: selectedIndex,
+        };
+      }
+    }
+
+    return null;
+  };
+
+  const defaultDirectorySelection = (
+    snapshot: DirectorySnapshot,
+  ): DirectorySelection | null => {
+    const localIndex = snapshot.entries.findIndex((entry) => !entry.is_directory);
+    const entry =
+      localIndex === -1 ? snapshot.entries[0] : snapshot.entries[localIndex];
+
+    if (entry === undefined) {
+      return null;
+    }
+
+    return {
+      path: entry.path,
+      index: snapshot.offset + (localIndex === -1 ? 0 : localIndex),
+    };
+  };
+
+  const applyDirectorySnapshot = (
+    nextSnapshot: DirectorySnapshot,
+    selectionMode: DirectorySelectionMode,
+  ) => {
+    const preservedSelection =
+      selectionMode === "preserve" || selectionMode === "preserve_or_default"
+        ? resolveLoadedSelection(
+            nextSnapshot,
+            selectedBrowserPath(),
+            selectedBrowserIndex(),
+          )
+        : null;
+    const nextSelection =
+      preservedSelection ??
+      (selectionMode === "default" || selectionMode === "preserve_or_default"
+        ? defaultDirectorySelection(nextSnapshot)
+        : null);
+
     startTransition(() => {
       setDirectorySnapshot(nextSnapshot);
-      setSelectedBrowserPath(nextSnapshot.selected_path);
+      setDirectoryQuery(nextSnapshot.query);
+      setDirectorySort(nextSnapshot.sort);
+      setSelectedBrowserPath(nextSelection?.path ?? null);
+      setSelectedBrowserIndex(nextSelection?.index ?? null);
       setErrorMessage(null);
     });
   };
@@ -512,17 +617,38 @@ export function WorkspaceShell() {
 
   const loadDirectoryState = async (
     path: string,
-    selectedPath: string | null,
+    options?: {
+      readonly offset?: number | null;
+      readonly query?: string;
+      readonly sort?: DirectorySort;
+      readonly selectionMode?: DirectorySelectionMode;
+    },
   ) => {
     clearSelectionPreviewDebounce();
     const requestId = ++directoryRequestId;
-    const nextSnapshot = await listDirectory(path, selectedPath);
+    setDirectoryLoading(true);
 
-    if (requestId !== directoryRequestId) {
-      return;
+    try {
+      const nextSnapshot = await listDirectory(path, {
+        offset: options?.offset ?? null,
+        limit: DIRECTORY_PAGE_LIMIT,
+        query: options?.query ?? directoryQuery(),
+        sort: options?.sort ?? directorySort(),
+      });
+
+      if (requestId !== directoryRequestId) {
+        return;
+      }
+
+      applyDirectorySnapshot(
+        nextSnapshot,
+        options?.selectionMode ?? "preserve_or_default",
+      );
+    } finally {
+      if (requestId === directoryRequestId) {
+        setDirectoryLoading(false);
+      }
     }
-
-    applyDirectorySnapshot(nextSnapshot);
   };
 
   const previewSelectedFile = async (path: string) => {
@@ -630,10 +756,18 @@ export function WorkspaceShell() {
       const nextStartupContext = await getStartupContext();
       setStartupContext(nextStartupContext);
       setFileTreeOpen(nextStartupContext.selected_file_path === null);
+      setSelectedBrowserPath(nextStartupContext.selected_file_path);
+      setSelectedBrowserIndex(null);
 
       await loadDirectoryState(
         nextStartupContext.current_directory_path,
-        nextStartupContext.selected_file_path,
+        {
+          query: "",
+          selectionMode:
+            nextStartupContext.selected_file_path === null
+              ? "default"
+              : "preserve",
+        },
       );
 
       if (nextStartupContext.selected_file_path !== null) {
@@ -680,14 +814,16 @@ export function WorkspaceShell() {
       return;
     }
 
+    await handleCopyPath(path, "Failed to copy the current file path");
+  };
+
+  const handleCopyPath = async (path: string, fallbackMessage: string) => {
     try {
       await writeTextToClipboard(path);
       setErrorMessage(null);
     } catch (error: unknown) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to copy the current file path",
+        error instanceof Error ? error.message : fallbackMessage,
       );
     }
   };
@@ -697,6 +833,17 @@ export function WorkspaceShell() {
     options?: FileBrowserSelectOptions,
   ) => {
     setSelectedBrowserPath(entry.path);
+    const snapshot = directorySnapshot();
+
+    if (snapshot !== null) {
+      const localIndex = snapshot.entries.findIndex((candidate) =>
+        candidate.path === entry.path
+      );
+
+      if (localIndex !== -1) {
+        setSelectedBrowserIndex(snapshot.offset + localIndex);
+      }
+    }
 
     if (entry.is_directory) {
       clearSelectionPreviewDebounce();
@@ -725,7 +872,12 @@ export function WorkspaceShell() {
       try {
         stopWatchingCurrentDocument();
         clearDocumentArea();
-        await loadDirectoryState(entry.path, entry.path);
+        setSelectedBrowserPath(null);
+        setSelectedBrowserIndex(null);
+        await loadDirectoryState(entry.path, {
+          query: "",
+          selectionMode: "default",
+        });
       } catch (error: unknown) {
         setErrorMessage(
           error instanceof Error ? error.message : "Failed to open directory",
@@ -760,7 +912,12 @@ export function WorkspaceShell() {
     try {
       stopWatchingCurrentDocument();
       clearDocumentArea();
-      await loadDirectoryState(parentDirectory, currentDirectory ?? null);
+      setSelectedBrowserPath(currentDirectory ?? null);
+      setSelectedBrowserIndex(null);
+      await loadDirectoryState(parentDirectory, {
+        query: "",
+        selectionMode: "preserve_or_default",
+      });
     } catch (error: unknown) {
       setErrorMessage(
         error instanceof Error
@@ -782,6 +939,84 @@ export function WorkspaceShell() {
   const fp = () => filePreview();
   const currentOpenPath = () => md()?.path ?? previewPath(fp());
   const hasOpenDocument = () => md() !== null || fp() !== null;
+  const handleDirectoryQueryChange = async (query: string) => {
+    setDirectoryQuery(query);
+    const currentDirectory = directorySnapshot()?.current_directory_path;
+
+    if (currentDirectory === undefined) {
+      return;
+    }
+
+    try {
+      await loadDirectoryState(currentDirectory, {
+        offset: 0,
+        query,
+        sort: directorySort(),
+        selectionMode: "preserve_or_default",
+      });
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to update file filter",
+      );
+    }
+  };
+
+  const handleDirectorySortChange = async (sort: DirectorySort) => {
+    setDirectorySort(sort);
+    const currentDirectory = directorySnapshot()?.current_directory_path;
+
+    if (currentDirectory === undefined) {
+      return;
+    }
+
+    try {
+      await loadDirectoryState(currentDirectory, {
+        offset: 0,
+        query: directoryQuery(),
+        sort,
+        selectionMode: "preserve_or_default",
+      });
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to update file sort",
+      );
+    }
+  };
+
+  const handleSelectDirectoryIndex = async (targetIndex: number) => {
+    const snapshot = directorySnapshot();
+
+    if (snapshot === null) {
+      return;
+    }
+
+    const previousSelection = {
+      index: selectedBrowserIndex(),
+      path: selectedBrowserPath(),
+    };
+    const maxOffset = Math.max(0, snapshot.total_entries - DIRECTORY_PAGE_LIMIT);
+    const targetOffset = Math.min(
+      maxOffset,
+      Math.max(0, targetIndex - Math.floor(DIRECTORY_PAGE_LIMIT / 2)),
+    );
+    setSelectedBrowserIndex(targetIndex);
+    setSelectedBrowserPath(null);
+
+    try {
+      await loadDirectoryState(snapshot.current_directory_path, {
+        offset: targetOffset,
+        query: directoryQuery(),
+        sort: directorySort(),
+        selectionMode: "preserve",
+      });
+    } catch (error: unknown) {
+      setSelectedBrowserIndex(previousSelection.index);
+      setSelectedBrowserPath(previousSelection.path);
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to move file selection",
+      );
+    }
+  };
 
   const viewerGridClassName = createMemo(() => {
     const toc = isTocOpen() && md() !== null;
@@ -901,6 +1136,9 @@ export function WorkspaceShell() {
       }
 
       if (matchesShortcut(event, "y")) {
+        if (isFileTreeOpen()) {
+          return;
+        }
         if (!hasOpenDocument()) {
           return;
         }
@@ -1130,11 +1368,21 @@ export function WorkspaceShell() {
               active={true}
               directory={directorySnapshot()}
               selectedPath={selectedBrowserPath()}
+              selectedIndex={selectedBrowserIndex()}
+              query={directoryQuery()}
+              sort={directorySort()}
+              isLoading={isDirectoryLoading()}
+              onChangeQuery={(query) => void handleDirectoryQueryChange(query)}
+              onChangeSort={(sort) => void handleDirectorySortChange(sort)}
+              onCopyPath={(path) =>
+                void handleCopyPath(path, "Failed to copy the selected path")
+              }
               onConfirmEntry={(entry, options) =>
                 void handleConfirmEntry(entry, options)
               }
               onNavigateToParent={() => void handleNavigateToParent()}
               onSelectEntry={handleSelectEntry}
+              onSelectIndex={(index) => void handleSelectDirectoryIndex(index)}
             />
           </Show>
 

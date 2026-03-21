@@ -218,6 +218,10 @@ export interface StartupContext {
 **Notes**: The current app is centered on a single Markdown startup path. The feature will be implemented by adding startup context plus separate directory-listing/file-preview commands, while preserving the existing Markdown editor flow for Markdown mode. Image and video previews are part of the file-view contract.
 
 ### Session: 2026-03-21 JST
+**Tasks Completed**: Refactored directory listing contract to keep selection frontend-owned
+**Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode
+**Blockers**: Runtime keyboard behavior still needs manual validation in the app
+**Notes**: Removed `selected_path` / `selected_index` from the `list_directory` Tauri contract so the backend acts as a stateless page query service over `path`, `offset`, `limit`, `query`, and `sort`. Frontend selection is now owned locally in `WorkspaceShell`, including page-boundary keyboard navigation. Verified with `bun run typecheck`, `bun test`, `CARGO_TERM_QUIET=true cargo check -p chilla`, and `CARGO_TERM_QUIET=true cargo test -p chilla`.
 **Tasks Completed**: Extended the directory-entry contract with file size and modified-time metadata; added frontend file-tree sort modes and keyboard shortcuts for name, mtime, and size.
 **Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
@@ -228,3 +232,15 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
 **Notes**: The play overlay remains keyboard reachable, and the autoplay request id is now consumed once per preview load so repeated reactive updates do not retrigger stale playback requests.
+
+### Session: 2026-03-21 JST
+**Tasks Completed**: Tuned large-directory file-tree rendering by virtualizing the visible rows, moving scrolling into a dedicated viewport, and removing per-row truncation measurement observers that scaled with entry count.
+**Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: The file tree now renders only the visible slice plus overscan, which keeps navigation responsive for large directories while preserving existing keyboard and focus behavior.
+
+### Session: 2026-03-21 JST
+**Tasks Completed**: Moved file-tree sort and filter evaluation to Rust, changed the directory-list contract to return a paged window with total counts and selection metadata, and updated the frontend file browser to request new windows as scroll/keyboard navigation moves across large directories.
+**Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: Large directories such as `/nix/store` no longer require sending the entire entry list over Tauri in one response. The frontend now treats the Rust response as a movable window over the full sorted directory.

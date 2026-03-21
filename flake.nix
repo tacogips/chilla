@@ -200,11 +200,23 @@
             postFixup = lib.optionalString pkgs.stdenv.isLinux ''
               wrapProgram $out/bin/chilla \
                 --prefix LD_LIBRARY_PATH : "${linuxRuntimeLibraryPath}" \
+                --set GIO_EXTRA_MODULES "${linuxGioModulePath}" \
+                --set XDG_DATA_DIRS "${linuxXdgDataDirs}" \
+                --set WEBKIT_DISABLE_DMABUF_RENDERER 1 \
                 --set GST_PLUGIN_SCANNER "${linuxGStreamerPluginScanner}" \
                 --set GST_PLUGIN_SYSTEM_PATH "${linuxGStreamerPluginPath}" \
                 --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : "${linuxGStreamerPluginPath}" \
                 --set GST_PLUGIN_PATH "${linuxGStreamerPluginPath}" \
-                --set GST_PLUGIN_PATH_1_0 "${linuxGStreamerPluginPath}"
+                --set GST_PLUGIN_PATH_1_0 "${linuxGStreamerPluginPath}" \
+                --unset GTK_PATH \
+                --unset GI_TYPELIB_PATH \
+                --unset GTK_IM_MODULE \
+                --unset GTK_IM_MODULE_FILE \
+                --unset QT_IM_MODULE \
+                --unset XMODIFIERS \
+                --unset GIO_MODULE_DIR \
+                --unset GTK_EXE_PREFIX \
+                --unset GTK_DATA_PREFIX
             '';
           };
 
