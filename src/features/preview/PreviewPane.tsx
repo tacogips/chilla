@@ -33,7 +33,10 @@ function mermaidTheme(colorScheme: ColorScheme): "dark" | "neutral" {
   return colorScheme === "dark" ? "dark" : "neutral";
 }
 
-async function enhanceMermaid(container: HTMLElement, colorScheme: ColorScheme) {
+async function enhanceMermaid(
+  container: HTMLElement,
+  colorScheme: ColorScheme,
+) {
   const mermaidBlocks = Array.from(
     container.querySelectorAll("pre > code.language-mermaid"),
   );
@@ -178,9 +181,11 @@ export function PreviewPane(props: PreviewPaneProps) {
 
         container.innerHTML = html;
 
-        void enhancePreviewContent(container, documentPath, colorScheme).catch(() => {
-          // Leave the rendered markup intact if asset or Mermaid enhancement fails.
-        });
+        void enhancePreviewContent(container, documentPath, colorScheme).catch(
+          () => {
+            // Leave the rendered markup intact if asset or Mermaid enhancement fails.
+          },
+        );
       },
     ),
   );

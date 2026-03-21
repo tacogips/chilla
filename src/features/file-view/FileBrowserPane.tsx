@@ -4,13 +4,17 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  createUniqueId,
   on,
   onCleanup,
   onMount,
 } from "solid-js";
 import { Portal } from "solid-js/web";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
-import type { DirectoryEntry, DirectorySnapshot } from "../../lib/tauri/document";
+import type {
+  DirectoryEntry,
+  DirectorySnapshot,
+} from "../../lib/tauri/document";
 import { middleEllipsisForWidth } from "./middleEllipsis";
 
 function FolderGlyph() {
@@ -78,9 +82,7 @@ function FileBrowserEntryName(props: { readonly name: string }) {
     const width = el.clientWidth;
     const font = getComputedStyle(el).font;
     setShown(
-      width <= 0
-        ? props.name
-        : middleEllipsisForWidth(props.name, width, font),
+      width <= 0 ? props.name : middleEllipsisForWidth(props.name, width, font),
     );
   };
 
@@ -146,6 +148,7 @@ function focusListButtonForPath(
 export function FileBrowserPane(props: FileBrowserPaneProps) {
   let filterInputEl: HTMLInputElement | undefined;
   let listEl: HTMLUListElement | undefined;
+  const filterInputId = createUniqueId();
   const [filterText, setFilterText] = createSignal("");
   const [nameTooltip, setNameTooltip] = createSignal<NameTooltipState | null>(
     null,
@@ -164,9 +167,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
       return dir.entries;
     }
 
-    return dir.entries.filter((entry) =>
-      entry.name.toLowerCase().includes(q),
-    );
+    return dir.entries.filter((entry) => entry.name.toLowerCase().includes(q));
   });
 
   const totalEntryCount = createMemo(
@@ -226,7 +227,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
   createEffect(
     on(
       () =>
-        props.active ? props.directory?.current_directory_path ?? null : null,
+        props.active ? (props.directory?.current_directory_path ?? null) : null,
       (cwd) => {
         if (cwd === null) {
           return;
@@ -291,9 +292,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
       }
 
       if (key === "k" || event.key === "ArrowUp") {
-        moveSelection(
-          selectedIndex === -1 ? 0 : Math.max(0, currentIndex - 1),
-        );
+        moveSelection(selectedIndex === -1 ? 0 : Math.max(0, currentIndex - 1));
         return;
       }
 
@@ -384,14 +383,14 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
           {props.directory?.current_directory_path ?? "Loading directory..."}
         </div>
         <div class="file-browser__filter-row">
-          <label class="file-browser__filter-label" for="file-browser-filter">
+          <label class="file-browser__filter-label" for={filterInputId}>
             Filter
           </label>
           <input
             ref={(element) => {
               filterInputEl = element;
             }}
-            id="file-browser-filter"
+            id={filterInputId}
             class="file-browser__filter"
             type="search"
             placeholder="Filter by name..."
