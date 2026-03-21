@@ -42,6 +42,8 @@ Global shortcuts:
 - `Q`: quit the app
 - `Ctrl+D`: scroll down
 - `Ctrl+U`: scroll up
+- `J` or `ArrowDown`: scroll the active file view down one line when the file tree is hidden
+- `K` or `ArrowUp`: scroll the active file view up one line when the file tree is hidden
 - `Shift+L`: toggle file tree
 - `Y`: copy the current file's absolute path
 - `R`: reload the current file

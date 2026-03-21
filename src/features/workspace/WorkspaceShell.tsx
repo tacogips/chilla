@@ -101,6 +101,14 @@ const SHORTCUT_SECTIONS: readonly {
         description: "Scroll document up",
       },
       {
+        keys: ["J", "↓"],
+        description: "Scroll the active file view down one line when the file tree is hidden",
+      },
+      {
+        keys: ["K", "↑"],
+        description: "Scroll the active file view up one line when the file tree is hidden",
+      },
+      {
         keys: ["Shift", "L"],
         description: "Toggle file tree",
       },
@@ -374,6 +382,21 @@ function scrollActiveDocumentPane(direction: 1 | -1): void {
   }
 
   const delta = Math.max(80, Math.floor(body.clientHeight * 0.45)) * direction;
+  body.scrollTop += delta;
+}
+
+function nudgeActiveDocumentPane(direction: 1 | -1): void {
+  const body = getActiveDocumentScrollBody();
+
+  if (body === null) {
+    return;
+  }
+
+  const computedStyle = getComputedStyle(body);
+  const lineHeight = Number.parseFloat(computedStyle.lineHeight);
+  const delta =
+    (Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 24) *
+    direction;
   body.scrollTop += delta;
 }
 
@@ -852,6 +875,20 @@ export function WorkspaceShell() {
         event.preventDefault();
         setFileTreeOpen((value) => !value);
         return;
+      }
+
+      if (!isFileTreeOpen()) {
+        if (matchesShortcut(event, "j") || event.key === "ArrowDown") {
+          event.preventDefault();
+          nudgeActiveDocumentPane(1);
+          return;
+        }
+
+        if (matchesShortcut(event, "k") || event.key === "ArrowUp") {
+          event.preventDefault();
+          nudgeActiveDocumentPane(-1);
+          return;
+        }
       }
 
       if (matchesShortcut(event, "r")) {
