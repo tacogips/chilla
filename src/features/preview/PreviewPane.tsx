@@ -2,6 +2,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { dirname, join, normalize } from "@tauri-apps/api/path";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { createEffect, on, onCleanup, onMount } from "solid-js";
+import type { ColorScheme } from "../../lib/theme";
 import {
   isDefaultBrowserUrl,
   resolveDocumentResourceUrl,
@@ -13,6 +14,7 @@ interface PreviewPaneProps {
   readonly visible: boolean;
   readonly selectedAnchorId: string | null;
   readonly documentPath: string | null;
+  readonly colorScheme: ColorScheme;
 }
 
 let mermaidModulePromise:
@@ -21,19 +23,17 @@ let mermaidModulePromise:
 
 async function getMermaid() {
   mermaidModulePromise ??= import("mermaid").then(({ default: mermaid }) => {
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: "strict",
-      theme: "neutral",
-    });
-
     return mermaid;
   });
 
   return mermaidModulePromise;
 }
 
-async function enhanceMermaid(container: HTMLElement) {
+function mermaidTheme(colorScheme: ColorScheme): "dark" | "neutral" {
+  return colorScheme === "dark" ? "dark" : "neutral";
+}
+
+async function enhanceMermaid(container: HTMLElement, colorScheme: ColorScheme) {
   const mermaidBlocks = Array.from(
     container.querySelectorAll("pre > code.language-mermaid"),
   );
@@ -56,6 +56,11 @@ async function enhanceMermaid(container: HTMLElement) {
   }
 
   const mermaid = await getMermaid();
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: "strict",
+    theme: mermaidTheme(colorScheme),
+  });
   const nodes = Array.from(container.querySelectorAll<HTMLElement>(".mermaid"));
 
   if (nodes.length > 0) {
@@ -102,6 +107,7 @@ async function enhancePreviewMedia(
 async function enhancePreviewContent(
   container: HTMLElement,
   documentPath: string | null,
+  colorScheme: ColorScheme,
 ) {
   for (const link of Array.from(
     container.querySelectorAll<HTMLAnchorElement>("a[href]"),
@@ -115,7 +121,7 @@ async function enhancePreviewContent(
   }
 
   await enhancePreviewMedia(container, documentPath);
-  await enhanceMermaid(container);
+  await enhanceMermaid(container, colorScheme);
 }
 
 export function PreviewPane(props: PreviewPaneProps) {
@@ -157,15 +163,22 @@ export function PreviewPane(props: PreviewPaneProps) {
 
   createEffect(
     on(
-      [() => props.visible, () => props.html, () => props.documentPath],
-      ([visible, , documentPath]) => {
+      [
+        () => props.visible,
+        () => props.html,
+        () => props.documentPath,
+        () => props.colorScheme,
+      ],
+      ([visible, html, documentPath, colorScheme]) => {
         const container = containerRef;
 
         if (!visible || container === undefined) {
           return;
         }
 
-        void enhancePreviewContent(container, documentPath).catch(() => {
+        container.innerHTML = html;
+
+        void enhancePreviewContent(container, documentPath, colorScheme).catch(() => {
           // Leave the rendered markup intact if asset or Mermaid enhancement fails.
         });
       },

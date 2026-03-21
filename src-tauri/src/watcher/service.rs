@@ -1,6 +1,6 @@
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
 
@@ -11,6 +11,7 @@ use crate::{
     document::service::DocumentService,
     error::{AppError, AppResult},
     events::DOCUMENT_REFRESHED_EVENT,
+    syntax_highlight::SyntaxUiTheme,
 };
 
 struct ActiveWatcher {
@@ -35,6 +36,7 @@ impl WatcherService {
         path: PathBuf,
         app_handle: AppHandle,
         document_service: DocumentService,
+        syntax_ui_theme: Arc<RwLock<SyntaxUiTheme>>,
     ) -> AppResult<()> {
         let watched_path = path.clone();
         let last_refresh = Arc::new(Mutex::new(None::<Instant>));
@@ -42,6 +44,7 @@ impl WatcherService {
         let app_handle_for_callback = app_handle.clone();
         let document_service_for_callback = document_service.clone();
         let watched_path_for_callback = watched_path.clone();
+        let syntax_ui_theme_for_callback = Arc::clone(&syntax_ui_theme);
 
         let mut watcher =
             notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
@@ -74,8 +77,13 @@ impl WatcherService {
 
                 *last_refresh_at = Some(Instant::now());
 
-                if let Ok(snapshot) =
-                    document_service_for_callback.reload(&watched_path_for_callback)
+                let ui_theme = syntax_ui_theme_for_callback
+                    .read()
+                    .map(|guard| *guard)
+                    .unwrap_or_default();
+
+                if let Ok(snapshot) = document_service_for_callback
+                    .reload(&watched_path_for_callback, ui_theme)
                 {
                     let _ = app_handle_for_callback.emit(DOCUMENT_REFRESHED_EVENT, snapshot);
                 }

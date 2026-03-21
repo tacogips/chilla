@@ -1,9 +1,8 @@
-import { dirname } from "@tauri-apps/api/path";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { ParentProps } from "solid-js";
 import {
-  For,
-  Match,
   Show,
-  Switch,
+  createMemo,
   createSignal,
   onCleanup,
   onMount,
@@ -16,8 +15,13 @@ import type {
   FilePreview,
   HeadingNode,
   StartupContext,
-  WorkspaceMode,
 } from "../../lib/tauri/document";
+import {
+  applyColorScheme,
+  getColorScheme,
+  type ColorScheme,
+} from "../../lib/theme";
+import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import {
   getStartupContext,
   isMarkdownPath,
@@ -26,58 +30,209 @@ import {
   openDocument,
   openFilePreview,
   reloadDocument,
-  saveDocument,
+  stopDocumentWatch,
 } from "../../lib/tauri/document";
-import { EditorPane } from "../editor/EditorPane";
 import { FileBrowserPane } from "../file-view/FileBrowserPane";
 import { PreviewPane } from "../preview/PreviewPane";
 import { TocPane } from "../toc/TocPane";
 import type { WorkspaceSelection } from "./state";
 
-function formatTimestamp(lastModified: string | null): string {
-  if (lastModified === null) {
-    return "Unknown";
+const appWindow = getCurrentWindow();
+
+type MarkdownPane = "raw" | "preview";
+
+function SunGlyph() {
+  return (
+    <svg class="workspace__theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <circle
+        cx="12"
+        cy="12"
+        r="4"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      />
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-width="2"
+        d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M6.35 17.65l-1.41 1.41M19.07 4.93l-1.41 1.41"
+      />
+    </svg>
+  );
+}
+
+function MoonGlyph() {
+  return (
+    <svg class="workspace__theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
+      />
+    </svg>
+  );
+}
+
+function WorkspaceHeaderIcon(props: ParentProps<{ readonly class?: string }>) {
+  return (
+    <svg
+      class={props.class ?? "workspace__header-action-icon"}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      {props.children}
+    </svg>
+  );
+}
+
+function RawSourceGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M16 18l6-6-6-6M8 6l-6 6 6 6"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}
+
+function PreviewGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+      />
+      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2" />
+    </WorkspaceHeaderIcon>
+  );
+}
+
+function TocGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}
+
+function ReloadGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}
+
+function MinimizeWindowGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-width="2"
+        d="M5 12h14"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}
+
+function MaximizeWindowGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <rect
+        x="5"
+        y="5"
+        width="14"
+        height="14"
+        rx="2"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}
+
+function CloseWindowGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M18 6L6 18M6 6l12 12"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}
+
+function getActiveDocumentScrollBody(): HTMLElement | null {
+  const column = document.querySelector(".workspace__document-column");
+
+  if (column === null) {
+    return null;
   }
 
-  const timestamp = Number(lastModified);
+  const pane = column.querySelector(".pane:not(.pane--hidden)");
 
-  if (Number.isNaN(timestamp)) {
-    return "Unknown";
+  if (pane === null) {
+    return null;
   }
 
-  return new Date(timestamp).toLocaleString();
+  return pane.querySelector<HTMLElement>(".pane__body");
+}
+
+function scrollActiveDocumentPane(direction: 1 | -1): void {
+  const body = getActiveDocumentScrollBody();
+
+  if (body === null) {
+    return;
+  }
+
+  const delta = Math.max(80, Math.floor(body.clientHeight * 0.45)) * direction;
+  body.scrollTop += delta;
 }
 
 function previewPath(preview: FilePreview | null): string | null {
   return preview?.path ?? null;
 }
 
-function previewFileName(preview: FilePreview | null): string {
-  return preview?.file_name ?? "No file selected";
-}
-
-function previewLastModified(preview: FilePreview | null): string | null {
-  return preview?.last_modified ?? null;
-}
-
 function previewHtml(preview: FilePreview | null): string {
-  return preview?.html ?? "<div class=\"empty\">Select a file to preview it.</div>";
-}
-
-function markdownCandidatePath(
-  mode: WorkspaceMode,
-  markdownSnapshot: DocumentSnapshot | null,
-  selectedPath: string | null,
-): string | null {
-  if (mode === "markdown") {
-    return markdownSnapshot?.path ?? null;
-  }
-
-  if (selectedPath !== null && isMarkdownPath(selectedPath)) {
-    return selectedPath;
-  }
-
-  return null;
+  return (
+    preview?.html ??
+    "<section class=\"file-preview-empty\"><p class=\"file-preview-empty__title\">No file selected</p><p class=\"file-preview-empty__hint\">Pick a file in the file tree to open it here.</p></section>"
+  );
 }
 
 export function WorkspaceShell() {
@@ -86,37 +241,25 @@ export function WorkspaceShell() {
   const [startupContext, setStartupContext] = createSignal<StartupContext | null>(
     null,
   );
-  const [mode, setMode] = createSignal<WorkspaceMode>("file_view");
   const [directorySnapshot, setDirectorySnapshot] =
     createSignal<DirectorySnapshot | null>(null);
   const [selectedBrowserPath, setSelectedBrowserPath] = createSignal<
     string | null
   >(null);
   const [filePreview, setFilePreview] = createSignal<FilePreview | null>(null);
-  const [snapshot, setSnapshot] = createSignal<DocumentSnapshot | null>(null);
-  const [editorText, setEditorText] = createSignal("");
-  const [isDirty, setDirty] = createSignal(false);
-  const [isPreviewOpen, setPreviewOpen] = createSignal(false);
-  const [isTocOpen, setTocOpen] = createSignal(true);
+  const [markdownDoc, setMarkdownDoc] = createSignal<DocumentSnapshot | null>(
+    null,
+  );
+  const [markdownPane, setMarkdownPane] = createSignal<MarkdownPane>("preview");
+  const [isTocOpen, setTocOpen] = createSignal(false);
+  const [isFileTreeOpen, setFileTreeOpen] = createSignal(true);
   const [selection, setSelection] = createSignal<WorkspaceSelection>({
     anchorId: null,
     lineStart: null,
   });
-  const [conflictSnapshot, setConflictSnapshot] =
-    createSignal<DocumentSnapshot | null>(null);
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
   const [isLoading, setLoading] = createSignal(true);
-
-  const applySnapshot = (nextSnapshot: DocumentSnapshot) => {
-    startTransition(() => {
-      setSnapshot(nextSnapshot);
-      setEditorText(nextSnapshot.source_text);
-      setDirty(false);
-      setConflictSnapshot(null);
-      setErrorMessage(null);
-      setSelectedBrowserPath(nextSnapshot.path);
-    });
-  };
+  const [colorScheme, setColorScheme] = createSignal<ColorScheme>(getColorScheme());
 
   const applyDirectorySnapshot = (nextSnapshot: DirectorySnapshot) => {
     startTransition(() => {
@@ -126,17 +269,10 @@ export function WorkspaceShell() {
     });
   };
 
-  const handleHeadingSelect = (heading: HeadingNode) => {
-    setPreviewOpen(true);
-    setSelection({
-      anchorId: heading.anchor_id,
-      lineStart: heading.line_start,
-    });
-  };
-
-  const clearFilePreview = () => {
+  const clearDocumentArea = () => {
     previewRequestId += 1;
     setFilePreview(null);
+    setMarkdownDoc(null);
   };
 
   const loadDirectoryState = async (
@@ -155,16 +291,74 @@ export function WorkspaceShell() {
 
   const previewSelectedFile = async (path: string) => {
     const requestId = ++previewRequestId;
-    const nextPreview = await openFilePreview(path);
 
-    if (requestId !== previewRequestId) {
+    try {
+      if (isMarkdownPath(path)) {
+        const doc = await openDocument(path);
+
+        if (requestId !== previewRequestId) {
+          return;
+        }
+
+        startTransition(() => {
+          setMarkdownDoc(doc);
+          setFilePreview(null);
+          setMarkdownPane("preview");
+          setErrorMessage(null);
+        });
+      } else {
+        try {
+          await stopDocumentWatch();
+        } catch {
+          // Not running under Tauri or watcher already idle
+        }
+
+        const nextPreview = await openFilePreview(path);
+
+        if (requestId !== previewRequestId) {
+          return;
+        }
+
+        startTransition(() => {
+          setMarkdownDoc(null);
+          setFilePreview(nextPreview);
+          setErrorMessage(null);
+        });
+      }
+    } catch (error: unknown) {
+      if (requestId !== previewRequestId) {
+        return;
+      }
+
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to open file",
+      );
+    }
+  };
+
+  const refreshSyntaxHighlights = async () => {
+    const doc = markdownDoc();
+
+    if (doc !== null) {
+      try {
+        const nextSnapshot = await reloadDocument(doc.path);
+        setMarkdownDoc(nextSnapshot);
+      } catch (error: unknown) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to refresh markdown preview",
+        );
+      }
+
       return;
     }
 
-    startTransition(() => {
-      setFilePreview(nextPreview);
-      setErrorMessage(null);
-    });
+    const path = previewPath(filePreview());
+
+    if (path !== null) {
+      await previewSelectedFile(path);
+    }
   };
 
   const handleInitialLoad = async () => {
@@ -173,21 +367,13 @@ export function WorkspaceShell() {
     try {
       const nextStartupContext = await getStartupContext();
       setStartupContext(nextStartupContext);
-      setMode(nextStartupContext.initial_mode);
+
       await loadDirectoryState(
         nextStartupContext.current_directory_path,
         nextStartupContext.selected_file_path,
       );
 
-      if (
-        nextStartupContext.initial_mode === "markdown" &&
-        nextStartupContext.selected_file_path !== null
-      ) {
-        const nextSnapshot = await openDocument(
-          nextStartupContext.selected_file_path,
-        );
-        applySnapshot(nextSnapshot);
-      } else if (nextStartupContext.selected_file_path !== null) {
+      if (nextStartupContext.selected_file_path !== null) {
         await previewSelectedFile(nextStartupContext.selected_file_path);
       }
     } catch (error: unknown) {
@@ -199,61 +385,27 @@ export function WorkspaceShell() {
     }
   };
 
-  const handleSave = async () => {
-    const activeSnapshot = snapshot();
+  const handleReloadCurrent = async () => {
+    const doc = markdownDoc();
 
-    if (activeSnapshot === null) {
-      return;
-    }
-
-    try {
-      const nextSnapshot = await saveDocument(
-        activeSnapshot.path,
-        editorText(),
-      );
-      applySnapshot(nextSnapshot);
-    } catch (error: unknown) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to save document",
-      );
-    }
-  };
-
-  const handleReload = async () => {
-    const activeSnapshot = snapshot();
-
-    if (activeSnapshot === null) {
-      return;
-    }
-
-    try {
-      const nextSnapshot = await reloadDocument(activeSnapshot.path);
-      applySnapshot(nextSnapshot);
-    } catch (error: unknown) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to reload document",
-      );
-    }
-  };
-
-  const handleRefreshFileView = async () => {
-    const currentDirectory = directorySnapshot()?.current_directory_path;
-    const currentPreviewPath = previewPath(filePreview());
-
-    if (currentDirectory === undefined) {
-      return;
-    }
-
-    try {
-      await loadDirectoryState(currentDirectory, selectedBrowserPath());
-
-      if (currentPreviewPath !== null) {
-        await previewSelectedFile(currentPreviewPath);
+    if (doc !== null) {
+      try {
+        const nextSnapshot = await reloadDocument(doc.path);
+        setMarkdownDoc(nextSnapshot);
+        setErrorMessage(null);
+      } catch (error: unknown) {
+        setErrorMessage(
+          error instanceof Error ? error.message : "Failed to reload file",
+        );
       }
-    } catch (error: unknown) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to refresh file view",
-      );
+
+      return;
+    }
+
+    const path = previewPath(filePreview());
+
+    if (path !== null) {
+      await previewSelectedFile(path);
     }
   };
 
@@ -261,7 +413,8 @@ export function WorkspaceShell() {
     setSelectedBrowserPath(entry.path);
 
     if (entry.is_directory) {
-      clearFilePreview();
+      void stopDocumentWatch().catch(() => {});
+      clearDocumentArea();
       return;
     }
 
@@ -271,8 +424,9 @@ export function WorkspaceShell() {
   const handleConfirmEntry = async (entry: DirectoryEntry) => {
     if (entry.is_directory) {
       try {
-        clearFilePreview();
-        await loadDirectoryState(entry.path, null);
+        void stopDocumentWatch().catch(() => {});
+        clearDocumentArea();
+        await loadDirectoryState(entry.path, entry.path);
       } catch (error: unknown) {
         setErrorMessage(
           error instanceof Error
@@ -289,7 +443,7 @@ export function WorkspaceShell() {
       await previewSelectedFile(entry.path);
     } catch (error: unknown) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Failed to preview file",
+        error instanceof Error ? error.message : "Failed to open file",
       );
     }
   };
@@ -303,7 +457,8 @@ export function WorkspaceShell() {
     }
 
     try {
-      clearFilePreview();
+      void stopDocumentWatch().catch(() => {});
+      clearDocumentArea();
       await loadDirectoryState(parentDirectory, currentDirectory ?? null);
     } catch (error: unknown) {
       setErrorMessage(
@@ -314,75 +469,33 @@ export function WorkspaceShell() {
     }
   };
 
-  const handleSwitchToMarkdownMode = async () => {
-    const nextPath = markdownCandidatePath(
-      mode(),
-      snapshot(),
-      selectedBrowserPath(),
-    );
-
-    if (nextPath === null) {
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const nextSnapshot = await openDocument(nextPath);
-      applySnapshot(nextSnapshot);
-      setMode("markdown");
-    } catch (error: unknown) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to open Markdown mode",
-      );
-    } finally {
-      setLoading(false);
-    }
+  const handleHeadingSelect = (heading: HeadingNode) => {
+    setMarkdownPane("preview");
+    setSelection({
+      anchorId: heading.anchor_id,
+      lineStart: heading.line_start,
+    });
   };
 
-  const handleSwitchToFileView = async () => {
-    if (mode() === "file_view") {
-      return;
+  const md = () => markdownDoc();
+  const fp = () => filePreview();
+  const hasOpenDocument = () => md() !== null || fp() !== null;
+
+  const viewerGridClassName = createMemo(() => {
+    const toc = isTocOpen() && md() !== null;
+    const tree = isFileTreeOpen();
+    let className = "workspace__body workspace__body--viewer";
+
+    if (toc) {
+      className += " workspace__body--viewer--toc";
     }
 
-    const activePath =
-      snapshot()?.path ??
-      selectedBrowserPath() ??
-      startupContext()?.selected_file_path ??
-      null;
-    const targetDirectory =
-      activePath === null
-        ? startupContext()?.current_directory_path ?? null
-        : await dirname(activePath);
-
-    if (targetDirectory === null) {
-      return;
+    if (!tree) {
+      className += " workspace__body--viewer--no-tree";
     }
 
-    setLoading(true);
-
-    try {
-      await loadDirectoryState(targetDirectory, activePath);
-
-      if (activePath !== null) {
-        await previewSelectedFile(activePath);
-      } else {
-        clearFilePreview();
-      }
-
-      setMode("file_view");
-    } catch (error: unknown) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to open file view mode",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+    return className;
+  });
 
   onMount(() => {
     let isDisposed = false;
@@ -391,16 +504,14 @@ export function WorkspaceShell() {
     void handleInitialLoad();
 
     void listenDocumentRefreshed((refreshedSnapshot) => {
-      if (mode() !== "markdown") {
-        return;
-      }
+      const current = markdownDoc();
 
-      if (isDirty()) {
-        setConflictSnapshot(refreshedSnapshot);
-        return;
+      if (
+        current !== null &&
+        current.path === refreshedSnapshot.path
+      ) {
+        setMarkdownDoc(refreshedSnapshot);
       }
-
-      applySnapshot(refreshedSnapshot);
     })
       .then((dispose) => {
         if (isDisposed) {
@@ -422,239 +533,297 @@ export function WorkspaceShell() {
         );
       });
 
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+
+      if (event.key.toLowerCase() === "q" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        void appWindow.close().catch(() => {
+          // Vite dev without Tauri
+        });
+        return;
+      }
+
+      if (event.ctrlKey && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        scrollActiveDocumentPane(1);
+        return;
+      }
+
+      if (event.ctrlKey && event.key.toLowerCase() === "u") {
+        event.preventDefault();
+        scrollActiveDocumentPane(-1);
+        return;
+      }
+
+      if (
+        event.shiftKey &&
+        event.key.toLowerCase() === "l" &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        setFileTreeOpen((value) => !value);
+        return;
+      }
+
+      if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+        const key = event.key.toLowerCase();
+
+        if (key === "r") {
+          if (!hasOpenDocument()) {
+            return;
+          }
+          event.preventDefault();
+          void handleReloadCurrent();
+          return;
+        }
+
+        if (key === "t" && markdownDoc() !== null) {
+          event.preventDefault();
+          setTocOpen((value) => !value);
+          return;
+        }
+
+        if (key === "p" && markdownDoc() !== null) {
+          event.preventDefault();
+          setMarkdownPane((pane) => (pane === "preview" ? "raw" : "preview"));
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+
     onCleanup(() => {
       isDisposed = true;
       disposeListener?.();
+      window.removeEventListener("keydown", handleGlobalKeyDown);
     });
   });
-
-  const activeSnapshot = () => snapshot();
-  const activeMode = () => mode();
-  const activeMarkdownPath = () =>
-    markdownCandidatePath(activeMode(), activeSnapshot(), selectedBrowserPath());
 
   return (
     <main class="workspace">
       <div class="workspace__frame">
-        <header class="workspace__header">
-          <div class="workspace__title">
-            <span class="workspace__eyebrow">Marky File Viewer</span>
-            <strong class="workspace__file">
-              <Switch>
-                <Match when={activeMode() === "markdown"}>
-                  {activeSnapshot()?.file_name ?? "Loading..."}
-                </Match>
-                <Match when={true}>{previewFileName(filePreview())}</Match>
-              </Switch>
-            </strong>
-            <span class="workspace__status">
-              <For
-                each={
-                  activeMode() === "markdown"
-                    ? [
-                        "Markdown mode",
-                        isDirty() ? "Unsaved changes" : "Clean buffer",
-                        `Preview ${isPreviewOpen() ? "open" : "collapsed"}`,
-                        `Updated ${formatTimestamp(
-                          activeSnapshot()?.last_modified ?? null,
-                        )}`,
-                      ]
-                    : [
-                        "File view mode",
-                        directorySnapshot()?.current_directory_path ??
-                          "Loading directory",
-                        `Updated ${formatTimestamp(
-                          previewLastModified(filePreview()),
-                        )}`,
-                      ]
-                }
-              >
-                {(label, index) => (
-                  <>
-                    <span>{label}</span>
-                    <Show
-                      when={
-                        index() <
-                        (activeMode() === "markdown" ? 3 : 2)
-                      }
-                    >
-                      <span> · </span>
-                    </Show>
-                  </>
-                )}
-              </For>
-            </span>
-          </div>
-
-          <div class="workspace__actions">
-            <button
-              class={`button${
-                activeMode() === "file_view" ? " button--active" : ""
-              }`}
-              type="button"
-              onClick={() => void handleSwitchToFileView()}
-            >
-              File View
-            </button>
-            <button
-              class={`button${
-                activeMode() === "markdown" ? " button--active" : ""
-              }`}
-              type="button"
-              disabled={activeMarkdownPath() === null}
-              onClick={() => void handleSwitchToMarkdownMode()}
-            >
-              Markdown Mode
-            </button>
-
-            <Show when={activeMode() === "markdown"}>
+        <header class="workspace__header" data-tauri-drag-region="">
+          <div class="workspace__actions" data-tauri-drag-region="false">
+            <Show when={md() !== null}>
+              <div class="workspace__mode-group" role="group" aria-label="Markdown view">
+                <button
+                  class={`workspace__mode${
+                    markdownPane() === "raw" ? " workspace__mode--active" : ""
+                  }`}
+                  type="button"
+                  aria-label="Raw Markdown source"
+                  title="Raw source (P)"
+                  onClick={() => setMarkdownPane("raw")}
+                >
+                  <RawSourceGlyph />
+                </button>
+                <button
+                  class={`workspace__mode${
+                    markdownPane() === "preview"
+                      ? " workspace__mode--active"
+                      : ""
+                  }`}
+                  type="button"
+                  aria-label="Markdown preview"
+                  title="Preview (P)"
+                  onClick={() => setMarkdownPane("preview")}
+                >
+                  <PreviewGlyph />
+                </button>
+              </div>
               <button
-                class={`button${isTocOpen() ? " button--active" : ""}`}
+                class={`button button--ghost workspace__icon-button${
+                  isTocOpen() ? " button--active" : ""
+                }`}
                 type="button"
+                aria-label="Toggle table of contents"
+                title="Toggle TOC (T)"
                 onClick={() => setTocOpen((value) => !value)}
               >
-                Toggle TOC
-              </button>
-              <button
-                class={`button${isPreviewOpen() ? " button--active" : ""}`}
-                type="button"
-                onClick={() => setPreviewOpen((value) => !value)}
-              >
-                Toggle Preview
-              </button>
-              <button
-                class="button button--ghost"
-                type="button"
-                disabled={activeSnapshot() === null}
-                onClick={() => void handleReload()}
-              >
-                Reload
-              </button>
-              <button
-                class="button button--primary"
-                type="button"
-                disabled={!isDirty() || activeSnapshot() === null}
-                onClick={() => void handleSave()}
-              >
-                Save
+                <TocGlyph />
               </button>
             </Show>
 
-            <Show when={activeMode() === "file_view"}>
-              <button
-                class="button"
-                type="button"
-                disabled={directorySnapshot()?.parent_directory_path === null}
-                onClick={() => void handleNavigateToParent()}
-              >
-                Up
-              </button>
-              <button
-                class="button button--ghost"
-                type="button"
-                disabled={directorySnapshot() === null}
-                onClick={() => void handleRefreshFileView()}
-              >
-                Refresh
-              </button>
-            </Show>
-          </div>
-        </header>
+            <button
+              class="button button--ghost workspace__icon-button"
+              type="button"
+              disabled={!hasOpenDocument()}
+              aria-label="Reload current file"
+              title="Reload file (R)"
+              onClick={() => void handleReloadCurrent()}
+            >
+              <ReloadGlyph />
+            </button>
 
-        <Show when={conflictSnapshot() !== null && activeMode() === "markdown"}>
-          <div class="banner">
-            <div>
-              The file changed on disk while you were editing. Load the new
-              version or keep your current buffer and save later.
-            </div>
-            <div class="banner__actions">
+            <button
+              class="workspace__theme-toggle"
+              type="button"
+              aria-label={
+                colorScheme() === "dark"
+                  ? "Switch to light theme"
+                  : "Switch to dark theme"
+              }
+              title={
+                colorScheme() === "dark" ? "Light theme" : "Dark theme"
+              }
+              onClick={() => {
+                const next = colorScheme() === "dark" ? "light" : "dark";
+                void (async () => {
+                  await applyColorScheme(next);
+                  setColorScheme(next);
+                  await refreshSyntaxHighlights();
+                })();
+              }}
+            >
+              <Show when={colorScheme() === "dark"} fallback={<MoonGlyph />}>
+                <SunGlyph />
+              </Show>
+            </button>
+
+            <div class="workspace__window-controls" aria-label="Window controls">
               <button
-                class="button button--primary"
+                class="workspace__window-button"
                 type="button"
+                aria-label="Minimize window"
+                title="Minimize"
                 onClick={() => {
-                  const nextSnapshot = conflictSnapshot();
-
-                  if (nextSnapshot !== null) {
-                    applySnapshot(nextSnapshot);
-                  }
+                  void appWindow.minimize();
                 }}
               >
-                Load Disk Version
+                <MinimizeWindowGlyph />
               </button>
               <button
-                class="button"
+                class="workspace__window-button"
                 type="button"
-                onClick={() => setConflictSnapshot(null)}
+                aria-label="Toggle maximize window"
+                title="Maximize"
+                onClick={() => {
+                  void appWindow.toggleMaximize();
+                }}
               >
-                Keep Editing
+                <MaximizeWindowGlyph />
+              </button>
+              <button
+                class="workspace__window-button workspace__window-button--close"
+                type="button"
+                aria-label="Close window"
+                title="Close"
+                onClick={() => {
+                  void appWindow.close();
+                }}
+              >
+                <CloseWindowGlyph />
               </button>
             </div>
           </div>
-        </Show>
+        </header>
 
         <Show when={errorMessage() !== null}>
           <div class="banner banner--error">{errorMessage()}</div>
         </Show>
 
-        <div
-          class={`workspace__body workspace__body--${
-            activeMode() === "markdown" ? "markdown" : "file-view"
-          }`}
-        >
-          <Show
-            when={activeMode() === "markdown"}
-            fallback={
-              <>
-                <FileBrowserPane
-                  active={activeMode() === "file_view"}
-                  directory={directorySnapshot()}
-                  selectedPath={selectedBrowserPath()}
-                  onConfirmEntry={(entry) => void handleConfirmEntry(entry)}
-                  onNavigateToParent={() => void handleNavigateToParent()}
-                  onSelectEntry={handleSelectEntry}
-                />
-                <PreviewPane
-                  documentPath={previewPath(filePreview())}
-                  html={previewHtml(filePreview())}
-                  selectedAnchorId={null}
-                  visible={true}
-                />
-              </>
-            }
-          >
-            <TocPane
-              activeAnchorId={selection().anchorId}
-              headings={activeSnapshot()?.headings ?? []}
-              visible={isTocOpen()}
-              onSelectHeading={handleHeadingSelect}
-            />
-
-            <EditorPane
-              fileName={activeSnapshot()?.file_name ?? "document.md"}
-              isDirty={isDirty()}
-              requestedLineStart={selection().lineStart}
-              sourceText={editorText()}
-              onInput={(nextValue) => {
-                setEditorText(nextValue);
-                setDirty(nextValue !== (activeSnapshot()?.source_text ?? ""));
-              }}
-              onSave={() => void handleSave()}
-            />
-
-            <PreviewPane
-              documentPath={activeSnapshot()?.path ?? null}
-              html={activeSnapshot()?.html ?? ""}
-              selectedAnchorId={selection().anchorId}
-              visible={isPreviewOpen()}
+        <div class={viewerGridClassName()}>
+          <Show when={isFileTreeOpen()}>
+            <FileBrowserPane
+              active={true}
+              directory={directorySnapshot()}
+              selectedPath={selectedBrowserPath()}
+              onConfirmEntry={(entry) => void handleConfirmEntry(entry)}
+              onNavigateToParent={() => void handleNavigateToParent()}
+              onSelectEntry={handleSelectEntry}
             />
           </Show>
+
+          <Show when={isTocOpen() && md() !== null}>
+            <TocPane
+              activeAnchorId={selection().anchorId}
+              headings={md()?.headings ?? []}
+              visible={true}
+              onSelectHeading={handleHeadingSelect}
+            />
+          </Show>
+
+          <div class="workspace__document-column">
+            <Show
+              when={md() !== null && markdownPane() === "raw"}
+            >
+              <section class="pane workspace__markdown-raw-pane">
+                <header class="pane__header">
+                  <span class="pane__title">Markdown</span>
+                  <span>Source</span>
+                </header>
+                <div class="pane__body markdown-raw-body">
+                  <pre class="markdown-source">
+                    <code>{md()?.source_text ?? ""}</code>
+                  </pre>
+                </div>
+              </section>
+            </Show>
+
+            <Show when={md() !== null && markdownPane() === "preview"}>
+              <PreviewPane
+                colorScheme={colorScheme()}
+                documentPath={md()?.path ?? null}
+                html={md()?.html ?? ""}
+                selectedAnchorId={selection().anchorId}
+                visible={true}
+              />
+            </Show>
+
+            <Show when={md() === null && fp() !== null}>
+              <PreviewPane
+                colorScheme={colorScheme()}
+                documentPath={previewPath(fp())}
+                html={previewHtml(fp())}
+                selectedAnchorId={null}
+                visible={true}
+              />
+            </Show>
+
+            <Show when={!hasOpenDocument()}>
+              <section class="pane workspace__document-empty">
+                <header class="pane__header">
+                  <span class="pane__title">Viewer</span>
+                  <span>No file open</span>
+                </header>
+                <div class="pane__body preview">
+                  <section class="file-preview-empty">
+                    <p class="file-preview-empty__title">Nothing to show yet</p>
+                    <p class="file-preview-empty__hint">
+                      <Show
+                        when={isFileTreeOpen()}
+                        fallback={
+                          <>
+                            Press <kbd>Shift+L</kbd> to show the file tree.
+                            Markdown files support Raw and Preview; other files
+                            open in the preview pane.
+                          </>
+                        }
+                      >
+                        Choose a file in the tree. Markdown files support Raw and
+                        Preview; other files open in the preview pane. Press{" "}
+                        <kbd>Shift+L</kbd> to hide the tree.
+                      </Show>
+                    </p>
+                  </section>
+                </div>
+              </section>
+            </Show>
+          </div>
         </div>
 
         <Show when={isLoading()}>
-          <div class="empty">
-            {startupContext()?.initial_mode === "markdown"
-              ? "Opening the requested Markdown document..."
-              : "Loading file view mode..."}
+          <div class="workspace__loading" role="status" aria-live="polite">
+            <div class="workspace__loading-inner">
+              {startupContext()?.selected_file_path !== null
+                ? "Opening the requested file..."
+                : "Loading workspace..."}
+            </div>
           </div>
         </Show>
       </div>

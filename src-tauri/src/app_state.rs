@@ -1,7 +1,10 @@
+use std::sync::{Arc, RwLock};
+
 use tauri::AppHandle;
 
 use crate::{
     document::service::DocumentService,
+    syntax_highlight::SyntaxUiTheme,
     viewer::{service::ViewerService, types::StartupContext},
     watcher::service::WatcherService,
 };
@@ -12,6 +15,7 @@ pub struct AppState {
     document_service: DocumentService,
     viewer_service: ViewerService,
     watcher_service: WatcherService,
+    syntax_ui_theme: Arc<RwLock<SyntaxUiTheme>>,
 }
 
 impl AppState {
@@ -28,7 +32,25 @@ impl AppState {
             document_service,
             viewer_service,
             watcher_service,
+            syntax_ui_theme: Arc::new(RwLock::new(SyntaxUiTheme::Dark)),
         }
+    }
+
+    pub fn syntax_ui_theme(&self) -> SyntaxUiTheme {
+        self.syntax_ui_theme
+            .read()
+            .map(|guard| *guard)
+            .unwrap_or_default()
+    }
+
+    pub fn set_syntax_ui_theme(&self, theme: SyntaxUiTheme) {
+        if let Ok(mut guard) = self.syntax_ui_theme.write() {
+            *guard = theme;
+        }
+    }
+
+    pub fn syntax_ui_theme_handle(&self) -> Arc<RwLock<SyntaxUiTheme>> {
+        Arc::clone(&self.syntax_ui_theme)
     }
 
     pub fn startup_context(&self) -> StartupContext {

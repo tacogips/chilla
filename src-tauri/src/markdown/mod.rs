@@ -1,8 +1,11 @@
 use std::collections::BTreeMap;
 
-use pulldown_cmark::{html::push_html, CowStr, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{
+    html::push_html, CodeBlockKind, CowStr, Event, HeadingLevel, Options, Parser, Tag, TagEnd,
+};
 
 use crate::document::types::HeadingNode;
+use crate::syntax_highlight::SyntaxUiTheme;
 
 #[derive(Debug, Clone)]
 pub struct RenderedDocument {
@@ -39,7 +42,13 @@ struct EmbeddedMediaDraft {
     kind: EmbeddedMediaKind,
 }
 
-pub fn render_markdown(source_text: &str) -> RenderedDocument {
+#[derive(Debug)]
+struct CodeBlockCapture {
+    lang_token: Option<String>,
+    buf: String,
+}
+
+pub fn render_markdown(source_text: &str, ui_theme: SyntaxUiTheme) -> RenderedDocument {
     let parser = Parser::new_ext(source_text, parser_options());
     let line_starts = line_starts(source_text);
     let mut raw_events = Vec::new();
@@ -83,7 +92,7 @@ pub fn render_markdown(source_text: &str) -> RenderedDocument {
 
     assign_anchor_ids(&mut flat_headings);
 
-    let html = render_html_with_heading_ids(raw_events, &flat_headings);
+    let html = render_html_with_heading_ids(raw_events, &flat_headings, ui_theme);
     let headings = build_heading_tree(&flat_headings);
 
     RenderedDocument { html, headings }
@@ -104,12 +113,16 @@ fn sanitize_event(event: Event<'_>) -> Event<'_> {
     }
 }
 
-fn render_html_with_heading_ids(events: Vec<Event<'_>>, flat_headings: &[FlatHeading]) -> String {
+fn render_html_with_heading_ids(
+    events: Vec<Event<'_>>,
+    flat_headings: &[FlatHeading],
+    ui_theme: SyntaxUiTheme,
+) -> String {
     let mut heading_index = 0usize;
     let mut output_events = Vec::with_capacity(events.len());
     let mut current_media: Option<EmbeddedMediaDraft> = None;
     let mut link_depth = 0usize;
-    let mut inside_code_block = false;
+    let mut code_capture: Option<CodeBlockCapture> = None;
 
     for event in events {
         if let Some(media) = current_media.as_mut() {
@@ -123,6 +136,44 @@ fn render_html_with_heading_ids(events: Vec<Event<'_>>, flat_headings: &[FlatHea
                 }
                 Event::SoftBreak | Event::HardBreak => {
                     media.alt_text.push(' ');
+                }
+                _ => {}
+            }
+
+            continue;
+        }
+
+        if code_capture.is_some() {
+            match event {
+                Event::Text(text) | Event::Code(text) => {
+                    if let Some(capture) = code_capture.as_mut() {
+                        capture.buf.push_str(text.as_ref());
+                    }
+                }
+                Event::SoftBreak | Event::HardBreak => {
+                    if let Some(capture) = code_capture.as_mut() {
+                        capture.buf.push('\n');
+                    }
+                }
+                Event::End(TagEnd::CodeBlock) => {
+                    let finished = code_capture.take().expect("code block buffer");
+                    let html = if finished
+                        .lang_token
+                        .as_deref()
+                        .is_some_and(|lang| lang.eq_ignore_ascii_case("mermaid"))
+                    {
+                        format!(
+                            "<pre><code class=\"language-mermaid\">{}</code></pre>",
+                            escape_html_text(&finished.buf)
+                        )
+                    } else {
+                        crate::syntax_highlight::highlight_markdown_fence(
+                            &finished.buf,
+                            finished.lang_token.as_deref(),
+                            ui_theme,
+                        )
+                    };
+                    output_events.push(Event::Html(CowStr::from(html)));
                 }
                 _ => {}
             }
@@ -164,15 +215,21 @@ fn render_html_with_heading_ids(events: Vec<Event<'_>>, flat_headings: &[FlatHea
                 link_depth = link_depth.saturating_sub(1);
                 output_events.push(event);
             }
-            Event::Start(Tag::CodeBlock(_)) => {
-                inside_code_block = true;
-                output_events.push(event);
+            Event::Start(Tag::CodeBlock(kind)) => {
+                let lang_token = match kind {
+                    CodeBlockKind::Fenced(info) => info
+                        .split(' ')
+                        .next()
+                        .filter(|chunk| !chunk.is_empty())
+                        .map(|chunk| chunk.to_string()),
+                    CodeBlockKind::Indented => None,
+                };
+                code_capture = Some(CodeBlockCapture {
+                    lang_token,
+                    buf: String::new(),
+                });
             }
-            Event::End(TagEnd::CodeBlock) => {
-                inside_code_block = false;
-                output_events.push(event);
-            }
-            Event::Text(text) if link_depth == 0 && !inside_code_block => {
+            Event::Text(text) if link_depth == 0 => {
                 push_linkified_text(&mut output_events, text.as_ref())
             }
             other => output_events.push(other),
@@ -272,7 +329,10 @@ fn has_unbalanced_trailing_delimiter(candidate: &str, trailing_character: char) 
 }
 
 fn count_character(value: &str, target: char) -> usize {
-    value.chars().filter(|character| *character == target).count()
+    value
+        .chars()
+        .filter(|character| *character == target)
+        .count()
 }
 
 fn render_embedded_media(media: &EmbeddedMediaDraft) -> String {
@@ -453,12 +513,17 @@ fn build_heading_tree(flat_headings: &[FlatHeading]) -> Vec<HeadingNode> {
 
 #[cfg(test)]
 mod tests {
+    use crate::syntax_highlight::SyntaxUiTheme;
+
     use super::render_markdown;
 
     #[test]
     fn renders_heading_ids_and_nested_headings() {
         let rendered =
-            render_markdown("# Intro\n\n## Child Topic\n\n### Deep Topic\n\n## Child Topic\n");
+            render_markdown(
+                "# Intro\n\n## Child Topic\n\n### Deep Topic\n\n## Child Topic\n",
+                SyntaxUiTheme::Dark,
+            );
 
         assert!(rendered.html.contains("<h1 id=\"intro\">Intro</h1>"));
         assert!(rendered
@@ -477,15 +542,34 @@ mod tests {
 
     #[test]
     fn preserves_mermaid_code_blocks_in_html_output() {
-        let rendered = render_markdown("```mermaid\ngraph TD;\nA-->B;\n```");
+        let rendered = render_markdown(
+            "```mermaid\ngraph TD;\nA-->B;\n```",
+            SyntaxUiTheme::Dark,
+        );
 
         assert!(rendered.html.contains("language-mermaid"));
         assert!(rendered.html.contains("graph TD;"));
     }
 
     #[test]
+    fn highlights_fenced_rust_with_syntect() {
+        let rendered = render_markdown("```rust\nlet x: u32 = 1;\n```", SyntaxUiTheme::Dark);
+
+        assert!(rendered.html.contains("let</span>"), "body missing in: {}", rendered.html);
+        assert!(rendered.html.contains("u32"), "body missing in: {}", rendered.html);
+        assert!(
+            rendered.html.contains("style=") && rendered.html.contains("<span"),
+            "expected syntect HTML, got: {}",
+            rendered.html
+        );
+    }
+
+    #[test]
     fn autolinks_plain_urls() {
-        let rendered = render_markdown("Visit https://example.com/docs for details.");
+        let rendered = render_markdown(
+            "Visit https://example.com/docs for details.",
+            SyntaxUiTheme::Dark,
+        );
 
         assert!(rendered
             .html
@@ -494,7 +578,7 @@ mod tests {
 
     #[test]
     fn autolinks_urls_without_trailing_parentheses_or_punctuation() {
-        let rendered = render_markdown("Visit (https://example.com/docs).");
+        let rendered = render_markdown("Visit (https://example.com/docs).", SyntaxUiTheme::Dark);
 
         assert!(rendered
             .html
@@ -503,20 +587,25 @@ mod tests {
 
     #[test]
     fn autolinks_later_valid_urls_after_invalid_prefix_boundaries() {
-        let rendered =
-            render_markdown("skiphttps://invalid.example https://valid.example/docs");
+        let rendered = render_markdown(
+            "skiphttps://invalid.example https://valid.example/docs",
+            SyntaxUiTheme::Dark,
+        );
 
-        assert!(rendered.html.contains(
-            "<a href=\"https://valid.example/docs\">https://valid.example/docs</a>"
-        ));
-        assert!(!rendered.html.contains(
-            "<a href=\"https://invalid.example\">https://invalid.example</a>"
-        ));
+        assert!(rendered
+            .html
+            .contains("<a href=\"https://valid.example/docs\">https://valid.example/docs</a>"));
+        assert!(!rendered
+            .html
+            .contains("<a href=\"https://invalid.example\">https://invalid.example</a>"));
     }
 
     #[test]
     fn renders_video_files_from_markdown_media_syntax() {
-        let rendered = render_markdown("![Demo clip](./fixtures/demo.mp4)");
+        let rendered = render_markdown(
+            "![Demo clip](./fixtures/demo.mp4)",
+            SyntaxUiTheme::Dark,
+        );
 
         assert!(rendered
             .html
@@ -528,7 +617,10 @@ mod tests {
 
     #[test]
     fn preserves_standard_image_rendering_for_image_files() {
-        let rendered = render_markdown("![Preview image](./fixtures/preview.png)");
+        let rendered = render_markdown(
+            "![Preview image](./fixtures/preview.png)",
+            SyntaxUiTheme::Dark,
+        );
 
         assert!(rendered
             .html

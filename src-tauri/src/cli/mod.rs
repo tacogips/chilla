@@ -33,8 +33,8 @@ where
         .unwrap_or_else(|| "marky".to_string());
 
     let Some(argument) = args.next() else {
-        let current_directory =
-            std::env::current_dir().map_err(|source| AppError::io("resolve current directory", Path::new("."), source))?;
+        let current_directory = std::env::current_dir()
+            .map_err(|source| AppError::io("resolve current directory", Path::new("."), source))?;
         return Ok(CliParseOutcome::Run(StartupTarget::CurrentDirectory(
             current_directory,
         )));
@@ -61,7 +61,9 @@ where
             format!("unsupported flag `{flag}`\n\n{}", help_text(&binary_name)),
             2,
         )),
-        file_name => Ok(CliParseOutcome::Run(validate_cli_path(Path::new(file_name))?)),
+        file_name => Ok(CliParseOutcome::Run(validate_cli_path(Path::new(
+            file_name,
+        ))?)),
     }
 }
 
@@ -138,7 +140,10 @@ mod tests {
 
         match outcome {
             CliParseOutcome::Run(StartupTarget::Directory(path)) => {
-                assert_eq!(path, test_dir.path().canonicalize().expect("canonical path"));
+                assert_eq!(
+                    path,
+                    test_dir.path().canonicalize().expect("canonical path")
+                );
             }
             _ => panic!("unexpected parse outcome"),
         }
@@ -150,8 +155,8 @@ mod tests {
         let file_path = test_dir.path().join("notes.txt");
         fs::write(&file_path, "hello").expect("write file");
 
-        let outcome = parse_cli(["marky", file_path.to_str().expect("utf-8 path")])
-            .expect("parse file");
+        let outcome =
+            parse_cli(["marky", file_path.to_str().expect("utf-8 path")]).expect("parse file");
 
         match outcome {
             CliParseOutcome::Run(StartupTarget::File(path)) => {

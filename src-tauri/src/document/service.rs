@@ -9,6 +9,7 @@ use crate::{
     document::types::DocumentSnapshot,
     error::{AppError, AppResult},
     markdown::render_markdown,
+    syntax_highlight::SyntaxUiTheme,
 };
 
 const SUPPORTED_EXTENSIONS: [&str; 3] = ["md", "markdown", "mdown"];
@@ -21,11 +22,11 @@ impl DocumentService {
         Self
     }
 
-    pub fn open(&self, path: &Path) -> AppResult<DocumentSnapshot> {
+    pub fn open(&self, path: &Path, ui_theme: SyntaxUiTheme) -> AppResult<DocumentSnapshot> {
         let canonical_path = canonicalize_document_path(path)?;
         let source_text = fs::read_to_string(&canonical_path)
             .map_err(|source| AppError::io("read", &canonical_path, source))?;
-        let rendered_document = render_markdown(&source_text);
+        let rendered_document = render_markdown(&source_text, ui_theme);
         let metadata = fs::metadata(&canonical_path)
             .map_err(|source| AppError::io("read metadata for", &canonical_path, source))?;
         let modified_time = metadata
@@ -55,15 +56,20 @@ impl DocumentService {
         })
     }
 
-    pub fn save(&self, path: &Path, source_text: &str) -> AppResult<DocumentSnapshot> {
+    pub fn save(
+        &self,
+        path: &Path,
+        source_text: &str,
+        ui_theme: SyntaxUiTheme,
+    ) -> AppResult<DocumentSnapshot> {
         let canonical_path = canonicalize_document_path(path)?;
         fs::write(&canonical_path, source_text)
             .map_err(|source| AppError::io("write", &canonical_path, source))?;
-        self.open(&canonical_path)
+        self.open(&canonical_path, ui_theme)
     }
 
-    pub fn reload(&self, path: &Path) -> AppResult<DocumentSnapshot> {
-        self.open(path)
+    pub fn reload(&self, path: &Path, ui_theme: SyntaxUiTheme) -> AppResult<DocumentSnapshot> {
+        self.open(path, ui_theme)
     }
 }
 

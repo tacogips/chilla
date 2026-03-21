@@ -5,6 +5,7 @@ pub mod document;
 pub mod error;
 pub mod events;
 pub mod markdown;
+pub mod syntax_highlight;
 pub mod viewer;
 pub mod watcher;
 
@@ -38,12 +39,15 @@ pub fn run(startup_target: StartupTarget) -> Result<(), String> {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::document::stop_document_watch,
             commands::document::get_startup_context,
             commands::document::list_directory,
             commands::document::open_file_preview,
             commands::document::open_document,
             commands::document::save_document,
             commands::document::reload_document,
+            commands::document::set_syntax_ui_theme,
+            commands::document::render_markdown_preview,
         ])
         .run(tauri::generate_context!())
         .map_err(|error| error.to_string())

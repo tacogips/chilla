@@ -133,6 +133,14 @@ export async function openDocument(path: string): Promise<DocumentSnapshot> {
   }
 }
 
+export async function stopDocumentWatch(): Promise<void> {
+  try {
+    await invoke("stop_document_watch");
+  } catch (error: unknown) {
+    throw new Error(toErrorMessage(error));
+  }
+}
+
 export async function saveDocument(
   path: string,
   sourceText: string,
@@ -150,6 +158,23 @@ export async function saveDocument(
 export async function reloadDocument(path: string): Promise<DocumentSnapshot> {
   try {
     return await invoke<DocumentSnapshot>("reload_document", { path });
+  } catch (error: unknown) {
+    throw new Error(toErrorMessage(error));
+  }
+}
+
+export interface MarkdownPreviewOutput {
+  readonly html: string;
+  readonly headings: readonly HeadingNode[];
+}
+
+export async function renderMarkdownPreview(
+  sourceText: string,
+): Promise<MarkdownPreviewOutput> {
+  try {
+    return await invoke<MarkdownPreviewOutput>("render_markdown_preview", {
+      sourceText,
+    });
   } catch (error: unknown) {
     throw new Error(toErrorMessage(error));
   }

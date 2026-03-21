@@ -8,14 +8,18 @@ use crate::{
     cli::StartupTarget,
     document::service::DocumentService,
     error::{AppError, AppResult},
-    viewer::types::{DirectoryEntry, DirectorySnapshot, FilePreview, StartupContext, WorkspaceMode},
+    syntax_highlight::{self, SyntaxUiTheme},
+    viewer::types::{
+        DirectoryEntry, DirectorySnapshot, FilePreview, StartupContext, WorkspaceMode,
+    },
 };
 
 const MARKDOWN_EXTENSIONS: [&str; 3] = ["md", "markdown", "mdown"];
 const TEXTUAL_MIME_PREFIXES: [&str; 2] = ["text/", "inode/x-empty"];
-const TEXTUAL_APPLICATION_MIME_TYPES: [&str; 9] = [
+const TEXTUAL_APPLICATION_MIME_TYPES: [&str; 10] = [
     "application/json",
     "application/ld+json",
+    "application/schema+json",
     "application/toml",
     "application/typescript",
     "application/x-httpd-php",
@@ -23,6 +27,25 @@ const TEXTUAL_APPLICATION_MIME_TYPES: [&str; 9] = [
     "application/x-sh",
     "application/xml",
     "application/yaml",
+];
+/// When magic(1) reports `application/octet-stream` but the path is a known text config/data suffix.
+const TEXT_PREVIEW_EXTENSIONS: [&str; 11] = [
+    "toml", "json", "jsonc", "yaml", "yml", "xml", "lock", "svg", "csv", "webmanifest", "gradle",
+];
+const IMAGE_EXTENSION_MIME_TYPES: [(&str, &str); 6] = [
+    ("apng", "image/apng"),
+    ("gif", "image/gif"),
+    ("jpeg", "image/jpeg"),
+    ("jpg", "image/jpeg"),
+    ("png", "image/png"),
+    ("webp", "image/webp"),
+];
+const VIDEO_EXTENSION_MIME_TYPES: [(&str, &str); 5] = [
+    ("m4v", "video/mp4"),
+    ("mov", "video/quicktime"),
+    ("mp4", "video/mp4"),
+    ("ogv", "video/ogg"),
+    ("webm", "video/webm"),
 ];
 
 #[derive(Clone, Default)]
@@ -46,14 +69,9 @@ impl ViewerService {
             StartupTarget::File(path) => {
                 let file_path = canonicalize_file_path(path)?;
                 let current_directory_path = parent_directory_path(&file_path)?;
-                let initial_mode = if is_markdown_path(&file_path) {
-                    WorkspaceMode::Markdown
-                } else {
-                    WorkspaceMode::FileView
-                };
 
                 Ok(StartupContext {
-                    initial_mode,
+                    initial_mode: WorkspaceMode::FileView,
                     current_directory_path: display_path(&current_directory_path),
                     selected_file_path: Some(display_path(&file_path)),
                 })
@@ -68,17 +86,13 @@ impl ViewerService {
     ) -> AppResult<DirectorySnapshot> {
         let current_directory_path = canonicalize_directory_path(path)?;
         let parent_directory_path = current_directory_path.parent().map(display_path);
-        let selected_path = selected_path
-            .map(canonicalize_path)
-            .transpose()?
-            .filter(|selected_path| selected_path.parent() == Some(current_directory_path.as_path()))
-            .map(|selected_path| display_path(&selected_path));
 
         let mut entries = fs::read_dir(&current_directory_path)
             .map_err(|source| AppError::io("read directory", &current_directory_path, source))?
             .map(|entry_result| {
-                let entry = entry_result
-                    .map_err(|source| AppError::io("read directory entry", &current_directory_path, source))?;
+                let entry = entry_result.map_err(|source| {
+                    AppError::io("read directory entry", &current_directory_path, source)
+                })?;
                 let entry_path = entry.path();
                 let entry_metadata = entry
                     .metadata()
@@ -86,9 +100,9 @@ impl ViewerService {
                 let entry_name = entry.file_name().to_string_lossy().to_string();
 
                 Ok(DirectoryEntry {
-                    path: display_path(&entry_path.canonicalize().map_err(|source| {
-                        AppError::io("canonicalize", &entry_path, source)
-                    })?),
+                    // Use the directory listing path (symlink name), not the canonical target, so
+                    // each row is unique and keyboard navigation matches the focused item.
+                    path: display_path(&entry_path),
                     name: entry_name,
                     is_directory: entry_metadata.is_dir(),
                 })
@@ -99,9 +113,19 @@ impl ViewerService {
             right
                 .is_directory
                 .cmp(&left.is_directory)
-                .then_with(|| left.name.to_ascii_lowercase().cmp(&right.name.to_ascii_lowercase()))
+                .then_with(|| {
+                    left.name
+                        .to_ascii_lowercase()
+                        .cmp(&right.name.to_ascii_lowercase())
+                })
                 .then_with(|| left.name.cmp(&right.name))
         });
+
+        let selected_path = resolve_directory_selected_path(
+            &current_directory_path,
+            &entries,
+            selected_path,
+        );
 
         Ok(DirectorySnapshot {
             current_directory_path: display_path(&current_directory_path),
@@ -111,15 +135,17 @@ impl ViewerService {
         })
     }
 
-    pub fn open_file_preview(&self, path: &Path) -> AppResult<FilePreview> {
+    pub fn open_file_preview(&self, path: &Path, ui_theme: SyntaxUiTheme) -> AppResult<FilePreview> {
         let file_path = canonicalize_file_path(path)?;
 
         if is_markdown_path(&file_path) {
-            return self.open_markdown_preview(&file_path);
+            return self.open_markdown_preview(&file_path, ui_theme);
         }
 
-        let mime_type = tree_magic_mini::from_filepath(&file_path)
-            .unwrap_or("application/octet-stream")
+        let detected_mime_type =
+            tree_magic_mini::from_filepath(&file_path).unwrap_or("application/octet-stream");
+        let mime_type = fallback_media_mime_type(&file_path, detected_mime_type)
+            .unwrap_or(detected_mime_type)
             .to_string();
 
         if mime_type.starts_with("image/") {
@@ -131,14 +157,18 @@ impl ViewerService {
         }
 
         if is_textual_mime(&mime_type) {
-            return self.open_text_preview(&file_path, mime_type);
+            return self.open_text_preview(&file_path, mime_type, ui_theme);
+        }
+
+        if is_text_preview_extension(&file_path) {
+            return self.open_text_preview(&file_path, mime_type, ui_theme);
         }
 
         self.open_binary_preview(&file_path, mime_type)
     }
 
-    fn open_markdown_preview(&self, path: &Path) -> AppResult<FilePreview> {
-        let snapshot = DocumentService::new().open(path)?;
+    fn open_markdown_preview(&self, path: &Path, ui_theme: SyntaxUiTheme) -> AppResult<FilePreview> {
+        let snapshot = DocumentService::new().open(path, ui_theme)?;
 
         Ok(FilePreview::Markdown {
             mime_type: "text/markdown".to_string(),
@@ -181,18 +211,17 @@ impl ViewerService {
         &self,
         path: &Path,
         mime_type: String,
+        ui_theme: SyntaxUiTheme,
     ) -> AppResult<FilePreview> {
         let file_bytes = fs::read(path).map_err(|source| AppError::io("read", path, source))?;
         let source_text = String::from_utf8_lossy(&file_bytes);
+        let html = syntax_highlight::highlight_file_source(&source_text, path, ui_theme);
 
         Ok(FilePreview::Text {
             path: display_path(path),
             file_name: file_name(path),
             mime_type,
-            html: format!(
-                "<pre class=\"file-preview file-preview--text\"><code>{}</code></pre>",
-                escape_html_text(&source_text),
-            ),
+            html,
             last_modified: last_modified_string(path)?,
         })
     }
@@ -263,6 +292,60 @@ fn parent_directory_path(path: &Path) -> AppResult<PathBuf> {
         .ok_or_else(|| AppError::NotADirectory(display_path(path)))
 }
 
+fn default_list_focus_path(entries: &[DirectoryEntry]) -> Option<String> {
+    entries
+        .iter()
+        .find(|entry| !entry.is_directory)
+        .or_else(|| entries.first())
+        .map(|entry| entry.path.clone())
+}
+
+/// Keeps list focus stable across reloads. Matches either the logical listing path (per row) or the
+/// canonical target (e.g. startup file path, symlinks), without requiring the selection to be a
+/// direct child in canonical form.
+fn resolve_directory_selected_path(
+    current_directory_path: &Path,
+    entries: &[DirectoryEntry],
+    selected_path: Option<&Path>,
+) -> Option<String> {
+    let current_display = display_path(current_directory_path);
+
+    let Some(requested) = selected_path else {
+        return default_list_focus_path(entries);
+    };
+
+    let requested_display = display_path(requested);
+    if requested_display == current_display {
+        return default_list_focus_path(entries);
+    }
+
+    let requested_canonical = canonicalize_path(requested).ok();
+
+    if let Some(ref canon) = requested_canonical {
+        if canon == current_directory_path {
+            return default_list_focus_path(entries);
+        }
+    }
+
+    for entry in entries {
+        if entry.path == requested_display {
+            return Some(entry.path.clone());
+        }
+    }
+
+    if let Some(ref req_canon) = requested_canonical {
+        for entry in entries {
+            if let Ok(entry_canon) = canonicalize_path(Path::new(&entry.path)) {
+                if entry_canon == *req_canon {
+                    return Some(entry.path.clone());
+                }
+            }
+        }
+    }
+
+    default_list_focus_path(entries)
+}
+
 fn is_markdown_path(path: &Path) -> bool {
     path.extension()
         .and_then(std::ffi::OsStr::to_str)
@@ -271,10 +354,51 @@ fn is_markdown_path(path: &Path) -> bool {
 }
 
 fn is_textual_mime(mime_type: &str) -> bool {
+    let lower = mime_type.to_ascii_lowercase();
     TEXTUAL_MIME_PREFIXES
         .iter()
-        .any(|prefix| mime_type.starts_with(prefix))
-        || TEXTUAL_APPLICATION_MIME_TYPES.contains(&mime_type)
+        .any(|prefix| lower.starts_with(prefix))
+        || TEXTUAL_APPLICATION_MIME_TYPES.contains(&lower.as_str())
+        || is_textual_application_structured_subtype(&lower)
+}
+
+/// `application/*+json`, `+xml`, `+yaml` (e.g. `application/schema+json`, `application/xhtml+xml`).
+fn is_textual_application_structured_subtype(lower_mime: &str) -> bool {
+    if !lower_mime.starts_with("application/") {
+        return false;
+    }
+    lower_mime.contains("+json")
+        || lower_mime.contains("+xml")
+        || lower_mime.ends_with("+yaml")
+        || lower_mime.ends_with("+yml")
+}
+
+fn is_text_preview_extension(path: &Path) -> bool {
+    path.extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .map(|extension| {
+            let lower = extension.to_ascii_lowercase();
+            TEXT_PREVIEW_EXTENSIONS.contains(&lower.as_str())
+        })
+        .unwrap_or(false)
+}
+
+fn fallback_media_mime_type<'a>(path: &Path, detected_mime_type: &'a str) -> Option<&'a str> {
+    if detected_mime_type.starts_with("image/") || detected_mime_type.starts_with("video/") {
+        return None;
+    }
+
+    let extension = path
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)?
+        .to_ascii_lowercase();
+
+    IMAGE_EXTENSION_MIME_TYPES
+        .iter()
+        .chain(VIDEO_EXTENSION_MIME_TYPES.iter())
+        .find_map(|(candidate_extension, candidate_mime_type)| {
+            (extension == *candidate_extension).then_some(*candidate_mime_type)
+        })
 }
 
 fn file_name(path: &Path) -> String {
@@ -325,6 +449,7 @@ mod tests {
     use super::ViewerService;
     use crate::{
         cli::StartupTarget,
+        syntax_highlight::SyntaxUiTheme,
         viewer::types::{FilePreview, WorkspaceMode},
     };
 
@@ -355,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn startup_context_uses_markdown_mode_for_markdown_files() {
+    fn startup_context_is_file_view_for_opening_markdown_file() {
         let test_dir = TestDir::new();
         let markdown_path = test_dir.path().join("guide.md");
         fs::write(&markdown_path, "# Hello").expect("write markdown");
@@ -366,10 +491,16 @@ mod tests {
             ))
             .expect("startup context");
 
-        assert_eq!(context.initial_mode, WorkspaceMode::Markdown);
+        assert_eq!(context.initial_mode, WorkspaceMode::FileView);
         assert_eq!(
             context.selected_file_path,
-            Some(markdown_path.canonicalize().expect("canonical path").display().to_string())
+            Some(
+                markdown_path
+                    .canonicalize()
+                    .expect("canonical path")
+                    .display()
+                    .to_string()
+            )
         );
     }
 
@@ -391,6 +522,94 @@ mod tests {
             .map(|entry| entry.name.clone())
             .collect::<Vec<_>>();
         assert_eq!(names, vec!["Alpha", "beta", "Bravo.txt", "zeta.txt"]);
+
+        let bravo_logical = test_dir.path().join("Bravo.txt");
+        assert_eq!(
+            snapshot.selected_path,
+            Some(bravo_logical.display().to_string()),
+            "default selection is first file after directories",
+        );
+    }
+
+    #[test]
+    fn list_directory_never_selects_current_directory_path_defaults_to_first_file() {
+        let test_dir = TestDir::new();
+        fs::write(test_dir.path().join("a.txt"), "a").expect("write file");
+        let canonical = test_dir.path().canonicalize().expect("canonical path");
+
+        let a_txt_logical = test_dir.path().join("a.txt");
+
+        let snapshot = ViewerService::new()
+            .list_directory(test_dir.path(), Some(canonical.as_path()))
+            .expect("directory snapshot");
+
+        assert_ne!(
+            snapshot.selected_path,
+            Some(canonical.display().to_string()),
+            "current-directory path must not be the list selection",
+        );
+        assert_eq!(
+            snapshot.selected_path,
+            Some(a_txt_logical.display().to_string())
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_directory_symlink_entry_path_is_the_link_not_the_target() {
+        use std::os::unix::fs::symlink;
+
+        let test_dir = TestDir::new();
+        let target = test_dir.path().join("target.txt");
+        let link = test_dir.path().join("via_link.txt");
+        fs::write(&target, "x").expect("write target");
+        symlink(&target, &link).expect("symlink");
+
+        let snapshot = ViewerService::new()
+            .list_directory(test_dir.path(), None)
+            .expect("directory snapshot");
+
+        let paths: Vec<String> = snapshot.entries.iter().map(|e| e.path.clone()).collect();
+        assert!(
+            paths.contains(&target.display().to_string()),
+            "expected real file path in listing: {paths:?}"
+        );
+        assert!(
+            paths.contains(&link.display().to_string()),
+            "expected symlink path in listing, not only canonical target: {paths:?}"
+        );
+        assert_ne!(
+            target.canonicalize().expect("canonical target"),
+            link,
+            "sanity: link path differs from target path",
+        );
+
+        let target_row_path = snapshot
+            .entries
+            .iter()
+            .find(|e| e.name == "target.txt")
+            .map(|e| e.path.clone())
+            .expect("target row");
+        let target_canonical = target.canonicalize().expect("canonical");
+        let resolved = ViewerService::new()
+            .list_directory(test_dir.path(), Some(target_canonical.as_path()))
+            .expect("resolve by canonical target");
+        assert_eq!(
+            resolved.selected_path,
+            Some(target_row_path),
+            "selection by canonical path must map back to a listing row",
+        );
+
+        let link_row_path = snapshot
+            .entries
+            .iter()
+            .find(|e| e.name == "via_link.txt")
+            .map(|e| e.path.clone())
+            .expect("symlink row");
+        let resolved_link = ViewerService::new()
+            .list_directory(test_dir.path(), Some(Path::new(&link_row_path)))
+            .expect("resolve by symlink path as shown in listing");
+        assert_eq!(resolved_link.selected_path, Some(link_row_path));
     }
 
     #[test]
@@ -404,20 +623,22 @@ mod tests {
 
         fs::write(&markdown_path, "# Heading").expect("write markdown");
         fs::write(&text_path, "plain text").expect("write text");
-        fs::write(&image_path, [
-            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
-        ])
+        fs::write(
+            &image_path,
+            [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82],
+        )
         .expect("write png header");
-        fs::write(&video_path, [
-            0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109,
-        ])
+        fs::write(
+            &video_path,
+            [0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109],
+        )
         .expect("write mp4 header");
         fs::write(&binary_path, [0_u8, 159, 146, 150]).expect("write binary");
 
         let viewer_service = ViewerService::new();
 
         match viewer_service
-            .open_file_preview(&markdown_path)
+            .open_file_preview(&markdown_path, SyntaxUiTheme::Dark)
             .expect("markdown preview")
         {
             FilePreview::Markdown { snapshot, .. } => {
@@ -427,16 +648,23 @@ mod tests {
             _ => panic!("expected markdown preview"),
         }
 
-        match viewer_service.open_file_preview(&text_path).expect("text preview") {
+        match viewer_service
+            .open_file_preview(&text_path, SyntaxUiTheme::Dark)
+            .expect("text preview")
+        {
             FilePreview::Text { html, .. } => {
                 assert!(html.contains("<pre"));
                 assert!(html.contains("plain text"));
+                assert!(
+                    html.contains("style=") && html.contains("<span"),
+                    "expected syntect-highlighted HTML, got: {html}"
+                );
             }
             _ => panic!("expected text preview"),
         }
 
         match viewer_service
-            .open_file_preview(&image_path)
+            .open_file_preview(&image_path, SyntaxUiTheme::Dark)
             .expect("image preview")
         {
             FilePreview::Image { html, .. } => {
@@ -447,7 +675,7 @@ mod tests {
         }
 
         match viewer_service
-            .open_file_preview(&video_path)
+            .open_file_preview(&video_path, SyntaxUiTheme::Dark)
             .expect("video preview")
         {
             FilePreview::Video { html, .. } => {
@@ -458,13 +686,44 @@ mod tests {
         }
 
         match viewer_service
-            .open_file_preview(&binary_path)
+            .open_file_preview(&binary_path, SyntaxUiTheme::Dark)
             .expect("binary preview")
         {
             FilePreview::Binary { message, .. } => {
                 assert_eq!(message, "Binary file preview is not available.");
             }
             _ => panic!("expected binary preview"),
+        }
+    }
+
+    #[test]
+    fn textual_mime_accepts_structured_application_subtypes() {
+        assert!(super::is_textual_mime("application/schema+json"));
+        assert!(super::is_textual_mime("Application/Schema+JSON"));
+        assert!(super::is_textual_mime("application/vnd.api+json"));
+        assert!(super::is_textual_mime("application/xhtml+xml"));
+        assert!(super::is_textual_mime("application/vnd.oai.openapi+yaml"));
+        assert!(!super::is_textual_mime("application/octet-stream"));
+    }
+
+    #[test]
+    fn open_file_preview_highlights_toml_as_text() {
+        let test_dir = TestDir::new();
+        let path = test_dir.path().join("Cargo.toml");
+        fs::write(&path, "[package]\nname = \"demo\"\n").expect("write toml");
+
+        match ViewerService::new()
+            .open_file_preview(&path, SyntaxUiTheme::Dark)
+            .expect("toml preview")
+        {
+            FilePreview::Text { html, .. } => {
+                assert!(html.contains("[package]"));
+                assert!(
+                    html.contains("style=") && html.contains("<span"),
+                    "expected syntect HTML, got: {html}"
+                );
+            }
+            _ => panic!("expected text preview for TOML"),
         }
     }
 }
