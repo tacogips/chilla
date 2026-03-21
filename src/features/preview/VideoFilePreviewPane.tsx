@@ -9,6 +9,14 @@ interface VideoFilePreviewPaneProps {
   readonly autoplayRequestId: number;
 }
 
+function PlayGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 6.5v11l9-5.5z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
   const isLinuxDesktop = isLinuxWebKitDesktop();
   const [playbackFailed, setPlaybackFailed] = createSignal(false);
@@ -20,6 +28,7 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
   let loadGeneration = 0;
   let blobFallbackRequestedForPath: string | null = null;
   let playRequested = false;
+  let handledAutoplayRequestId = 0;
 
   const clearBlobUrl = () => {
     if (activeBlobUrl !== null) {
@@ -46,6 +55,7 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
     void props.path;
     loadGeneration += 1;
     blobFallbackRequestedForPath = null;
+    handledAutoplayRequestId = 0;
     clearBlobUrl();
     setPlaybackFailed(false);
     setShowPlayOverlay(true);
@@ -58,14 +68,24 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
   });
 
   createEffect(() => {
-    if (props.autoplayRequestId <= 0) {
+    const requestId = props.autoplayRequestId;
+
+    if (requestId <= 0 || requestId === handledAutoplayRequestId) {
       return;
     }
 
+    handledAutoplayRequestId = requestId;
+
     queueMicrotask(() => {
-      requestAnimationFrame(() => {
-        playButtonElement?.focus();
-      });
+      const playButton = playButtonElement;
+
+      if (playButton !== undefined) {
+        playButton.focus();
+        playButton.click();
+        return;
+      }
+
+      requestPlayback();
     });
   });
 
@@ -184,11 +204,12 @@ export function VideoFilePreviewPane(props: VideoFilePreviewPaneProps) {
                 }}
                 type="button"
                 class="button preview-video__play-button"
+                aria-label={`Play ${props.fileName}`}
                 onClick={() => {
                   requestPlayback();
                 }}
               >
-                Play
+                <PlayGlyph />
               </button>
             </div>
           </Show>

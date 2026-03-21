@@ -222,3 +222,9 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
 **Notes**: Sort metadata remains Rust-owned via the directory listing contract, while the active sort mode is frontend-owned so `a/A`, `m/M`, and `s/S` can reorder the current list without extra IPC calls.
+
+### Session: 2026-03-21 JST
+**Tasks Completed**: Polished video preview playback initiation so file-tree autoplay requests trigger the overlay button or direct playback reliably; replaced the text play CTA with an icon-only control that keeps an accessible label.
+**Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: The play overlay remains keyboard reachable, and the autoplay request id is now consumed once per preview load so repeated reactive updates do not retrigger stale playback requests.

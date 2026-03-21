@@ -69,6 +69,8 @@ File tree shortcuts:
 
 Video preview:
 
+- Opening a video from the file tree requests playback immediately when the webview allows it.
+- The preview overlay uses a focused play button with an icon-only affordance and an accessible label for the current file.
 - `Space`: play/pause when supported by the platform/webview
 
 ## Architecture
