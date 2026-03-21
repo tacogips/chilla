@@ -5,6 +5,9 @@
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     "Noto Sans", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+  --preview-content-min-width: 36rem;
+  --preview-content-inline-padding: clamp(0.125rem, 1vw, 0.6rem);
+  --preview-content-block-padding: 0.35rem;
 }
 
 [data-theme="dark"] {
@@ -407,7 +410,13 @@ button {
 
 .markdown-raw-body {
   margin: 0;
-  padding: 0.35rem;
+  padding: var(--preview-content-block-padding)
+    var(--preview-content-inline-padding);
+}
+
+.markdown-raw-body__content,
+.preview__content {
+  min-width: var(--preview-content-min-width);
 }
 
 .markdown-source {
@@ -547,7 +556,8 @@ button {
 
 .preview {
   margin: 0;
-  padding: 0.35rem;
+  padding: var(--preview-content-block-padding)
+    var(--preview-content-inline-padding);
   color: var(--text-muted);
   line-height: 1.65;
 }

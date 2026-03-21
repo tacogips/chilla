@@ -32,6 +32,6 @@ export async function writeTextToClipboard(text: string): Promise<void> {
   textarea.remove();
 
   if (!copied) {
-    throw new Error("Failed to copy the current file path to the clipboard.");
+    throw new Error("Failed to copy text to the clipboard.");
   }
 }

@@ -102,17 +102,22 @@ const SHORTCUT_SECTIONS: readonly {
       },
       {
         keys: ["J", "↓"],
-        description: "Scroll the active file view down one line when the file tree is hidden",
+        description:
+          "Scroll the active file view down one line when the file tree is hidden",
       },
       {
         keys: ["K", "↑"],
-        description: "Scroll the active file view up one line when the file tree is hidden",
+        description:
+          "Scroll the active file view up one line when the file tree is hidden",
       },
       {
         keys: ["Shift", "L"],
         description: "Toggle file tree",
       },
-      { keys: ["Y"], description: "Copy current file absolute path" },
+      {
+        keys: ["Y"],
+        description: "Copy selected file or directory absolute path",
+      },
       { keys: ["R"], description: "Reload current file" },
       {
         keys: ["Shift", "T"],
@@ -673,8 +678,10 @@ export function WorkspaceShell() {
     }
   };
 
+  const currentSelectedPath = () => selectedBrowserPath() ?? currentOpenPath();
+
   const handleCopyCurrentPath = async () => {
-    const path = currentOpenPath();
+    const path = currentSelectedPath();
 
     if (path === null) {
       return;
@@ -687,7 +694,7 @@ export function WorkspaceShell() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Failed to copy the current file path",
+          : "Failed to copy the selected path",
       );
     }
   };
@@ -901,7 +908,7 @@ export function WorkspaceShell() {
       }
 
       if (matchesShortcut(event, "y")) {
-        if (!hasOpenDocument()) {
+        if (currentSelectedPath() === null) {
           return;
         }
         event.preventDefault();
@@ -1155,9 +1162,11 @@ export function WorkspaceShell() {
                   <span>Source</span>
                 </header>
                 <div class="pane__body markdown-raw-body">
-                  <pre class="markdown-source">
-                    <code>{md()?.source_text ?? ""}</code>
-                  </pre>
+                  <div class="markdown-raw-body__content">
+                    <pre class="markdown-source">
+                      <code>{md()?.source_text ?? ""}</code>
+                    </pre>
+                  </div>
                 </div>
               </section>
             </Show>
@@ -1213,43 +1222,45 @@ export function WorkspaceShell() {
                   <span>No file open</span>
                 </header>
                 <div class="pane__body preview">
-                  <section class="file-preview-empty">
-                    <p class="file-preview-empty__app-name">chilla</p>
-                    <p class="file-preview-empty__app-tagline">file viewer</p>
-                    <img
-                      class="file-preview-empty__image"
-                      src={EMPTY_STATE_IMAGE_PATH}
-                      alt="Pixel-art cat peeking in from the side"
-                    />
-                    <p class="file-preview-empty__title">
-                      Please select a file.
-                    </p>
-                    <div class="file-preview-empty__shortcuts">
-                      <For each={SHORTCUT_SECTIONS}>
-                        {(section) => (
-                          <section class="shortcuts-help__section">
-                            <h3 class="shortcuts-help__heading">
-                              {section.title}
-                            </h3>
-                            <ul class="shortcuts-help__list">
-                              <For each={section.shortcuts}>
-                                {(shortcut) => (
-                                  <li class="shortcuts-help__row">
-                                    <span class="shortcuts-help__keys">
-                                      {renderShortcutKeys(shortcut.keys)}
-                                    </span>
-                                    <span class="shortcuts-help__desc">
-                                      {shortcut.description}
-                                    </span>
-                                  </li>
-                                )}
-                              </For>
-                            </ul>
-                          </section>
-                        )}
-                      </For>
-                    </div>
-                  </section>
+                  <div class="preview__content">
+                    <section class="file-preview-empty">
+                      <p class="file-preview-empty__app-name">chilla</p>
+                      <p class="file-preview-empty__app-tagline">file viewer</p>
+                      <img
+                        class="file-preview-empty__image"
+                        src={EMPTY_STATE_IMAGE_PATH}
+                        alt="Pixel-art cat peeking in from the side"
+                      />
+                      <p class="file-preview-empty__title">
+                        Please select a file.
+                      </p>
+                      <div class="file-preview-empty__shortcuts">
+                        <For each={SHORTCUT_SECTIONS}>
+                          {(section) => (
+                            <section class="shortcuts-help__section">
+                              <h3 class="shortcuts-help__heading">
+                                {section.title}
+                              </h3>
+                              <ul class="shortcuts-help__list">
+                                <For each={section.shortcuts}>
+                                  {(shortcut) => (
+                                    <li class="shortcuts-help__row">
+                                      <span class="shortcuts-help__keys">
+                                        {renderShortcutKeys(shortcut.keys)}
+                                      </span>
+                                      <span class="shortcuts-help__desc">
+                                        {shortcut.description}
+                                      </span>
+                                    </li>
+                                  )}
+                                </For>
+                              </ul>
+                            </section>
+                          )}
+                        </For>
+                      </div>
+                    </section>
+                  </div>
                 </div>
               </section>
             </Show>
