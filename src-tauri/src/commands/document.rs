@@ -7,7 +7,7 @@ use crate::{
     document::types::{DocumentSnapshot, HeadingNode},
     markdown::render_markdown,
     syntax_highlight::SyntaxUiTheme,
-    viewer::types::{DirectorySnapshot, FilePreview, StartupContext},
+    viewer::types::{DirectoryListSort, DirectoryPage, FilePreview, StartupContext},
 };
 
 fn format_command_error(error: impl std::fmt::Display) -> String {
@@ -19,6 +19,15 @@ fn format_command_error(error: impl std::fmt::Display) -> String {
 pub struct MarkdownPreviewOutput {
     pub html: String,
     pub headings: Vec<HeadingNode>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListDirectoryInput {
+    pub path: String,
+    pub sort: Option<DirectoryListSort>,
+    pub offset: Option<usize>,
+    pub limit: Option<usize>,
 }
 
 #[tauri::command]
@@ -47,13 +56,42 @@ pub fn get_startup_context(state: State<'_, AppState>) -> Result<StartupContext,
 
 #[tauri::command]
 pub fn list_directory(
-    path: String,
-    selected_path: Option<String>,
+    path: Option<String>,
+    sort: Option<DirectoryListSort>,
+    offset: Option<usize>,
+    limit: Option<usize>,
+    input: Option<ListDirectoryInput>,
     state: State<'_, AppState>,
-) -> Result<DirectorySnapshot, String> {
+) -> Result<DirectoryPage, String> {
+    let resolved_path = input
+        .as_ref()
+        .map(|value| value.path.clone())
+        .or(path)
+        .ok_or_else(|| "missing required key path".to_string())?;
+    let resolved_sort = input
+        .as_ref()
+        .and_then(|value| value.sort)
+        .or(sort)
+        .unwrap_or_default();
+    let resolved_offset = input
+        .as_ref()
+        .and_then(|value| value.offset)
+        .or(offset)
+        .unwrap_or(0);
+    let resolved_limit = input
+        .as_ref()
+        .and_then(|value| value.limit)
+        .or(limit)
+        .unwrap_or(0);
+
     state
         .viewer_service()
-        .list_directory(Path::new(&path), selected_path.as_deref().map(Path::new))
+        .list_directory(
+            Path::new(&resolved_path),
+            resolved_sort,
+            resolved_offset,
+            resolved_limit,
+        )
         .map_err(format_command_error)
 }
 

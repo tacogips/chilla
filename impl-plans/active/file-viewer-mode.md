@@ -234,3 +234,9 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
 **Notes**: `task nix-build` was reverified after the packaged-build fix. The current implementation now treats the selected browser entry, not only the open document, as the source of truth for copy-path behavior in file view mode.
+
+### Session: 2026-03-22 JST
+**Tasks Completed**: Switched the file-view directory IPC contract to stateless server-side sorting plus paged reads (`path`, `sort`, `offset`, `limit`); capped directory pages at 200 entries; added canonical row paths so the frontend can match startup or parent-navigation selections without server session state; updated the frontend file browser to lazy-load additional pages while preserving keyboard navigation and active selection.
+**Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: Default sorting no longer requires metadata reads for the entire directory before the first render, which improves large-directory behavior such as `/nix/store`. Verification passed with `bun run typecheck`, `bun run test`, `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml`, `CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml`, and `CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`.

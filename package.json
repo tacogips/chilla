@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "test:dom": "vitest run --config vitest.config.ts",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -18,10 +20,17 @@
     "solid-js": "^1.9.3"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.3",
     "@tauri-apps/cli": "^2",
+    "@types/bun": "^1.3.3",
+    "@vitest/browser-playwright": "^4.1.0",
+    "@vitest/browser-preview": "^4.1.0",
+    "agent-browser": "^0.21.4",
+    "jsdom": "^29.0.1",
+    "playwright": "^1.58.2",
+    "playwright-cli": "^0.262.0",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
-    "vite-plugin-solid": "^2.11.0"
+    "vite-plugin-solid": "^2.11.0",
+    "vitest": "^4.1.0"
   }
 }

@@ -10,7 +10,8 @@ use crate::{
     error::{AppError, AppResult},
     syntax_highlight::{self, SyntaxUiTheme},
     viewer::types::{
-        DirectoryEntry, DirectorySnapshot, FilePreview, StartupContext, WorkspaceMode,
+        DirectoryEntry, DirectoryListSort, DirectoryPage, DirectorySortDirection,
+        DirectorySortField, FilePreview, StartupContext, WorkspaceMode,
     },
 };
 
@@ -58,6 +59,21 @@ const VIDEO_EXTENSION_MIME_TYPES: [(&str, &str); 5] = [
     ("webm", "video/webm"),
 ];
 const PDF_EXTENSION_MIME_TYPES: [(&str, &str); 1] = [("pdf", "application/pdf")];
+const MAX_DIRECTORY_PAGE_SIZE: usize = 200;
+
+#[derive(Debug)]
+struct DirectoryEntrySeed {
+    path: PathBuf,
+    name: String,
+    is_directory: bool,
+}
+
+#[derive(Debug)]
+struct DirectoryEntryRecord {
+    seed: DirectoryEntrySeed,
+    size_bytes: u64,
+    modified_at_unix_ms: u64,
+}
 
 #[derive(Clone, Default)]
 pub struct ViewerService;
@@ -93,60 +109,58 @@ impl ViewerService {
     pub fn list_directory(
         &self,
         path: &Path,
-        selected_path: Option<&Path>,
-    ) -> AppResult<DirectorySnapshot> {
+        sort: DirectoryListSort,
+        offset: usize,
+        limit: usize,
+    ) -> AppResult<DirectoryPage> {
         let current_directory_path = canonicalize_directory_path(path)?;
         let parent_directory_path = current_directory_path.parent().map(display_path);
+        let page_limit = normalize_directory_page_limit(limit);
 
-        let mut entries = fs::read_dir(&current_directory_path)
-            .map_err(|source| AppError::io("read directory", &current_directory_path, source))?
-            .map(|entry_result| {
-                let entry = entry_result.map_err(|source| {
-                    AppError::io("read directory entry", &current_directory_path, source)
-                })?;
-                let entry_path = entry.path();
-                let entry_metadata = entry
-                    .metadata()
-                    .map_err(|source| AppError::io("read metadata for", &entry_path, source))?;
-                let entry_name = entry.file_name().to_string_lossy().to_string();
-                let modified_at_unix_ms =
-                    metadata_modified_at_unix_ms(&entry_metadata).map_err(|source| {
-                        AppError::io("read modified time for", &entry_path, source)
-                    })?;
+        match sort.field {
+            DirectorySortField::Name | DirectorySortField::Extension => {
+                let mut seeds = read_directory_entry_seeds(&current_directory_path)?;
+                seeds.sort_by(|left, right| compare_directory_entry_seeds(left, right, sort));
 
-                Ok(DirectoryEntry {
-                    // Use the directory listing path (symlink name), not the canonical target, so
-                    // each row is unique and keyboard navigation matches the focused item.
-                    path: display_path(&entry_path),
-                    name: entry_name,
-                    is_directory: entry_metadata.is_dir(),
-                    size_bytes: entry_metadata.len(),
-                    modified_at_unix_ms,
+                let total_entry_count = seeds.len();
+                let (start, end) = page_bounds(total_entry_count, offset, page_limit);
+                let entries = seeds[start..end]
+                    .iter()
+                    .map(directory_entry_from_seed)
+                    .collect::<AppResult<Vec<_>>>()?;
+
+                Ok(DirectoryPage {
+                    current_directory_path: display_path(&current_directory_path),
+                    parent_directory_path,
+                    entries,
+                    total_entry_count,
+                    offset: start,
+                    limit: page_limit,
+                    has_more: end < total_entry_count,
                 })
-            })
-            .collect::<AppResult<Vec<_>>>()?;
+            }
+            DirectorySortField::Mtime | DirectorySortField::Size => {
+                let mut records = read_directory_entry_records(&current_directory_path)?;
+                records.sort_by(|left, right| compare_directory_entry_records(left, right, sort));
 
-        entries.sort_by(|left, right| {
-            right
-                .is_directory
-                .cmp(&left.is_directory)
-                .then_with(|| {
-                    left.name
-                        .to_ascii_lowercase()
-                        .cmp(&right.name.to_ascii_lowercase())
+                let total_entry_count = records.len();
+                let (start, end) = page_bounds(total_entry_count, offset, page_limit);
+                let entries = records[start..end]
+                    .iter()
+                    .map(directory_entry_from_record)
+                    .collect::<AppResult<Vec<_>>>()?;
+
+                Ok(DirectoryPage {
+                    current_directory_path: display_path(&current_directory_path),
+                    parent_directory_path,
+                    entries,
+                    total_entry_count,
+                    offset: start,
+                    limit: page_limit,
+                    has_more: end < total_entry_count,
                 })
-                .then_with(|| left.name.cmp(&right.name))
-        });
-
-        let selected_path =
-            resolve_directory_selected_path(&current_directory_path, &entries, selected_path);
-
-        Ok(DirectorySnapshot {
-            current_directory_path: display_path(&current_directory_path),
-            parent_directory_path,
-            entries,
-            selected_path,
-        })
+            }
+        }
     }
 
     pub fn open_file_preview(
@@ -327,58 +341,238 @@ fn parent_directory_path(path: &Path) -> AppResult<PathBuf> {
         .ok_or_else(|| AppError::NotADirectory(display_path(path)))
 }
 
-fn default_list_focus_path(entries: &[DirectoryEntry]) -> Option<String> {
-    entries
-        .iter()
-        .find(|entry| !entry.is_directory)
-        .or_else(|| entries.first())
-        .map(|entry| entry.path.clone())
+fn normalize_directory_page_limit(limit: usize) -> usize {
+    if limit == 0 {
+        return MAX_DIRECTORY_PAGE_SIZE;
+    }
+
+    limit.min(MAX_DIRECTORY_PAGE_SIZE)
 }
 
-/// Keeps list focus stable across reloads. Matches either the logical listing path (per row) or the
-/// canonical target (e.g. startup file path, symlinks), without requiring the selection to be a
-/// direct child in canonical form.
-fn resolve_directory_selected_path(
-    current_directory_path: &Path,
-    entries: &[DirectoryEntry],
-    selected_path: Option<&Path>,
-) -> Option<String> {
-    let current_display = display_path(current_directory_path);
+fn page_bounds(total_entries: usize, offset: usize, limit: usize) -> (usize, usize) {
+    let start = offset.min(total_entries);
+    let end = start.saturating_add(limit).min(total_entries);
 
-    let Some(requested) = selected_path else {
-        return default_list_focus_path(entries);
+    (start, end)
+}
+
+fn read_directory_entry_seeds(current_directory_path: &Path) -> AppResult<Vec<DirectoryEntrySeed>> {
+    fs::read_dir(current_directory_path)
+        .map_err(|source| AppError::io("read directory", current_directory_path, source))?
+        .map(|entry_result| {
+            let entry = entry_result.map_err(|source| {
+                AppError::io("read directory entry", current_directory_path, source)
+            })?;
+            directory_entry_seed_from_fs_entry(&entry)
+        })
+        .collect()
+}
+
+fn read_directory_entry_records(
+    current_directory_path: &Path,
+) -> AppResult<Vec<DirectoryEntryRecord>> {
+    fs::read_dir(current_directory_path)
+        .map_err(|source| AppError::io("read directory", current_directory_path, source))?
+        .map(|entry_result| {
+            let entry = entry_result.map_err(|source| {
+                AppError::io("read directory entry", current_directory_path, source)
+            })?;
+            directory_entry_record_from_fs_entry(&entry)
+        })
+        .collect()
+}
+
+fn directory_entry_seed_from_fs_entry(entry: &fs::DirEntry) -> AppResult<DirectoryEntrySeed> {
+    let entry_path = entry.path();
+    let entry_name = entry.file_name().to_string_lossy().to_string();
+    let file_type = entry
+        .file_type()
+        .map_err(|source| AppError::io("read file type for", &entry_path, source))?;
+
+    let is_directory = if file_type.is_symlink() {
+        entry
+            .metadata()
+            .map_err(|source| AppError::io("read metadata for", &entry_path, source))?
+            .is_dir()
+    } else {
+        file_type.is_dir()
     };
 
-    let requested_display = display_path(requested);
-    if requested_display == current_display {
-        return default_list_focus_path(entries);
-    }
+    Ok(DirectoryEntrySeed {
+        path: entry_path,
+        name: entry_name,
+        is_directory,
+    })
+}
 
-    let requested_canonical = canonicalize_path(requested).ok();
+fn directory_entry_record_from_fs_entry(entry: &fs::DirEntry) -> AppResult<DirectoryEntryRecord> {
+    let seed = directory_entry_seed_from_fs_entry(entry)?;
+    let entry_metadata = entry
+        .metadata()
+        .map_err(|source| AppError::io("read metadata for", &seed.path, source))?;
+    let modified_at_unix_ms = metadata_modified_at_unix_ms(&entry_metadata)
+        .map_err(|source| AppError::io("read modified time for", &seed.path, source))?;
 
-    if let Some(ref canon) = requested_canonical {
-        if canon == current_directory_path {
-            return default_list_focus_path(entries);
+    Ok(DirectoryEntryRecord {
+        seed,
+        size_bytes: entry_metadata.len(),
+        modified_at_unix_ms,
+    })
+}
+
+fn directory_entry_from_seed(seed: &DirectoryEntrySeed) -> AppResult<DirectoryEntry> {
+    let entry_metadata = fs::metadata(&seed.path)
+        .map_err(|source| AppError::io("read metadata for", &seed.path, source))?;
+    let modified_at_unix_ms = metadata_modified_at_unix_ms(&entry_metadata)
+        .map_err(|source| AppError::io("read modified time for", &seed.path, source))?;
+
+    Ok(DirectoryEntry {
+        // Use the directory listing path (symlink name), not the canonical target, so
+        // each row is unique and keyboard navigation matches the focused item.
+        path: display_path(&seed.path),
+        canonical_path: display_path(&canonicalize_path(&seed.path)?),
+        name: seed.name.clone(),
+        is_directory: seed.is_directory,
+        size_bytes: entry_metadata.len(),
+        modified_at_unix_ms,
+    })
+}
+
+fn directory_entry_from_record(record: &DirectoryEntryRecord) -> AppResult<DirectoryEntry> {
+    Ok(DirectoryEntry {
+        path: display_path(&record.seed.path),
+        canonical_path: display_path(&canonicalize_path(&record.seed.path)?),
+        name: record.seed.name.clone(),
+        is_directory: record.seed.is_directory,
+        size_bytes: record.size_bytes,
+        modified_at_unix_ms: record.modified_at_unix_ms,
+    })
+}
+
+fn compare_directory_entry_records(
+    left: &DirectoryEntryRecord,
+    right: &DirectoryEntryRecord,
+    sort: DirectoryListSort,
+) -> std::cmp::Ordering {
+    compare_directory_priority(left.seed.is_directory, right.seed.is_directory)
+        .then_with(|| compare_directory_entry_record_field(left, right, sort))
+        .then_with(|| {
+            compare_directory_names(
+                &left.seed.name,
+                &right.seed.name,
+                DirectorySortDirection::Asc,
+            )
+        })
+        .then_with(|| display_path(&left.seed.path).cmp(&display_path(&right.seed.path)))
+}
+
+fn compare_directory_entry_record_field(
+    left: &DirectoryEntryRecord,
+    right: &DirectoryEntryRecord,
+    sort: DirectoryListSort,
+) -> std::cmp::Ordering {
+    match sort.field {
+        DirectorySortField::Mtime => compare_numbers(
+            left.modified_at_unix_ms,
+            right.modified_at_unix_ms,
+            sort.direction,
+        ),
+        DirectorySortField::Size => {
+            compare_numbers(left.size_bytes, right.size_bytes, sort.direction)
+        }
+        DirectorySortField::Name => {
+            compare_directory_names(&left.seed.name, &right.seed.name, sort.direction)
+        }
+        DirectorySortField::Extension => {
+            compare_directory_extensions(&left.seed.name, &right.seed.name, sort.direction)
         }
     }
+}
 
-    for entry in entries {
-        if entry.path == requested_display {
-            return Some(entry.path.clone());
+fn compare_directory_entry_seeds(
+    left: &DirectoryEntrySeed,
+    right: &DirectoryEntrySeed,
+    sort: DirectoryListSort,
+) -> std::cmp::Ordering {
+    compare_directory_entry_seed_field(left, right, sort)
+        .then_with(|| compare_directory_names(&left.name, &right.name, DirectorySortDirection::Asc))
+        .then_with(|| display_path(&left.path).cmp(&display_path(&right.path)))
+}
+
+fn compare_directory_entry_seed_field(
+    left: &DirectoryEntrySeed,
+    right: &DirectoryEntrySeed,
+    sort: DirectoryListSort,
+) -> std::cmp::Ordering {
+    match sort.field {
+        DirectorySortField::Name => {
+            compare_directory_names(&left.name, &right.name, sort.direction)
         }
+        DirectorySortField::Extension => {
+            compare_directory_extensions(&left.name, &right.name, sort.direction)
+        }
+        DirectorySortField::Mtime | DirectorySortField::Size => std::cmp::Ordering::Equal,
+    }
+}
+
+fn compare_directory_priority(
+    left_is_directory: bool,
+    right_is_directory: bool,
+) -> std::cmp::Ordering {
+    right_is_directory.cmp(&left_is_directory)
+}
+
+fn compare_directory_names(
+    left_name: &str,
+    right_name: &str,
+    direction: DirectorySortDirection,
+) -> std::cmp::Ordering {
+    let ordering = left_name
+        .to_ascii_lowercase()
+        .cmp(&right_name.to_ascii_lowercase())
+        .then_with(|| left_name.cmp(right_name));
+
+    match direction {
+        DirectorySortDirection::Asc => ordering,
+        DirectorySortDirection::Desc => ordering.reverse(),
+    }
+}
+
+fn compare_numbers<T>(left: T, right: T, direction: DirectorySortDirection) -> std::cmp::Ordering
+where
+    T: Ord,
+{
+    match direction {
+        DirectorySortDirection::Asc => left.cmp(&right),
+        DirectorySortDirection::Desc => right.cmp(&left),
+    }
+}
+
+fn compare_directory_extensions(
+    left_name: &str,
+    right_name: &str,
+    direction: DirectorySortDirection,
+) -> std::cmp::Ordering {
+    let ordering = file_extension(left_name)
+        .cmp(&file_extension(right_name))
+        .then_with(|| compare_directory_names(left_name, right_name, DirectorySortDirection::Asc));
+
+    match direction {
+        DirectorySortDirection::Asc => ordering,
+        DirectorySortDirection::Desc => ordering.reverse(),
+    }
+}
+
+fn file_extension(name: &str) -> String {
+    let Some((_, extension)) = name.rsplit_once('.') else {
+        return String::new();
+    };
+
+    if extension.is_empty() || name.starts_with('.') && !name[1..].contains('.') {
+        return String::new();
     }
 
-    if let Some(ref req_canon) = requested_canonical {
-        for entry in entries {
-            if let Ok(entry_canon) = canonicalize_path(Path::new(&entry.path)) {
-                if entry_canon == *req_canon {
-                    return Some(entry.path.clone());
-                }
-            }
-        }
-    }
-
-    default_list_focus_path(entries)
+    extension.to_ascii_lowercase()
 }
 
 fn is_markdown_path(path: &Path) -> bool {
@@ -494,7 +688,10 @@ mod tests {
     use crate::{
         cli::StartupTarget,
         syntax_highlight::SyntaxUiTheme,
-        viewer::types::{FilePreview, WorkspaceMode},
+        viewer::types::{
+            DirectoryListSort, DirectorySortDirection, DirectorySortField, FilePreview,
+            WorkspaceMode,
+        },
     };
 
     struct TestDir {
@@ -514,6 +711,13 @@ mod tests {
 
         fn path(&self) -> &Path {
             &self.path
+        }
+    }
+
+    fn default_directory_sort() -> DirectoryListSort {
+        DirectoryListSort {
+            field: DirectorySortField::Name,
+            direction: DirectorySortDirection::Asc,
         }
     }
 
@@ -549,15 +753,15 @@ mod tests {
     }
 
     #[test]
-    fn list_directory_sorts_directories_before_files() {
+    fn list_directory_name_sort_orders_entries_without_directory_priority() {
         let test_dir = TestDir::new();
         fs::create_dir_all(test_dir.path().join("beta")).expect("create beta directory");
-        fs::create_dir_all(test_dir.path().join("Alpha")).expect("create alpha directory");
-        fs::write(test_dir.path().join("zeta.txt"), "zeta").expect("write zeta");
-        fs::write(test_dir.path().join("Bravo.txt"), "bravo").expect("write bravo");
+        fs::create_dir_all(test_dir.path().join("zulu")).expect("create zulu directory");
+        fs::write(test_dir.path().join("Alpha.txt"), "alpha").expect("write alpha");
+        fs::write(test_dir.path().join("bravo.txt"), "bravo").expect("write bravo");
 
         let snapshot = ViewerService::new()
-            .list_directory(test_dir.path(), None)
+            .list_directory(test_dir.path(), default_directory_sort(), 0, 200)
             .expect("directory snapshot");
 
         let names = snapshot
@@ -565,47 +769,52 @@ mod tests {
             .iter()
             .map(|entry| entry.name.clone())
             .collect::<Vec<_>>();
-        assert_eq!(names, vec!["Alpha", "beta", "Bravo.txt", "zeta.txt"]);
+        assert_eq!(names, vec!["Alpha.txt", "beta", "bravo.txt", "zulu"]);
 
-        let bravo_logical = test_dir.path().join("Bravo.txt");
-        assert_eq!(
-            snapshot.selected_path,
-            Some(bravo_logical.display().to_string()),
-            "default selection is first file after directories",
-        );
+        let bravo_logical = test_dir.path().join("bravo.txt");
+        assert_eq!(snapshot.total_entry_count, 4);
+        assert!(!snapshot.has_more);
 
         let bravo_entry = snapshot
             .entries
             .iter()
-            .find(|entry| entry.name == "Bravo.txt")
+            .find(|entry| entry.name == "bravo.txt")
             .expect("bravo entry");
         let bravo_metadata =
             fs::metadata(bravo_logical).expect("metadata for bravo logical file path");
         assert_eq!(bravo_entry.size_bytes, bravo_metadata.len());
         assert!(bravo_entry.modified_at_unix_ms > 0);
+        assert_eq!(
+            bravo_entry.canonical_path, bravo_entry.path,
+            "non-symlink file rows keep identical logical and canonical paths",
+        );
     }
 
     #[test]
-    fn list_directory_never_selects_current_directory_path_defaults_to_first_file() {
+    fn list_directory_paginates_large_directories_in_requested_batches() {
         let test_dir = TestDir::new();
-        fs::write(test_dir.path().join("a.txt"), "a").expect("write file");
-        let canonical = test_dir.path().canonicalize().expect("canonical path");
+        for index in 0..205 {
+            fs::write(test_dir.path().join(format!("file-{index:03}.txt")), "x")
+                .expect("write paged test file");
+        }
 
-        let a_txt_logical = test_dir.path().join("a.txt");
+        let first_page = ViewerService::new()
+            .list_directory(test_dir.path(), default_directory_sort(), 0, 200)
+            .expect("first page");
+        let second_page = ViewerService::new()
+            .list_directory(test_dir.path(), default_directory_sort(), 200, 200)
+            .expect("second page");
 
-        let snapshot = ViewerService::new()
-            .list_directory(test_dir.path(), Some(canonical.as_path()))
-            .expect("directory snapshot");
+        assert_eq!(first_page.entries.len(), 200);
+        assert_eq!(first_page.total_entry_count, 205);
+        assert!(first_page.has_more);
+        assert_eq!(first_page.offset, 0);
+        assert_eq!(first_page.limit, 200);
 
-        assert_ne!(
-            snapshot.selected_path,
-            Some(canonical.display().to_string()),
-            "current-directory path must not be the list selection",
-        );
-        assert_eq!(
-            snapshot.selected_path,
-            Some(a_txt_logical.display().to_string())
-        );
+        assert_eq!(second_page.entries.len(), 5);
+        assert_eq!(second_page.total_entry_count, 205);
+        assert!(!second_page.has_more);
+        assert_eq!(second_page.offset, 200);
     }
 
     #[cfg(unix)]
@@ -620,7 +829,7 @@ mod tests {
         symlink(&target, &link).expect("symlink");
 
         let snapshot = ViewerService::new()
-            .list_directory(test_dir.path(), None)
+            .list_directory(test_dir.path(), default_directory_sort(), 0, 200)
             .expect("directory snapshot");
 
         let paths: Vec<String> = snapshot.entries.iter().map(|e| e.path.clone()).collect();
@@ -638,32 +847,28 @@ mod tests {
             "sanity: link path differs from target path",
         );
 
-        let target_row_path = snapshot
+        let target_entry = snapshot
             .entries
             .iter()
             .find(|e| e.name == "target.txt")
-            .map(|e| e.path.clone())
             .expect("target row");
         let target_canonical = target.canonicalize().expect("canonical");
-        let resolved = ViewerService::new()
-            .list_directory(test_dir.path(), Some(target_canonical.as_path()))
-            .expect("resolve by canonical target");
         assert_eq!(
-            resolved.selected_path,
-            Some(target_row_path),
-            "selection by canonical path must map back to a listing row",
+            target_entry.canonical_path,
+            target_canonical.display().to_string(),
+            "canonical path is returned for each row so the client can match symlink targets",
         );
 
-        let link_row_path = snapshot
+        let link_entry = snapshot
             .entries
             .iter()
             .find(|e| e.name == "via_link.txt")
-            .map(|e| e.path.clone())
             .expect("symlink row");
-        let resolved_link = ViewerService::new()
-            .list_directory(test_dir.path(), Some(Path::new(&link_row_path)))
-            .expect("resolve by symlink path as shown in listing");
-        assert_eq!(resolved_link.selected_path, Some(link_row_path));
+        assert_eq!(link_entry.path, link.display().to_string());
+        assert_eq!(
+            link_entry.canonical_path,
+            target_canonical.display().to_string()
+        );
     }
 
     #[test]

@@ -12,7 +12,7 @@ import {
 import { Portal } from "solid-js/web";
 import type {
   DirectoryEntry,
-  DirectorySnapshot,
+  DirectoryListSort,
   DocumentSnapshot,
   FilePreview,
   HeadingNode,
@@ -37,14 +37,22 @@ import {
 } from "../../lib/tauri/document";
 import { FileBrowserPane } from "../file-view/FileBrowserPane";
 import type { FileBrowserSelectOptions } from "../file-view/FileBrowserPane";
+import { DEFAULT_FILE_TREE_SORT, DIRECTORY_PAGE_SIZE } from "../file-view/sort";
 import { PreviewPane } from "../preview/PreviewPane";
 import { PdfFilePreviewPane } from "../preview/PdfFilePreviewPane";
 import { VideoFilePreviewPane } from "../preview/VideoFilePreviewPane";
 import { TocPane } from "../toc/TocPane";
 import type { WorkspaceSelection } from "./state";
 
-const appWindow = getCurrentWindow();
 const EMPTY_STATE_IMAGE_PATH = "/empty-state-cat.png";
+
+function resolveCurrentWindow() {
+  try {
+    return getCurrentWindow();
+  } catch {
+    return null;
+  }
+}
 
 /** Delay before opening a file from keyboard selection alone (j-k); confirm opens immediately. */
 const SELECTION_PREVIEW_DEBOUNCE_MS = 500;
@@ -416,6 +424,39 @@ function previewHtml(preview: FilePreview | null): string {
   );
 }
 
+interface LoadedDirectoryState {
+  readonly current_directory_path: string;
+  readonly parent_directory_path: string | null;
+  readonly entries: readonly DirectoryEntry[];
+  readonly total_entry_count: number;
+  readonly next_offset: number;
+  readonly sort: DirectoryListSort;
+}
+
+function defaultFocusedEntryPath(
+  entries: readonly DirectoryEntry[],
+): string | null {
+  const preferred = entries.find((entry) => !entry.is_directory) ?? entries[0];
+  return preferred?.path ?? null;
+}
+
+function resolveSelectedPath(
+  currentDirectoryPath: string,
+  entries: readonly DirectoryEntry[],
+  requestedPath: string | null,
+): string | null {
+  if (requestedPath === null || requestedPath === currentDirectoryPath) {
+    return defaultFocusedEntryPath(entries);
+  }
+
+  const matched = entries.find(
+    (entry) =>
+      entry.path === requestedPath || entry.canonical_path === requestedPath,
+  );
+
+  return matched?.path ?? defaultFocusedEntryPath(entries);
+}
+
 function renderShortcutKeys(keys: readonly string[]) {
   return (
     <>
@@ -466,16 +507,22 @@ function matchesShortcut(
 }
 
 export function WorkspaceShell() {
+  const appWindow = resolveCurrentWindow();
   let directoryRequestId = 0;
   let previewRequestId = 0;
   let selectionPreviewDebounceTimer: number | undefined;
   const [startupContext, setStartupContext] =
     createSignal<StartupContext | null>(null);
-  const [directorySnapshot, setDirectorySnapshot] =
-    createSignal<DirectorySnapshot | null>(null);
+  const [directoryState, setDirectoryState] =
+    createSignal<LoadedDirectoryState | null>(null);
+  const [directorySort, setDirectorySort] = createSignal<DirectoryListSort>(
+    DEFAULT_FILE_TREE_SORT,
+  );
   const [selectedBrowserPath, setSelectedBrowserPath] = createSignal<
     string | null
   >(null);
+  const [isLoadingMoreDirectoryEntries, setLoadingMoreDirectoryEntries] =
+    createSignal(false);
   const [filePreview, setFilePreview] = createSignal<FilePreview | null>(null);
   const [videoAutoplayRequestId, setVideoAutoplayRequestId] = createSignal(0);
   const [markdownDoc, setMarkdownDoc] = createSignal<DocumentSnapshot | null>(
@@ -494,10 +541,19 @@ export function WorkspaceShell() {
   const [colorScheme, setColorScheme] =
     createSignal<ColorScheme>(getColorScheme());
 
-  const applyDirectorySnapshot = (nextSnapshot: DirectorySnapshot) => {
+  const applyDirectoryState = (
+    nextState: LoadedDirectoryState,
+    requestedSelectedPath: string | null,
+  ) => {
     startTransition(() => {
-      setDirectorySnapshot(nextSnapshot);
-      setSelectedBrowserPath(nextSnapshot.selected_path);
+      setDirectoryState(nextState);
+      setSelectedBrowserPath(
+        resolveSelectedPath(
+          nextState.current_directory_path,
+          nextState.entries,
+          requestedSelectedPath,
+        ),
+      );
       setErrorMessage(null);
     });
   };
@@ -518,16 +574,127 @@ export function WorkspaceShell() {
   const loadDirectoryState = async (
     path: string,
     selectedPath: string | null,
+    sort: DirectoryListSort = directorySort(),
   ) => {
     clearSelectionPreviewDebounce();
     const requestId = ++directoryRequestId;
-    const nextSnapshot = await listDirectory(path, selectedPath);
+    setLoadingMoreDirectoryEntries(false);
+
+    let nextPage = await listDirectory(path, sort, 0, DIRECTORY_PAGE_SIZE);
 
     if (requestId !== directoryRequestId) {
       return;
     }
 
-    applyDirectorySnapshot(nextSnapshot);
+    let nextState: LoadedDirectoryState = {
+      current_directory_path: nextPage.current_directory_path,
+      parent_directory_path: nextPage.parent_directory_path,
+      entries: nextPage.entries,
+      total_entry_count: nextPage.total_entry_count,
+      next_offset: nextPage.offset + nextPage.entries.length,
+      sort,
+    };
+
+    while (
+      selectedPath !== null &&
+      selectedPath !== nextState.current_directory_path &&
+      !nextState.entries.some(
+        (entry) =>
+          entry.path === selectedPath || entry.canonical_path === selectedPath,
+      ) &&
+      nextPage.has_more
+    ) {
+      nextPage = await listDirectory(
+        path,
+        sort,
+        nextState.next_offset,
+        DIRECTORY_PAGE_SIZE,
+      );
+
+      if (requestId !== directoryRequestId) {
+        return;
+      }
+
+      nextState = {
+        current_directory_path: nextPage.current_directory_path,
+        parent_directory_path: nextPage.parent_directory_path,
+        entries: [...nextState.entries, ...nextPage.entries],
+        total_entry_count: nextPage.total_entry_count,
+        next_offset: nextPage.offset + nextPage.entries.length,
+        sort,
+      };
+    }
+
+    if (requestId !== directoryRequestId) {
+      return;
+    }
+
+    applyDirectoryState(nextState, selectedPath);
+  };
+
+  const loadMoreDirectoryEntries = async () => {
+    const currentDirectory = directoryState();
+
+    if (
+      currentDirectory === null ||
+      isLoadingMoreDirectoryEntries() ||
+      currentDirectory.entries.length >= currentDirectory.total_entry_count
+    ) {
+      return;
+    }
+
+    setLoadingMoreDirectoryEntries(true);
+    const requestId = directoryRequestId;
+
+    try {
+      const nextPage = await listDirectory(
+        currentDirectory.current_directory_path,
+        currentDirectory.sort,
+        currentDirectory.next_offset,
+        DIRECTORY_PAGE_SIZE,
+      );
+
+      if (requestId !== directoryRequestId) {
+        return;
+      }
+
+      startTransition(() => {
+        setDirectoryState((previous) => {
+          if (
+            previous === null ||
+            previous.current_directory_path !==
+              nextPage.current_directory_path ||
+            previous.sort.field !== currentDirectory.sort.field ||
+            previous.sort.direction !== currentDirectory.sort.direction
+          ) {
+            return previous;
+          }
+
+          const dedupedEntries = [
+            ...previous.entries,
+            ...nextPage.entries.filter(
+              (entry) =>
+                !previous.entries.some(
+                  (existing) => existing.path === entry.path,
+                ),
+            ),
+          ];
+
+          return {
+            current_directory_path: nextPage.current_directory_path,
+            parent_directory_path: nextPage.parent_directory_path,
+            entries: dedupedEntries,
+            total_entry_count: nextPage.total_entry_count,
+            next_offset: nextPage.offset + nextPage.entries.length,
+            sort: previous.sort,
+          };
+        });
+      });
+    } finally {
+      if (requestId === directoryRequestId) {
+        setLoadingMoreDirectoryEntries(false);
+      }
+    }
   };
 
   const previewSelectedFile = async (path: string) => {
@@ -699,6 +866,34 @@ export function WorkspaceShell() {
     }
   };
 
+  const handleChangeDirectorySort = async (nextSort: DirectoryListSort) => {
+    const currentDirectory = directoryState();
+
+    if (
+      currentDirectory === null ||
+      (currentDirectory.sort.field === nextSort.field &&
+        currentDirectory.sort.direction === nextSort.direction)
+    ) {
+      return;
+    }
+
+    setDirectorySort(nextSort);
+
+    try {
+      await loadDirectoryState(
+        currentDirectory.current_directory_path,
+        selectedBrowserPath(),
+        nextSort,
+      );
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to resort directory entries",
+      );
+    }
+  };
+
   const handleSelectEntry = (
     entry: DirectoryEntry,
     options?: FileBrowserSelectOptions,
@@ -732,7 +927,7 @@ export function WorkspaceShell() {
       try {
         stopWatchingCurrentDocument();
         clearDocumentArea();
-        await loadDirectoryState(entry.path, entry.path);
+        await loadDirectoryState(entry.path, null);
       } catch (error: unknown) {
         setErrorMessage(
           error instanceof Error ? error.message : "Failed to open directory",
@@ -757,8 +952,8 @@ export function WorkspaceShell() {
   };
 
   const handleNavigateToParent = async () => {
-    const parentDirectory = directorySnapshot()?.parent_directory_path;
-    const currentDirectory = directorySnapshot()?.current_directory_path;
+    const parentDirectory = directoryState()?.parent_directory_path;
+    const currentDirectory = directoryState()?.current_directory_path;
 
     if (parentDirectory === null || parentDirectory === undefined) {
       return;
@@ -789,6 +984,14 @@ export function WorkspaceShell() {
   const fp = () => filePreview();
   const currentOpenPath = () => md()?.path ?? previewPath(fp());
   const hasOpenDocument = () => md() !== null || fp() !== null;
+  const canLoadMoreDirectoryEntries = createMemo(() => {
+    const currentDirectory = directoryState();
+
+    return (
+      currentDirectory !== null &&
+      currentDirectory.entries.length < currentDirectory.total_entry_count
+    );
+  });
 
   const viewerGridClassName = createMemo(() => {
     const toc = isTocOpen() && md() !== null;
@@ -860,7 +1063,7 @@ export function WorkspaceShell() {
 
       if (matchesShortcut(event, "q")) {
         event.preventDefault();
-        void appWindow.close().catch(() => {
+        void appWindow?.close().catch(() => {
           // Vite dev without Tauri
         });
         return;
@@ -1096,7 +1299,7 @@ export function WorkspaceShell() {
                 aria-label="Minimize window"
                 title="Minimize"
                 onClick={() => {
-                  void appWindow.minimize();
+                  void appWindow?.minimize();
                 }}
               >
                 <MinimizeWindowGlyph />
@@ -1107,7 +1310,7 @@ export function WorkspaceShell() {
                 aria-label="Toggle maximize window"
                 title="Maximize"
                 onClick={() => {
-                  void appWindow.toggleMaximize();
+                  void appWindow?.toggleMaximize();
                 }}
               >
                 <MaximizeWindowGlyph />
@@ -1118,7 +1321,7 @@ export function WorkspaceShell() {
                 aria-label="Close window"
                 title="Close"
                 onClick={() => {
-                  void appWindow.close();
+                  void appWindow?.close();
                 }}
               >
                 <CloseWindowGlyph />
@@ -1135,11 +1338,20 @@ export function WorkspaceShell() {
           <Show when={isFileTreeOpen()}>
             <FileBrowserPane
               active={true}
-              directory={directorySnapshot()}
+              directory={directoryState()}
+              sort={directorySort()}
               selectedPath={selectedBrowserPath()}
+              canLoadMore={canLoadMoreDirectoryEntries()}
+              isLoadingMore={isLoadingMoreDirectoryEntries()}
               onConfirmEntry={(entry, options) =>
                 void handleConfirmEntry(entry, options)
               }
+              onChangeSort={(nextSort) => {
+                void handleChangeDirectorySort(nextSort);
+              }}
+              onLoadMore={() => {
+                void loadMoreDirectoryEntries();
+              }}
               onNavigateToParent={() => void handleNavigateToParent()}
               onSelectEntry={handleSelectEntry}
             />

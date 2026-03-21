@@ -928,6 +928,13 @@ button {
   pointer-events: none;
 }
 
+.file-browser__status {
+  margin: 0;
+  padding: 0.38rem 0.4rem 0.5rem;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+}
+
 .file-preview {
   margin: 0;
 }
