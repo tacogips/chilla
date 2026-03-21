@@ -84,7 +84,7 @@ async function enhancePreviewMedia(
 ) {
   const mediaElements = Array.from(
     container.querySelectorAll<HTMLElement>(
-      "img[src], video[src], video source[src]",
+      "img[src], video[src], video source[src], iframe[src], embed[src]",
     ),
   );
 

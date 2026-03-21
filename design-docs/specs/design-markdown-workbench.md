@@ -1,6 +1,6 @@
 # Markdown Workbench Design
 
-Detailed design for the `marky` desktop Markdown viewer/editor workspace.
+Detailed design for the `chilla` desktop Markdown viewer/editor workspace.
 
 ## Overview
 
@@ -18,7 +18,7 @@ This is a target-state design document for the first Markdown workbench slice.
 
 ### Entry Point
 
-- Launch command: `marky {file_name}`
+- Launch command: `chilla {file_name}`
 - Supported target: one Markdown file path per window
 - Supported extensions for the first slice: `.md`, `.markdown`, `.mdown`
 - Expected startup behavior:
@@ -26,7 +26,7 @@ This is a target-state design document for the first Markdown workbench slice.
   - show the editor immediately
   - show the table of contents by default
   - keep the preview collapsed by default
-- Bare `marky` startup without a file is out of scope for the first slice.
+- Bare `chilla` startup without a file is out of scope for the first slice.
 
 ### Workspace Layout
 

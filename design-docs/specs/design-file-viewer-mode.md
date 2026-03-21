@@ -1,6 +1,6 @@
 # File Viewer Mode Design
 
-Detailed design for extending `marky` from a Markdown-only workbench into a mixed file viewer with a switchable Markdown editor mode.
+Detailed design for extending `chilla` from a Markdown-only workbench into a mixed file viewer with a switchable Markdown editor mode.
 
 ## Overview
 
@@ -8,14 +8,14 @@ This document defines the startup behavior, Rust-side file classification, and f
 
 ## Startup Behavior
 
-`marky` accepts zero or one positional path.
+`chilla` accepts zero or one positional path.
 
 | Invocation | Startup Target | Initial Mode |
 |-----------|----------------|--------------|
-| `marky` | current working directory | file view |
-| `marky <dir_path>` | requested directory | file view |
-| `marky <markdown_file>` | requested file | markdown |
-| `marky <other_file>` | parent directory + selected file | file view |
+| `chilla` | current working directory | file view |
+| `chilla <dir_path>` | requested directory | file view |
+| `chilla <markdown_file>` | requested file | markdown |
+| `chilla <other_file>` | parent directory + selected file | file view |
 
 Rules:
 

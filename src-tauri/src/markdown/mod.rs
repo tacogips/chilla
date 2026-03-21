@@ -362,7 +362,7 @@ fn render_embedded_media(media: &EmbeddedMediaDraft) -> String {
             };
 
             format!(
-                "<figure class=\"preview-media preview-media--video\"><video controls preload=\"metadata\" src=\"{source}\"{title_attribute}{aria_attribute}>{}</video>{caption}</figure>",
+                "<figure class=\"preview-media preview-media--video\"><video controls preload=\"none\" playsinline src=\"{source}\"{title_attribute}{aria_attribute}>{}</video>{caption}</figure>",
                 escape_html_text(alt_text),
             )
         }
@@ -609,7 +609,7 @@ mod tests {
 
         assert!(rendered
             .html
-            .contains("<video controls preload=\"metadata\""));
+            .contains("<video controls preload=\"none\""));
         assert!(rendered.html.contains("src=\"./fixtures/demo.mp4\""));
         assert!(rendered.html.contains("<figcaption>Demo clip</figcaption>"));
         assert!(!rendered.html.contains("<img"));

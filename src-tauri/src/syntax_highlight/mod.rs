@@ -94,7 +94,7 @@ fn escaped_fallback(source: &str) -> String {
             _ => body.push(ch),
         }
     }
-    format!(r#"<pre class="marky-fallback"><code>{body}</code></pre>"#)
+    format!(r#"<pre class="chilla-fallback"><code>{body}</code></pre>"#)
 }
 
 /// Full-file preview in the file viewer: grammar is inferred from the file path.

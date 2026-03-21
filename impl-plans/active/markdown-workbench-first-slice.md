@@ -17,19 +17,19 @@
 - `design-docs/specs/notes.md#markdown-workbench-notes`
 
 ### Summary
-Implement the first usable `marky` product slice as a Tauri + Bun desktop Markdown workbench. The plan covers repository migration from the current Rust-only scaffold, direct file-open CLI startup, backend parsing and file watching, and a Solid.js workspace with TOC, editor, and preview panes.
+Implement the first usable `chilla` product slice as a Tauri + Bun desktop Markdown workbench. The plan covers repository migration from the current Rust-only scaffold, direct file-open CLI startup, backend parsing and file watching, and a Solid.js workspace with TOC, editor, and preview panes.
 
 ### Scope
 **Included**:
 - migrate the repository from the Rust template baseline into the target mixed-stack layout
-- preserve `marky <file_name>` as the only first-slice document-open flow
+- preserve `chilla <file_name>` as the only first-slice document-open flow
 - implement Rust-owned document loading, saving, Markdown rendering, heading extraction, and file watching
 - implement Tauri commands/events for open, save, reload, refresh, and conflict signaling
 - implement the frontend workspace shell with default TOC-open and preview-collapsed behavior
 - add Bun/Tauri-aware `task` automation and mixed-stack verification commands
 
 **Excluded**:
-- bare `marky` startup without an initial file
+- bare `chilla` startup without an initial file
 - multi-document or recent-files workflows
 - export flows, browser mode, or non-desktop targets
 - advanced merge tooling for conflict resolution beyond explicit conflict state and manual reload/save retry paths
@@ -250,7 +250,7 @@ Required repository outcomes:
 **Deliverables**: `src-tauri/src/main.rs`, `src-tauri/src/cli/mod.rs`, `src-tauri/src/commands/document.rs`, `src-tauri/src/state.rs`
 
 **Completion Criteria**:
-- [x] `marky <file_name>` is the only first-slice open flow
+- [x] `chilla <file_name>` is the only first-slice open flow
 - [x] unsupported or unreadable paths fail before the desktop window opens
 - [x] `open_document`, `save_document`, and `reload_document` return refreshed snapshots
 - [x] CLI behavior aligns with the exit-code and extension policy in `command.md`
@@ -309,7 +309,7 @@ Required repository outcomes:
 ## Completion Criteria
 
 - [x] repository matches the target mixed-stack layout described in the design docs
-- [ ] direct open flow `marky <file_name>` works for `.md`, `.markdown`, and `.mdown`
+- [ ] direct open flow `chilla <file_name>` works for `.md`, `.markdown`, and `.mdown`
 - [x] backend owns parsing, heading extraction, persistence, and file watching
 - [x] frontend owns layout, dirty state, pane toggles, TOC rendering, and Mermaid hydration
 - [ ] external file changes refresh clean buffers and surface conflicts for dirty buffers

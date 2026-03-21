@@ -47,6 +47,7 @@ const VIDEO_EXTENSION_MIME_TYPES: [(&str, &str); 5] = [
     ("ogv", "video/ogg"),
     ("webm", "video/webm"),
 ];
+const PDF_EXTENSION_MIME_TYPES: [(&str, &str); 1] = [("pdf", "application/pdf")];
 
 #[derive(Clone, Default)]
 pub struct ViewerService;
@@ -156,6 +157,10 @@ impl ViewerService {
             return self.open_video_preview(&file_path, mime_type);
         }
 
+        if mime_type == "application/pdf" {
+            return self.open_pdf_preview(&file_path, mime_type);
+        }
+
         if is_textual_mime(&mime_type) {
             return self.open_text_preview(&file_path, mime_type, ui_theme);
         }
@@ -197,12 +202,21 @@ impl ViewerService {
             path: display_path(path),
             file_name: file_name.clone(),
             mime_type,
-            html: format!(
-                "<figure class=\"preview-media preview-media--video\"><video controls preload=\"metadata\" src=\"{}\" aria-label=\"{}\">{}</video></figure>",
-                escape_html_attribute(&display_path(path)),
-                escape_html_attribute(&file_name),
-                escape_html_text(&file_name),
-            ),
+            // Playback uses the frontend `<video src={convertFileSrc(path)}>`; HTML unused.
+            html: String::new(),
+            last_modified: last_modified_string(path)?,
+        })
+    }
+
+    fn open_pdf_preview(&self, path: &Path, mime_type: String) -> AppResult<FilePreview> {
+        let file_name = file_name(path);
+
+        Ok(FilePreview::Pdf {
+            path: display_path(path),
+            file_name: file_name.clone(),
+            mime_type,
+            // Inline viewer uses the frontend iframe + convertFileSrc(path); HTML unused.
+            html: String::new(),
             last_modified: last_modified_string(path)?,
         })
     }
@@ -384,7 +398,10 @@ fn is_text_preview_extension(path: &Path) -> bool {
 }
 
 fn fallback_media_mime_type<'a>(path: &Path, detected_mime_type: &'a str) -> Option<&'a str> {
-    if detected_mime_type.starts_with("image/") || detected_mime_type.starts_with("video/") {
+    if detected_mime_type.starts_with("image/")
+        || detected_mime_type.starts_with("video/")
+        || detected_mime_type == "application/pdf"
+    {
         return None;
     }
 
@@ -396,6 +413,7 @@ fn fallback_media_mime_type<'a>(path: &Path, detected_mime_type: &'a str) -> Opt
     IMAGE_EXTENSION_MIME_TYPES
         .iter()
         .chain(VIDEO_EXTENSION_MIME_TYPES.iter())
+        .chain(PDF_EXTENSION_MIME_TYPES.iter())
         .find_map(|(candidate_extension, candidate_mime_type)| {
             (extension == *candidate_extension).then_some(*candidate_mime_type)
         })
@@ -463,7 +481,7 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos();
-            let path = std::env::temp_dir().join(format!("marky-viewer-tests-{unique}"));
+            let path = std::env::temp_dir().join(format!("chilla-viewer-tests-{unique}"));
             fs::create_dir_all(&path).expect("create temp test directory");
             Self { path }
         }
@@ -619,6 +637,7 @@ mod tests {
         let text_path = test_dir.path().join("notes.txt");
         let image_path = test_dir.path().join("photo.png");
         let video_path = test_dir.path().join("clip.mp4");
+        let pdf_path = test_dir.path().join("notes.pdf");
         let binary_path = test_dir.path().join("asset.bin");
 
         fs::write(&markdown_path, "# Heading").expect("write markdown");
@@ -633,6 +652,11 @@ mod tests {
             [0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109],
         )
         .expect("write mp4 header");
+        fs::write(
+            &pdf_path,
+            b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
+        )
+        .expect("write minimal pdf");
         fs::write(&binary_path, [0_u8, 159, 146, 150]).expect("write binary");
 
         let viewer_service = ViewerService::new();
@@ -678,11 +702,22 @@ mod tests {
             .open_file_preview(&video_path, SyntaxUiTheme::Dark)
             .expect("video preview")
         {
-            FilePreview::Video { html, .. } => {
-                assert!(html.contains("<video"));
-                assert!(html.contains("clip.mp4"));
+            FilePreview::Video { html, path, .. } => {
+                assert!(html.is_empty());
+                assert!(path.ends_with("clip.mp4"));
             }
             _ => panic!("expected video preview"),
+        }
+
+        match viewer_service
+            .open_file_preview(&pdf_path, SyntaxUiTheme::Dark)
+            .expect("pdf preview")
+        {
+            FilePreview::Pdf { html, path, .. } => {
+                assert!(html.is_empty());
+                assert!(path.ends_with("notes.pdf"));
+            }
+            _ => panic!("expected pdf preview"),
         }
 
         match viewer_service

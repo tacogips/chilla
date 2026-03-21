@@ -1,11 +1,11 @@
 [package]
-name = "marky"
+name = "chilla"
 version = "0.1.0"
 description = "A Tauri markdown workbench"
 edition = "2021"
 
 [lib]
-name = "marky_lib"
+name = "chilla_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -22,7 +22,7 @@ syntect = { version = "5.3", default-features = false, features = [
   "html",
   "dump-load",
 ] }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-opener = "2.5.3"
 thiserror = "2"
 tree_magic_mini = "3.2.2"

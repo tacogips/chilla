@@ -16,10 +16,10 @@ The current command surface defines no named subcommands. The binary accepts an 
 
 | Invocation | Arguments | Behavior |
 |------------|-----------|----------|
-| `marky` | None | Open the current working directory in file view mode |
-| `marky <path>` | Path to a file or directory | Open Markdown files in markdown mode, other files in file view mode, or directories in file view mode |
-| `marky --help` | None | Show CLI help |
-| `marky --version` | None | Show application version |
+| `chilla` | None | Open the current working directory in file view mode |
+| `chilla <path>` | Path to a file or directory | Open Markdown files in markdown mode, other files in file view mode, or directories in file view mode |
+| `chilla --help` | None | Show CLI help |
+| `chilla --version` | None | Show application version |
 
 The positional argument is named `path` in product messaging and accepts a relative or absolute filesystem path.
 
@@ -47,10 +47,10 @@ The positional argument is named `path` in product messaging and accepts a relat
 
 ### Startup Contract
 
-- `marky` with no positional argument starts in file view mode rooted at the current working directory.
-- `marky <dir_path>` starts in file view mode rooted at the requested directory.
-- `marky <markdown_file>` starts in markdown mode for that file.
-- `marky <other_file>` starts in file view mode rooted at the parent directory with that file selected for preview.
+- `chilla` with no positional argument starts in file view mode rooted at the current working directory.
+- `chilla <dir_path>` starts in file view mode rooted at the requested directory.
+- `chilla <markdown_file>` starts in markdown mode for that file.
+- `chilla <other_file>` starts in file view mode rooted at the parent directory with that file selected for preview.
 - The CLI validates that the path exists and is readable before initializing the desktop app.
 - Canonicalized startup context is forwarded into the Tauri application, including both the initial mode and the initial directory/file selection.
 - Markdown mode still recognizes `.md`, `.markdown`, and `.mdown` as Markdown inputs.
@@ -58,7 +58,7 @@ The positional argument is named `path` in product messaging and accepts a relat
 ### Future-Compatible Command Notes
 
 - The initial design does not require subcommands such as `open`, `watch`, or `export`.
-- Future additions should preserve direct `marky <path>` startup because it is the primary interaction model.
+- Future additions should preserve direct `chilla <path>` startup because it is the primary interaction model.
 - If recent-files or workspace-restoration support is added later, it should not break direct file open behavior.
 
 ---

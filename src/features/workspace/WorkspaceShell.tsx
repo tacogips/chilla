@@ -36,10 +36,29 @@ import {
 } from "../../lib/tauri/document";
 import { FileBrowserPane } from "../file-view/FileBrowserPane";
 import { PreviewPane } from "../preview/PreviewPane";
+import { PdfFilePreviewPane } from "../preview/PdfFilePreviewPane";
+import { VideoFilePreviewPane } from "../preview/VideoFilePreviewPane";
 import { TocPane } from "../toc/TocPane";
 import type { WorkspaceSelection } from "./state";
 
 const appWindow = getCurrentWindow();
+
+/** Delay before opening a file from tree selection alone (click / j-k); confirm opens immediately. */
+const SELECTION_PREVIEW_DEBOUNCE_MS = 500;
+/** Binary / media previews: shorter wait while keeping debounce for text and Markdown. */
+const SELECTION_PREVIEW_DEBOUNCE_FAST_MS = 120;
+
+function selectionPreviewDebounceMsForPath(filePath: string): number {
+  if (/\.(pdf|png|apng|jpe?g|gif|webp)$/i.test(filePath)) {
+    return SELECTION_PREVIEW_DEBOUNCE_FAST_MS;
+  }
+
+  if (/\.(mp4|m4v|mov|webm|ogv)$/i.test(filePath)) {
+    return SELECTION_PREVIEW_DEBOUNCE_FAST_MS;
+  }
+
+  return SELECTION_PREVIEW_DEBOUNCE_MS;
+}
 
 type MarkdownPane = "raw" | "preview";
 type ShortcutDefinition = {
@@ -102,7 +121,8 @@ const SHORTCUT_SECTIONS: readonly {
       },
       {
         keys: ["Ctrl", "M"],
-        description: "First list row (when filter focused)",
+        description:
+          "First list row (when filter focused); preview loads immediately (no debounce)",
       },
       {
         keys: ["J", "↓"],
@@ -119,6 +139,16 @@ const SHORTCUT_SECTIONS: readonly {
       {
         keys: ["L", "→", "Enter"],
         description: "Open or confirm",
+      },
+    ],
+  },
+  {
+    title: "Video preview (file open)",
+    shortcuts: [
+      {
+        keys: ["Space"],
+        description:
+          "Play / pause (macOS/Windows when focus is outside the player), or open in default player (Linux)",
       },
     ],
   },
@@ -377,6 +407,7 @@ function matchesShortcut(
 export function WorkspaceShell() {
   let directoryRequestId = 0;
   let previewRequestId = 0;
+  let selectionPreviewDebounceTimer: number | undefined;
   const [startupContext, setStartupContext] =
     createSignal<StartupContext | null>(null);
   const [directorySnapshot, setDirectorySnapshot] =
@@ -415,10 +446,18 @@ export function WorkspaceShell() {
     setMarkdownDoc(null);
   };
 
+  const clearSelectionPreviewDebounce = () => {
+    if (selectionPreviewDebounceTimer !== undefined) {
+      clearTimeout(selectionPreviewDebounceTimer);
+      selectionPreviewDebounceTimer = undefined;
+    }
+  };
+
   const loadDirectoryState = async (
     path: string,
     selectedPath: string | null,
   ) => {
+    clearSelectionPreviewDebounce();
     const requestId = ++directoryRequestId;
     const nextSnapshot = await listDirectory(path, selectedPath);
 
@@ -476,6 +515,18 @@ export function WorkspaceShell() {
     }
   };
 
+  const scheduleSelectionPreviewFromTree = (path: string) => {
+    clearSelectionPreviewDebounce();
+    selectionPreviewDebounceTimer = window.setTimeout(() => {
+      selectionPreviewDebounceTimer = undefined;
+      if (selectedBrowserPath() !== path) {
+        return;
+      }
+
+      void previewSelectedFile(path);
+    }, selectionPreviewDebounceMsForPath(path));
+  };
+
   const refreshSyntaxHighlights = async () => {
     const doc = markdownDoc();
 
@@ -497,6 +548,7 @@ export function WorkspaceShell() {
     const path = previewPath(filePreview());
 
     if (path !== null) {
+      clearSelectionPreviewDebounce();
       await previewSelectedFile(path);
     }
   };
@@ -559,20 +611,31 @@ export function WorkspaceShell() {
     const path = previewPath(filePreview());
 
     if (path !== null) {
+      clearSelectionPreviewDebounce();
       await previewSelectedFile(path);
     }
   };
 
-  const handleSelectEntry = (entry: DirectoryEntry) => {
+  const handleSelectEntry = (
+    entry: DirectoryEntry,
+    options?: { readonly immediatePreview?: boolean },
+  ) => {
     setSelectedBrowserPath(entry.path);
 
     if (entry.is_directory) {
+      clearSelectionPreviewDebounce();
       stopWatchingCurrentDocument();
       clearDocumentArea();
       return;
     }
 
-    void previewSelectedFile(entry.path);
+    if (options?.immediatePreview === true) {
+      clearSelectionPreviewDebounce();
+      void previewSelectedFile(entry.path);
+      return;
+    }
+
+    scheduleSelectionPreviewFromTree(entry.path);
   };
 
   const handleConfirmEntry = async (entry: DirectoryEntry) => {
@@ -591,6 +654,7 @@ export function WorkspaceShell() {
     }
 
     try {
+      clearSelectionPreviewDebounce();
       setSelectedBrowserPath(entry.path);
       await previewSelectedFile(entry.path);
     } catch (error: unknown) {
@@ -767,6 +831,7 @@ export function WorkspaceShell() {
       isDisposed = true;
       disposeListener?.();
       window.removeEventListener("keydown", handleGlobalKeyDown);
+      clearSelectionPreviewDebounce();
     });
   });
 
@@ -996,13 +1061,36 @@ export function WorkspaceShell() {
               />
             </Show>
 
-            <Show when={md() === null && fp() !== null}>
+            <Show
+              when={
+                md() === null &&
+                fp() !== null &&
+                fp()!.kind !== "video" &&
+                fp()!.kind !== "pdf"
+              }
+            >
               <PreviewPane
                 colorScheme={colorScheme()}
                 documentPath={previewPath(fp())}
                 html={previewHtml(fp())}
                 selectedAnchorId={null}
                 visible={true}
+              />
+            </Show>
+
+            <Show when={md() === null && fp() !== null && fp()!.kind === "pdf"}>
+              <PdfFilePreviewPane
+                path={fp()!.path}
+                fileName={fp()!.file_name}
+              />
+            </Show>
+
+            <Show
+              when={md() === null && fp() !== null && fp()!.kind === "video"}
+            >
+              <VideoFilePreviewPane
+                path={fp()!.path}
+                fileName={fp()!.file_name}
               />
             </Show>
 

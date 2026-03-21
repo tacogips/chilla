@@ -26,7 +26,7 @@ This design therefore describes the target mixed-stack architecture and the migr
 
 ### Product Scope
 
-- `marky {file_name}` opens a Markdown file directly into the desktop workbench.
+- `chilla {file_name}` opens a Markdown file directly into the desktop workbench.
 - The main workspace is a three-column layout:
   - Left: collapsible table of contents generated from Markdown headings
   - Center: Markdown editor
@@ -51,7 +51,7 @@ The target application is a mixed Tauri desktop system with clear responsibility
 
 | Component | Stack | Responsibility |
 |-----------|-------|----------------|
-| CLI/bootstrap | Rust | Parse `marky {file_name}`, validate path, launch Tauri app with initial document context |
+| CLI/bootstrap | Rust | Parse `chilla {file_name}`, validate path, launch Tauri app with initial document context |
 | Document service | Rust | Load Markdown file, normalize metadata, persist editor writes, expose current document snapshot |
 | Markdown pipeline | Rust | Convert Markdown to HTML, extract heading tree, derive stable anchor identifiers |
 | File watch service | Rust | Detect external file modifications and emit refresh events to the frontend |
@@ -74,7 +74,7 @@ The architecture has to support a staged migration from the current Rust-only sc
 
 #### Initial Open
 
-1. The CLI receives a Markdown path from `marky {file_name}`.
+1. The CLI receives a Markdown path from `chilla {file_name}`.
 2. Rust validates the path and passes it into the Tauri app as initial state.
 3. The document service reads file content.
 4. The Markdown pipeline returns:

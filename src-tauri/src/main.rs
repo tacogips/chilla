@@ -1,11 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use marky_lib::cli::{parse_cli, CliParseOutcome};
+use chilla_lib::cli::{parse_cli, CliParseOutcome};
 
 fn main() {
     match parse_cli(std::env::args_os()) {
         Ok(CliParseOutcome::Run(startup_path)) => {
-            if let Err(error) = marky_lib::run(startup_path) {
+            if let Err(error) = chilla_lib::run(startup_path) {
                 eprintln!("{error}");
                 std::process::exit(1);
             }

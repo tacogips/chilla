@@ -70,7 +70,35 @@
             webkitgtk_4_1
           ];
 
-          linuxRuntimeLibraryPath = lib.makeLibraryPath linuxGuiLibraries;
+          # WebKitGTK uses GStreamer for <video> / media; plugins must resolve libavcodec, pulse, etc.
+          linuxGStreamerPluginPackages = with pkgs.gst_all_1; [
+            gst-plugins-base
+            gst-plugins-good
+            gst-plugins-bad
+            gst-plugins-ugly
+            gst-libav
+          ];
+
+          linuxGStreamerPluginPath = lib.makeSearchPath "lib/gstreamer-1.0" linuxGStreamerPluginPackages;
+
+          linuxWebkitMediaLibraries = with pkgs; [
+            ffmpeg
+            libpulseaudio
+            alsa-lib
+          ];
+
+          linuxRuntimeLibraryPath =
+            if pkgs.stdenv.isLinux then
+              lib.makeLibraryPath (
+                linuxGuiLibraries
+                ++ (with pkgs.gst_all_1; [
+                  gstreamer
+                  gst-plugins-base
+                ])
+                ++ linuxWebkitMediaLibraries
+              )
+            else
+              lib.makeLibraryPath linuxGuiLibraries;
           linuxGioModulePath = lib.makeSearchPath "lib/gio/modules" (with pkgs; [
             dconf.lib
             glib-networking
@@ -93,7 +121,7 @@
           ];
 
           frontendDist = pkgs.stdenvNoCC.mkDerivation {
-            pname = "marky-frontend";
+            pname = "chilla-frontend";
             version = "0.1.0";
             src = cleanedSource;
             dontRunLifecycleScripts = true;
@@ -127,7 +155,7 @@
             '';
           };
 
-          tauriBuildSource = pkgs.runCommand "marky-tauri-source" { } ''
+          tauriBuildSource = pkgs.runCommand "chilla-tauri-source" { } ''
             cp -R ${cleanedSource} $out
             chmod -R u+w $out
             mkdir -p $out/dist
@@ -135,7 +163,7 @@
           '';
 
           cargoArtifacts = craneLib.buildDepsOnly {
-            pname = "marky-artifacts";
+            pname = "chilla-artifacts";
             version = "0.1.0";
             src = tauriBuildSource;
             cargoExtraArgs = "--manifest-path src-tauri/Cargo.toml";
@@ -143,8 +171,8 @@
             nativeBuildInputs = with pkgs; [ pkg-config ];
           };
 
-          marky = craneLib.buildPackage {
-            pname = "marky";
+          chilla = craneLib.buildPackage {
+            pname = "chilla";
             version = "0.1.0";
             src = tauriBuildSource;
             inherit cargoArtifacts;
@@ -156,8 +184,10 @@
             ];
 
             postFixup = lib.optionalString pkgs.stdenv.isLinux ''
-              wrapProgram $out/bin/marky \
-                --prefix LD_LIBRARY_PATH : "${linuxRuntimeLibraryPath}"
+              wrapProgram $out/bin/chilla \
+                --prefix LD_LIBRARY_PATH : "${linuxRuntimeLibraryPath}" \
+                --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : "${linuxGStreamerPluginPath}" \
+                --prefix GST_PLUGIN_PATH : "${linuxGStreamerPluginPath}"
             '';
           };
 
@@ -180,10 +210,10 @@
         in
         {
           checks = {
-            inherit frontendDist marky;
+            inherit frontendDist chilla;
 
             clippy = craneLib.cargoClippy {
-              pname = "marky-clippy";
+              pname = "chilla-clippy";
               version = "0.1.0";
               src = tauriBuildSource;
               inherit cargoArtifacts;
@@ -194,7 +224,7 @@
             };
 
             fmt = craneLib.cargoFmt {
-              pname = "marky-fmt";
+              pname = "chilla-fmt";
               version = "0.1.0";
               src = tauriBuildSource;
               cargoFmtExtraArgs = "--manifest-path src-tauri/Cargo.toml";
@@ -202,15 +232,15 @@
           };
 
           packages = {
-            default = marky;
-            marky = marky;
+            default = chilla;
+            chilla = chilla;
             frontend = frontendDist;
           };
 
           apps = {
             default = {
               type = "app";
-              program = lib.getExe marky;
+              program = lib.getExe chilla;
             };
           };
 
@@ -225,6 +255,9 @@
                 export GIO_EXTRA_MODULES="${linuxGioModulePath}"
                 export XDG_DATA_DIRS="${linuxXdgDataDirs}"
                 export WEBKIT_DISABLE_DMABUF_RENDERER=1
+                export GST_PLUGIN_SYSTEM_PATH_1_0="${linuxGStreamerPluginPath}''${GST_PLUGIN_SYSTEM_PATH_1_0:+:$GST_PLUGIN_SYSTEM_PATH_1_0}"
+                # Some WebKit builds consult GST_PLUGIN_PATH as well as GST_PLUGIN_SYSTEM_PATH_1_0.
+                export GST_PLUGIN_PATH="${linuxGStreamerPluginPath}''${GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}"
                 unset GTK_PATH
                 unset GI_TYPELIB_PATH
                 unset GTK_IM_MODULE
@@ -243,7 +276,7 @@
     perSystem
     // {
       overlays.default = final: _prev: {
-        marky = self.packages.${final.system}.default;
+        chilla = self.packages.${final.system}.default;
       };
     };
 }

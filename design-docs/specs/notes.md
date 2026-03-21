@@ -16,7 +16,7 @@ Notable items that do not fit into architecture or client categories.
 
 - The architecture documents a target Tauri + Bun + TypeScript application, not the current checked-in repository shape.
 - The current repository still reflects the Rust-template baseline, so migration work has to be planned explicitly.
-- Bare `marky` startup without a file was removed from the first-slice command contract to keep startup behavior internally consistent.
+- Bare `chilla` startup without a file was removed from the first-slice command contract to keep startup behavior internally consistent.
 - Cargo development variables such as `CARGO_TERM_QUIET` belong to implementation tooling, not the product CLI surface.
 
 ### Key Assumptions
@@ -30,7 +30,7 @@ Notable items that do not fit into architecture or client categories.
 
 ### Scope Additions
 
-- `marky` is no longer Markdown-file-only at startup; it must handle directories, Markdown files, other text files, and binary files.
+- `chilla` is no longer Markdown-file-only at startup; it must handle directories, Markdown files, other text files, and binary files.
 - File type parsing is a Rust responsibility and should use a dedicated library rather than frontend sniffing.
 - Binary files are previewable only as metadata/placeholders, not as rendered content.
 - File view mode uses a yazi-style flat current-directory list, not a recursive tree widget.

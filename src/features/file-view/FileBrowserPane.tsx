@@ -52,11 +52,19 @@ function FileGlyph() {
   );
 }
 
+export interface FileBrowserSelectOptions {
+  /** Skip selection debounce and open the preview immediately (e.g. Ctrl+M from filter). */
+  readonly immediatePreview?: boolean;
+}
+
 interface FileBrowserPaneProps {
   readonly active: boolean;
   readonly directory: DirectorySnapshot | null;
   readonly selectedPath: string | null;
-  readonly onSelectEntry: (entry: DirectoryEntry) => void;
+  readonly onSelectEntry: (
+    entry: DirectoryEntry,
+    options?: FileBrowserSelectOptions,
+  ) => void;
   readonly onConfirmEntry: (entry: DirectoryEntry) => void;
   readonly onNavigateToParent: () => void;
 }
@@ -190,11 +198,14 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
     return `${shown} of ${total} ${total === 1 ? "entry" : "entries"}`;
   });
 
-  const focusFirstListButton = (entries: readonly DirectoryEntry[]) => {
+  const focusFirstListButton = (
+    entries: readonly DirectoryEntry[],
+    options?: FileBrowserSelectOptions,
+  ) => {
     const first = entries[0];
 
     if (first !== undefined) {
-      props.onSelectEntry(first);
+      props.onSelectEntry(first, options);
     }
 
     queueMicrotask(() => {
@@ -206,7 +217,10 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
     });
   };
 
-  const leaveFilterForList = (clearFilter: boolean) => {
+  const leaveFilterForList = (
+    clearFilter: boolean,
+    immediatePreview?: boolean,
+  ) => {
     if (clearFilter) {
       setFilterText("");
     }
@@ -221,7 +235,10 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
       return;
     }
 
-    focusFirstListButton(entries);
+    focusFirstListButton(
+      entries,
+      immediatePreview === true ? { immediatePreview: true } : undefined,
+    );
   };
 
   createEffect(
@@ -260,6 +277,14 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
         return;
       }
 
+      const key = event.key.toLowerCase();
+
+      if (key === "h" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        props.onNavigateToParent();
+        return;
+      }
+
       const entries = filteredEntries();
 
       if (entries.length === 0) {
@@ -280,8 +305,6 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
         }
       };
 
-      const key = event.key.toLowerCase();
-
       if (key === "j" || event.key === "ArrowDown") {
         moveSelection(
           selectedIndex === -1
@@ -293,12 +316,6 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
 
       if (key === "k" || event.key === "ArrowUp") {
         moveSelection(selectedIndex === -1 ? 0 : Math.max(0, currentIndex - 1));
-        return;
-      }
-
-      if (key === "h" || event.key === "ArrowLeft") {
-        event.preventDefault();
-        props.onNavigateToParent();
         return;
       }
 
@@ -412,7 +429,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
               if (event.ctrlKey && event.key.toLowerCase() === "m") {
                 event.preventDefault();
                 event.stopPropagation();
-                leaveFilterForList(false);
+                leaveFilterForList(false, true);
               }
             }}
           />
@@ -429,7 +446,8 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
             when={filteredEntries().length > 0}
             fallback={
               <div class="empty">
-                No file or folder names match this filter.
+                No file or folder names match this filter. Use <code>h</code> to
+                move up.
               </div>
             }
           >

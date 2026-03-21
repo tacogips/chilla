@@ -131,7 +131,7 @@ feat: implement user authentication system
 
 ## Project Overview
 
-This is marky - a Tauri + Bun desktop application for viewing and editing Markdown.
+This is chilla - a Tauri + Bun desktop application for viewing and editing Markdown.
 
 This repository was originally generated from `ign-template`'s `rust-v1` template, so some Rust-oriented scaffolding remains. Agent instructions in this repository must treat the project as a mixed Rust + TypeScript Tauri application, not as a Rust-only crate.
 

@@ -30,7 +30,7 @@ where
     let binary_name = args
         .next()
         .and_then(|argument| argument.into_string().ok())
-        .unwrap_or_else(|| "marky".to_string());
+        .unwrap_or_else(|| "chilla".to_string());
 
     let Some(argument) = args.next() else {
         let current_directory = std::env::current_dir()
@@ -73,7 +73,7 @@ fn validate_cli_path(path: &Path) -> AppResult<StartupTarget> {
 
 fn help_text(binary_name: &str) -> String {
     format!(
-        "Usage:\n  {binary_name} [path]\n  {binary_name} --help\n  {binary_name} --version\n\nIf no path is provided, marky opens the current working directory in file view mode."
+        "Usage:\n  {binary_name} [path]\n  {binary_name} --help\n  {binary_name} --version\n\nIf no path is provided, chilla opens the current working directory in file view mode."
     )
 }
 
@@ -101,7 +101,7 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos();
-            let path = std::env::temp_dir().join(format!("marky-cli-tests-{unique}"));
+            let path = std::env::temp_dir().join(format!("chilla-cli-tests-{unique}"));
             fs::create_dir_all(&path).expect("create temp test directory");
             Self { path }
         }
@@ -121,7 +121,7 @@ mod tests {
     fn parses_bare_startup_as_current_directory() {
         let current_directory = std::env::current_dir().expect("current directory");
 
-        let outcome = parse_cli(["marky"]).expect("parse bare startup");
+        let outcome = parse_cli(["chilla"]).expect("parse bare startup");
 
         match outcome {
             CliParseOutcome::Run(StartupTarget::CurrentDirectory(path)) => {
@@ -135,7 +135,7 @@ mod tests {
     fn parses_directory_startup_targets() {
         let test_dir = TestDir::new();
 
-        let outcome = parse_cli(["marky", test_dir.path().to_str().expect("utf-8 path")])
+        let outcome = parse_cli(["chilla", test_dir.path().to_str().expect("utf-8 path")])
             .expect("parse directory");
 
         match outcome {
@@ -156,7 +156,7 @@ mod tests {
         fs::write(&file_path, "hello").expect("write file");
 
         let outcome =
-            parse_cli(["marky", file_path.to_str().expect("utf-8 path")]).expect("parse file");
+            parse_cli(["chilla", file_path.to_str().expect("utf-8 path")]).expect("parse file");
 
         match outcome {
             CliParseOutcome::Run(StartupTarget::File(path)) => {

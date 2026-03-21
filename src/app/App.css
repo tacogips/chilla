@@ -573,6 +573,99 @@ button {
   background: #000;
 }
 
+/* File-view PDF / video: fill the document pane below the header. */
+.pane__body.preview.preview--embedded-pdf,
+.pane__body.preview.preview--embedded-video {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.pane__body.preview.preview--embedded-pdf .preview-pdf-frame {
+  flex: 1;
+  min-height: 0;
+}
+
+.pane__body.preview.preview--embedded-video .preview-media--video {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.pane__body.preview.preview--embedded-video video {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.pane__body.preview.preview--embedded-video.preview--video-external-linux {
+  justify-content: center;
+  align-items: stretch;
+  padding: 1rem 1rem 1.25rem;
+  gap: 0.75rem;
+  overflow: auto;
+}
+
+.pane__body.preview.preview--embedded-video.preview--video-external-linux .preview-media--video {
+  width: 100%;
+}
+
+.preview-video__open-default {
+  align-self: flex-start;
+}
+
+.preview-video__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.preview-video__error {
+  margin: 0;
+  max-width: 36rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-subtle);
+}
+
+.pane__body.preview.preview--embedded-pdf .preview-pdf-frame {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg-app);
+}
+
+/* Markdown (and other HTML) preview: PDF iframe uses remaining column height. */
+.workspace__document-column .pane__body.preview:has(.preview-pdf-frame) {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.workspace__document-column .pane__body.preview:has(.preview-pdf-frame) .preview-media--pdf {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+}
+
+.workspace__document-column .pane__body.preview:has(.preview-pdf-frame) .preview-pdf-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg-app);
+}
+
 .preview h1,
 .preview h2,
 .preview h3,

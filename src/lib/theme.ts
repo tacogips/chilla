@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type ColorScheme = "light" | "dark";
 
-const STORAGE_KEY = "marky-color-scheme";
+const STORAGE_KEY = "chilla-color-scheme";
 
 function isColorScheme(value: string | null): value is ColorScheme {
   return value === "light" || value === "dark";

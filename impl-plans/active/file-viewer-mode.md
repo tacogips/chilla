@@ -16,7 +16,7 @@
 
 ### Summary
 
-Implement a switchable file-view workspace on top of the current Markdown workbench so `marky` can launch on the current directory, a directory path, a Markdown file, or another file path.
+Implement a switchable file-view workspace on top of the current Markdown workbench so `chilla` can launch on the current directory, a directory path, a Markdown file, or another file path.
 
 ### Scope
 
@@ -201,10 +201,10 @@ export interface StartupContext {
 
 ## Completion Criteria
 
-- [ ] Bare `marky` startup opens file view mode rooted at the current directory
-- [ ] `marky <dir_path>` opens file view mode rooted at that directory
-- [ ] `marky <markdown_file>` opens markdown mode
-- [ ] `marky <other_file>` opens file view mode with that file previewed
+- [ ] Bare `chilla` startup opens file view mode rooted at the current directory
+- [ ] `chilla <dir_path>` opens file view mode rooted at that directory
+- [ ] `chilla <markdown_file>` opens markdown mode
+- [ ] `chilla <other_file>` opens file view mode with that file previewed
 - [ ] Non-Markdown text files preview as text
 - [ ] Image and video files preview inline
 - [ ] Binary files are not rendered
