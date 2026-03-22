@@ -869,7 +869,7 @@ button {
   margin: 0 0 16px;
   border-radius: 6px;
   border: 1px solid var(--markdown-border);
-  background: var(--markdown-pre-bg);
+  background: var(--markdown-surface);
   padding: 16px;
 }
 

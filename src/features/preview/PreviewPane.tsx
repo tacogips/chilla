@@ -24,16 +24,27 @@ let mermaidModulePromise:
   | Promise<(typeof import("mermaid"))["default"]>
   | undefined;
 
+function mermaidThemeVariables(colorScheme: ColorScheme): {
+  readonly background: string;
+  readonly darkMode: boolean;
+} {
+  return colorScheme === "dark"
+    ? {
+        background: "#0d1117",
+        darkMode: true,
+      }
+    : {
+        background: "#ffffff",
+        darkMode: false,
+      };
+}
+
 async function getMermaid() {
   mermaidModulePromise ??= import("mermaid").then(({ default: mermaid }) => {
     return mermaid;
   });
 
   return mermaidModulePromise;
-}
-
-function mermaidTheme(colorScheme: ColorScheme): "dark" | "neutral" {
-  return colorScheme === "dark" ? "dark" : "neutral";
 }
 
 async function enhanceMermaid(
@@ -65,7 +76,8 @@ async function enhanceMermaid(
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: "strict",
-    theme: mermaidTheme(colorScheme),
+    theme: "base",
+    themeVariables: mermaidThemeVariables(colorScheme),
   });
   const nodes = Array.from(container.querySelectorAll<HTMLElement>(".mermaid"));
 
