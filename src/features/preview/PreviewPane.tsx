@@ -24,19 +24,79 @@ let mermaidModulePromise:
   | Promise<(typeof import("mermaid"))["default"]>
   | undefined;
 
-function mermaidThemeVariables(colorScheme: ColorScheme): {
+interface MermaidThemeVariables {
   readonly background: string;
-  readonly darkMode: boolean;
-} {
-  return colorScheme === "dark"
-    ? {
-        background: "#0d1117",
-        darkMode: true,
-      }
-    : {
-        background: "#ffffff",
-        darkMode: false,
-      };
+  readonly primaryColor: string;
+  readonly primaryTextColor: string;
+  readonly primaryBorderColor: string;
+  readonly secondaryColor: string;
+  readonly secondaryTextColor: string;
+  readonly secondaryBorderColor: string;
+  readonly tertiaryColor: string;
+  readonly tertiaryTextColor: string;
+  readonly tertiaryBorderColor: string;
+  readonly noteBkgColor: string;
+  readonly noteTextColor: string;
+  readonly noteBorderColor: string;
+  readonly lineColor: string;
+  readonly textColor: string;
+  readonly mainBkg: string;
+  readonly nodeBkg: string;
+  readonly nodeBorder: string;
+  readonly clusterBkg: string;
+  readonly clusterBorder: string;
+  readonly defaultLinkColor: string;
+  readonly titleColor: string;
+  readonly edgeLabelBackground: string;
+  readonly nodeTextColor: string;
+}
+
+function readCssVariable(name: string): string {
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+
+  if (value === "") {
+    throw new Error(`Missing CSS custom property: ${name}`);
+  }
+
+  return value;
+}
+
+export function mermaidThemeVariables(): MermaidThemeVariables {
+  const surface = readCssVariable("--markdown-surface");
+  const preBackground = readCssVariable("--markdown-pre-bg");
+  const foreground = readCssVariable("--markdown-fg");
+  const heading = readCssVariable("--markdown-heading");
+  const muted = readCssVariable("--markdown-muted");
+  const border = readCssVariable("--markdown-border");
+
+  return {
+    background: surface,
+    primaryColor: preBackground,
+    primaryTextColor: foreground,
+    primaryBorderColor: border,
+    secondaryColor: preBackground,
+    secondaryTextColor: foreground,
+    secondaryBorderColor: border,
+    tertiaryColor: preBackground,
+    tertiaryTextColor: foreground,
+    tertiaryBorderColor: border,
+    noteBkgColor: preBackground,
+    noteTextColor: foreground,
+    noteBorderColor: border,
+    lineColor: border,
+    textColor: foreground,
+    mainBkg: preBackground,
+    nodeBkg: preBackground,
+    nodeBorder: border,
+    clusterBkg: preBackground,
+    clusterBorder: border,
+    defaultLinkColor: muted,
+    titleColor: heading,
+    edgeLabelBackground: surface,
+    nodeTextColor: foreground,
+  };
 }
 
 async function getMermaid() {
@@ -76,8 +136,9 @@ async function enhanceMermaid(
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: "strict",
+    darkMode: colorScheme === "dark",
     theme: "base",
-    themeVariables: mermaidThemeVariables(colorScheme),
+    themeVariables: mermaidThemeVariables(),
   });
   const nodes = Array.from(container.querySelectorAll<HTMLElement>(".mermaid"));
 
@@ -138,7 +199,9 @@ function extractAsciinemaRecordingId(rawUrl: string): string | null {
     return null;
   }
 
-  return parsedUrl.pathname.match(ASCIINEMA_RECORDING_PATH_PATTERN)?.[1] ?? null;
+  return (
+    parsedUrl.pathname.match(ASCIINEMA_RECORDING_PATH_PATTERN)?.[1] ?? null
+  );
 }
 
 function isAsciinemaPosterImage(
