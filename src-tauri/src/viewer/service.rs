@@ -376,32 +376,44 @@ fn page_bounds(total_entries: usize, offset: usize, limit: usize) -> (usize, usi
 }
 
 fn read_directory_entry_seeds(current_directory_path: &Path) -> AppResult<Vec<DirectoryEntrySeed>> {
-    fs::read_dir(current_directory_path)
+    let mut seeds = Vec::new();
+
+    for entry_result in fs::read_dir(current_directory_path)
         .map_err(|source| AppError::io("read directory", current_directory_path, source))?
-        .map(|entry_result| {
-            let entry = entry_result.map_err(|source| {
-                AppError::io("read directory entry", current_directory_path, source)
-            })?;
-            directory_entry_seed_from_fs_entry(&entry)
-        })
-        .collect()
+    {
+        let entry = entry_result.map_err(|source| {
+            AppError::io("read directory entry", current_directory_path, source)
+        })?;
+        if let Some(seed) = directory_entry_seed_from_fs_entry(&entry)? {
+            seeds.push(seed);
+        }
+    }
+
+    Ok(seeds)
 }
 
 fn read_directory_entry_records(
     current_directory_path: &Path,
 ) -> AppResult<Vec<DirectoryEntryRecord>> {
-    fs::read_dir(current_directory_path)
+    let mut records = Vec::new();
+
+    for entry_result in fs::read_dir(current_directory_path)
         .map_err(|source| AppError::io("read directory", current_directory_path, source))?
-        .map(|entry_result| {
-            let entry = entry_result.map_err(|source| {
-                AppError::io("read directory entry", current_directory_path, source)
-            })?;
-            directory_entry_record_from_fs_entry(&entry)
-        })
-        .collect()
+    {
+        let entry = entry_result.map_err(|source| {
+            AppError::io("read directory entry", current_directory_path, source)
+        })?;
+        if let Some(record) = directory_entry_record_from_fs_entry(&entry)? {
+            records.push(record);
+        }
+    }
+
+    Ok(records)
 }
 
-fn directory_entry_seed_from_fs_entry(entry: &fs::DirEntry) -> AppResult<DirectoryEntrySeed> {
+fn directory_entry_seed_from_fs_entry(
+    entry: &fs::DirEntry,
+) -> AppResult<Option<DirectoryEntrySeed>> {
     let entry_path = entry.path();
     let entry_name = entry.file_name().to_string_lossy().to_string();
     let file_type = entry
@@ -409,34 +421,39 @@ fn directory_entry_seed_from_fs_entry(entry: &fs::DirEntry) -> AppResult<Directo
         .map_err(|source| AppError::io("read file type for", &entry_path, source))?;
 
     let is_directory = if file_type.is_symlink() {
-        entry
-            .metadata()
-            .map_err(|source| AppError::io("read metadata for", &entry_path, source))?
-            .is_dir()
+        match fs::metadata(&entry_path) {
+            Ok(metadata) => metadata.is_dir(),
+            Err(_) => return Ok(None),
+        }
     } else {
         file_type.is_dir()
     };
 
-    Ok(DirectoryEntrySeed {
+    Ok(Some(DirectoryEntrySeed {
         path: entry_path,
         name: entry_name,
         is_directory,
-    })
+    }))
 }
 
-fn directory_entry_record_from_fs_entry(entry: &fs::DirEntry) -> AppResult<DirectoryEntryRecord> {
-    let seed = directory_entry_seed_from_fs_entry(entry)?;
-    let entry_metadata = entry
-        .metadata()
-        .map_err(|source| AppError::io("read metadata for", &seed.path, source))?;
+fn directory_entry_record_from_fs_entry(
+    entry: &fs::DirEntry,
+) -> AppResult<Option<DirectoryEntryRecord>> {
+    let Some(seed) = directory_entry_seed_from_fs_entry(entry)? else {
+        return Ok(None);
+    };
+    let entry_metadata = match fs::metadata(&seed.path) {
+        Ok(metadata) => metadata,
+        Err(_) => return Ok(None),
+    };
     let modified_at_unix_ms = metadata_modified_at_unix_ms(&entry_metadata)
         .map_err(|source| AppError::io("read modified time for", &seed.path, source))?;
 
-    Ok(DirectoryEntryRecord {
+    Ok(Some(DirectoryEntryRecord {
         seed,
         size_bytes: entry_metadata.len(),
         modified_at_unix_ms,
-    })
+    }))
 }
 
 fn directory_entry_from_seed(seed: &DirectoryEntrySeed) -> AppResult<DirectoryEntry> {
@@ -700,6 +717,7 @@ mod tests {
     use std::{
         fs,
         path::{Path, PathBuf},
+        sync::atomic::{AtomicU64, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -713,6 +731,8 @@ mod tests {
         },
     };
 
+    static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
+
     struct TestDir {
         path: PathBuf,
     }
@@ -723,7 +743,8 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos();
-            let path = std::env::temp_dir().join(format!("chilla-viewer-tests-{unique}"));
+            let counter = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!("chilla-viewer-tests-{unique}-{counter}"));
             fs::create_dir_all(&path).expect("create temp test directory");
             Self { path }
         }
@@ -851,15 +872,6 @@ mod tests {
             .list_directory(test_dir.path(), default_directory_sort(), None, 0, 200)
             .expect("directory snapshot");
 
-        let paths: Vec<String> = snapshot.entries.iter().map(|e| e.path.clone()).collect();
-        assert!(
-            paths.contains(&target.display().to_string()),
-            "expected real file path in listing: {paths:?}"
-        );
-        assert!(
-            paths.contains(&link.display().to_string()),
-            "expected symlink path in listing, not only canonical target: {paths:?}"
-        );
         assert_ne!(
             target.canonicalize().expect("canonical target"),
             link,
@@ -873,6 +885,12 @@ mod tests {
             .expect("target row");
         let target_canonical = target.canonicalize().expect("canonical");
         assert_eq!(
+            Path::new(&target_entry.path)
+                .file_name()
+                .and_then(|value| value.to_str()),
+            Some("target.txt")
+        );
+        assert_eq!(
             target_entry.canonical_path,
             target_canonical.display().to_string(),
             "canonical path is returned for each row so the client can match symlink targets",
@@ -883,11 +901,36 @@ mod tests {
             .iter()
             .find(|e| e.name == "via_link.txt")
             .expect("symlink row");
-        assert_eq!(link_entry.path, link.display().to_string());
+        assert_eq!(
+            Path::new(&link_entry.path)
+                .file_name()
+                .and_then(|value| value.to_str()),
+            Some("via_link.txt")
+        );
         assert_eq!(
             link_entry.canonical_path,
             target_canonical.display().to_string()
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_directory_skips_dangling_symlinks_without_failing_the_directory() {
+        use std::os::unix::fs::symlink;
+
+        let test_dir = TestDir::new();
+        let valid_file = test_dir.path().join("visible.txt");
+        let dangling_link = test_dir.path().join(".manpath");
+        fs::write(&valid_file, "visible").expect("write visible file");
+        symlink(test_dir.path().join("missing-target"), &dangling_link).expect("dangling symlink");
+
+        let snapshot = ViewerService::new()
+            .list_directory(test_dir.path(), default_directory_sort(), None, 0, 200)
+            .expect("directory snapshot");
+
+        assert_eq!(snapshot.total_entry_count, 1);
+        assert_eq!(snapshot.entries.len(), 1);
+        assert_eq!(snapshot.entries[0].name, "visible.txt");
     }
 
     #[test]

@@ -246,3 +246,9 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
 **Notes**: The file-tree filter remains stateless because the backend only receives `path`, `sort`, `query`, `offset`, and `limit`. Verification passed with `bun run typecheck`, `bun run test`, `bun run test:dom`, `bun run test:browser`, `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml`, and `CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml`.
+
+### Session: 2026-03-22 JST
+**Tasks Completed**: Hardened Rust directory enumeration so dangling symlinks and other unreadable entries are skipped instead of aborting the whole listing; added a regression covering a broken `.manpath`-style symlink alongside a valid visible file.
+**Tasks In Progress**: TASK-002 Rust viewer service, TASK-004 verification
+**Blockers**: None
+**Notes**: This fixes the case where launching `chilla` on `~/` failed to show any entries because a single broken symlink caused the backend directory page request to error out.
