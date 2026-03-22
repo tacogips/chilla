@@ -2,6 +2,14 @@ import { describe, expect, it } from "bun:test";
 import { __browserMock } from "./document";
 
 describe("browser mock document adapter", () => {
+  it("returns highlighted markdown source HTML for mock documents", () => {
+    const snapshot = __browserMock.openDocument("/mock/workspace/README.md");
+
+    expect(snapshot.source_html).toContain("<pre");
+    expect(snapshot.source_html).toContain("<code>");
+    expect(snapshot.source_html).toContain("This document is served by the browser mock adapter.");
+  });
+
   it("returns paged root directory data", () => {
     const firstPage = __browserMock.listDirectory(
       "/mock/workspace",

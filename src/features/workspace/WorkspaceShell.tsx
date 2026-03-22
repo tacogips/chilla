@@ -1415,9 +1415,10 @@ export function WorkspaceShell() {
                 </header>
                 <div class="pane__body markdown-raw-body">
                   <div class="markdown-raw-body__content">
-                    <pre class="markdown-source">
-                      <code>{md()?.source_text ?? ""}</code>
-                    </pre>
+                    <div
+                      class="markdown-source"
+                      innerHTML={md()?.source_html ?? ""}
+                    />
                   </div>
                 </div>
               </section>

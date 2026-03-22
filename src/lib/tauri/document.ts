@@ -16,6 +16,7 @@ export interface DocumentSnapshot {
   readonly path: string;
   readonly file_name: string;
   readonly source_text: string;
+  readonly source_html: string;
   readonly html: string;
   readonly headings: readonly HeadingNode[];
   readonly revision_token: RevisionToken;
@@ -396,6 +397,17 @@ function browserMockHeading(title: string): HeadingNode {
   };
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function browserMockSourceHtml(sourceText: string): string {
+  return `<pre class="chilla-fallback"><code>${escapeHtml(sourceText)}</code></pre>`;
+}
+
 function browserMockOpenDocument(path: string): DocumentSnapshot {
   const segments = path.split("/");
   const fileName = segments[segments.length - 1] ?? "mock.md";
@@ -406,6 +418,7 @@ function browserMockOpenDocument(path: string): DocumentSnapshot {
     path,
     file_name: fileName,
     source_text: sourceText,
+    source_html: browserMockSourceHtml(sourceText),
     html: `<h1 id="${browserMockHeading(title).anchor_id}">${title}</h1><p>This document is served by the browser mock adapter.</p>`,
     headings: [browserMockHeading(title)],
     revision_token: `mock:${path}:1`,
@@ -559,6 +572,7 @@ export async function saveDocument(
     return {
       ...browserMockOpenDocument(path),
       source_text: sourceText,
+      source_html: browserMockSourceHtml(sourceText),
       revision_token: `mock:${path}:saved`,
     };
   }

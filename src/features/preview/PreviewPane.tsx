@@ -314,7 +314,7 @@ export function PreviewPane(props: PreviewPaneProps) {
       <div class="pane__body preview">
         <div
           ref={containerRef}
-          class="preview__content"
+          class="preview__content markdown-body"
           innerHTML={props.html}
         />
       </div>

@@ -121,7 +121,38 @@ fn sanitize_raw_html_event(html: CowStr<'_>) -> Event<'_> {
 }
 
 fn sanitize_allowed_raw_html(raw_html: &str) -> Option<String> {
-    sanitize_raw_img_tag(raw_html)
+    sanitize_raw_paragraph_tag(raw_html).or_else(|| sanitize_raw_img_tag(raw_html))
+}
+
+fn sanitize_raw_paragraph_tag(raw_html: &str) -> Option<String> {
+    let trimmed = raw_html.trim();
+
+    if trimmed.eq("</p>") {
+        return Some("</p>".to_string());
+    }
+
+    if !trimmed.starts_with("<p") || trimmed.starts_with("</") || !trimmed.ends_with('>') {
+        return None;
+    }
+
+    let attr_source = trimmed
+        .strip_prefix("<p")?
+        .strip_suffix('>')?
+        .trim_end_matches('/')
+        .trim();
+
+    if attr_source.is_empty() {
+        return Some("<p>".to_string());
+    }
+
+    let attributes = parse_html_attributes(attr_source);
+    let align = attributes.get("align").map(|value| value.trim())?;
+
+    if !matches!(align, "left" | "center" | "right" | "justify") {
+        return None;
+    }
+
+    Some(format!("<p align=\"{}\">", escape_html_attribute(align)))
 }
 
 fn sanitize_raw_img_tag(raw_html: &str) -> Option<String> {
@@ -153,8 +184,28 @@ fn sanitize_raw_img_tag(raw_html: &str) -> Option<String> {
         html.push_str(&format!(" title=\"{}\"", escape_html_attribute(title)));
     }
 
+    if let Some(width) = attributes
+        .get("width")
+        .map(|value| value.trim())
+        .filter(|value| is_safe_html_dimension(value))
+    {
+        html.push_str(&format!(" width=\"{}\"", escape_html_attribute(width)));
+    }
+
+    if let Some(height) = attributes
+        .get("height")
+        .map(|value| value.trim())
+        .filter(|value| is_safe_html_dimension(value))
+    {
+        html.push_str(&format!(" height=\"{}\"", escape_html_attribute(height)));
+    }
+
     html.push_str(" />");
     Some(html)
+}
+
+fn is_safe_html_dimension(value: &str) -> bool {
+    !value.is_empty() && value.chars().all(|character| character.is_ascii_digit())
 }
 
 fn parse_html_attributes(value: &str) -> BTreeMap<String, String> {
@@ -346,7 +397,7 @@ fn render_html_with_heading_ids(
             Event::Start(Tag::CodeBlock(kind)) => {
                 let lang_token = match kind {
                     CodeBlockKind::Fenced(info) => info
-                        .split(' ')
+                        .split_whitespace()
                         .next()
                         .filter(|chunk| !chunk.is_empty())
                         .map(|chunk| chunk.to_string()),
@@ -755,10 +806,38 @@ mod tests {
     }
 
     #[test]
+    fn highlights_typescript_fences_in_markdown_preview() {
+        let rendered = render_markdown(
+            "```typescript\nconst answer: number = 42;\nconsole.log(answer);\n```",
+            SyntaxUiTheme::Dark,
+        );
+
+        assert!(
+            rendered.html.contains("style=") && rendered.html.contains("<span"),
+            "expected syntax-highlighted HTML for typescript fence, got: {}",
+            rendered.html
+        );
+    }
+
+    #[test]
     fn preserves_safe_raw_html_img_tags() {
         let rendered = render_markdown("<img src=\"etc/msrv-badge.svg\">", SyntaxUiTheme::Dark);
 
         assert!(rendered.html.contains("<img src=\"etc/msrv-badge.svg\" />"));
+    }
+
+    #[test]
+    fn preserves_center_aligned_paragraph_wrapping_image() {
+        let rendered = render_markdown(
+            "<p align=\"center\">\n  <img src=\"usage/resource/qraftbox_log.png\" alt=\"QraftBox\" width=\"400\" />\n</p>",
+            SyntaxUiTheme::Dark,
+        );
+
+        assert!(rendered.html.contains("<p align=\"center\">"));
+        assert!(rendered.html.contains(
+            "<img src=\"usage/resource/qraftbox_log.png\" alt=\"QraftBox\" width=\"400\" />"
+        ));
+        assert!(rendered.html.contains("</p>"));
     }
 
     #[test]
@@ -772,6 +851,19 @@ mod tests {
             .html
             .contains("<img src=\"etc/msrv-badge.svg\" alt=\"MSRV\" />"));
         assert!(!rendered.html.contains("onerror"));
+    }
+
+    #[test]
+    fn strips_unsafe_attributes_from_raw_paragraph_tags() {
+        let rendered = render_markdown(
+            "<p align=\"center\" onclick=\"alert(1)\">\nsafe\n</p>",
+            SyntaxUiTheme::Dark,
+        );
+
+        assert!(rendered.html.contains("<p align=\"center\">"));
+        assert!(rendered.html.contains("safe"));
+        assert!(rendered.html.contains("</p>"));
+        assert!(!rendered.html.contains("onclick"));
     }
 
     #[test]

@@ -954,6 +954,12 @@ mod tests {
             FilePreview::Markdown { snapshot, .. } => {
                 assert_eq!(snapshot.file_name, "guide.md");
                 assert!(snapshot.html.contains("<h1 id=\"heading\">Heading</h1>"));
+                assert!(
+                    snapshot.source_html.contains("style=")
+                        && snapshot.source_html.contains("<span"),
+                    "expected syntect-highlighted markdown source HTML, got: {}",
+                    snapshot.source_html
+                );
             }
             _ => panic!("expected markdown preview"),
         }
