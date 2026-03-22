@@ -586,6 +586,22 @@ button {
   line-height: 1.5;
 }
 
+/* Keep github-markdown-css aligned with the app theme instead of WebKit's
+   prefers-color-scheme result in packaged builds. */
+.preview__content.markdown-body {
+  color-scheme: inherit;
+  color: var(--markdown-fg);
+  background: transparent;
+  --fgColor-accent: var(--preview-link);
+  --fgColor-default: var(--markdown-fg);
+  --fgColor-muted: var(--markdown-muted);
+  --bgColor-default: var(--markdown-surface);
+  --bgColor-muted: var(--markdown-pre-bg);
+  --bgColor-neutral-muted: var(--markdown-inline-code-bg);
+  --borderColor-default: var(--markdown-border);
+  --borderColor-muted: var(--markdown-border);
+}
+
 .preview a {
   color: var(--preview-link);
   text-decoration: none;
