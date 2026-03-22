@@ -130,35 +130,40 @@
           ]
           ++ lib.optionals pkgs.stdenv.isLinux linuxGuiLibraries
           ++ lib.optionals pkgs.stdenv.isDarwin [
+            darwin.apple_sdk.frameworks.AppKit
+            darwin.apple_sdk.frameworks.Cocoa
+            darwin.apple_sdk.frameworks.CoreFoundation
+            darwin.apple_sdk.frameworks.CoreServices
+            darwin.apple_sdk.frameworks.Foundation
             darwin.apple_sdk.frameworks.Security
             darwin.apple_sdk.frameworks.SystemConfiguration
+            darwin.apple_sdk.frameworks.WebKit
           ];
+
+          frontendBunDeps = bun2nixPackage.fetchBunDeps {
+            bunNix = ./bun.nix;
+          };
 
           frontendDist = pkgs.stdenvNoCC.mkDerivation {
             pname = "chilla-frontend";
             version = "0.1.0";
             src = cleanedSource;
-            dontRunLifecycleScripts = true;
-            dontUseBunPatch = true;
 
             nativeBuildInputs = [
               bun
-              bun2nixPackage.hook
             ];
-
-            bunDeps = bun2nixPackage.fetchBunDeps {
-              bunNix = ./bun.nix;
-            };
-            bunInstallFlagsArray = [ "--frozen-lockfile" ];
 
             patchPhase = ''
               runHook prePatch
               export HOME=$(mktemp -d)
+              export BUN_INSTALL_CACHE_DIR=$(mktemp -d)
+              cp -RL ${frontendBunDeps}/share/bun-cache/. "$BUN_INSTALL_CACHE_DIR"
               runHook postPatch
             '';
 
             buildPhase = ''
               runHook preBuild
+              bun install --frozen-lockfile --backend=copyfile --ignore-scripts
               bun run build
               runHook postBuild
             '';
@@ -196,6 +201,18 @@
               makeWrapper
               pkg-config
             ];
+            preBuild = ''
+              # Tauri caches build-script outputs with absolute OUT_DIR paths.
+              # When crane reuses cargoArtifacts across derivations, those paths
+              # point at the previous sandbox and break permission generation.
+              rm -rf target/release/build/tauri-*
+              rm -rf target/release/build/tauri-build-*
+              rm -rf target/release/build/tauri-plugin-*
+              rm -rf target/release/build/tauri-runtime-*
+              rm -rf target/release/build/tauri-runtime-wry-*
+              rm -rf target/release/build/tauri-utils-*
+              rm -rf target/release/build/chilla-*
+            '';
 
             postFixup = lib.optionalString pkgs.stdenv.isLinux ''
               wrapProgram $out/bin/chilla \
