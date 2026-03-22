@@ -9,7 +9,7 @@ use crate::{
     document::types::DocumentSnapshot,
     error::{AppError, AppResult},
     markdown::render_markdown,
-    syntax_highlight::SyntaxUiTheme,
+    syntax_highlight::{self, SyntaxUiTheme},
 };
 
 const SUPPORTED_EXTENSIONS: [&str; 3] = ["md", "markdown", "mdown"];
@@ -27,6 +27,8 @@ impl DocumentService {
         let source_text = fs::read_to_string(&canonical_path)
             .map_err(|source| AppError::io("read", &canonical_path, source))?;
         let rendered_document = render_markdown(&source_text, ui_theme);
+        let source_html =
+            syntax_highlight::highlight_file_source(&source_text, &canonical_path, ui_theme);
         let metadata = fs::metadata(&canonical_path)
             .map_err(|source| AppError::io("read metadata for", &canonical_path, source))?;
         let modified_time = metadata
@@ -49,6 +51,7 @@ impl DocumentService {
                 .map(|file_name| file_name.to_string_lossy().to_string())
                 .unwrap_or_else(|| "document.md".to_string()),
             source_text,
+            source_html,
             html: rendered_document.html,
             headings: rendered_document.headings,
             revision_token,

@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::document::types::DocumentSnapshot;
 
@@ -16,17 +16,52 @@ pub struct StartupContext {
     pub selected_file_path: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DirectorySortField {
+    Name,
+    Mtime,
+    Size,
+    Extension,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DirectorySortDirection {
+    Asc,
+    Desc,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DirectoryListSort {
+    pub field: DirectorySortField,
+    pub direction: DirectorySortDirection,
+}
+
+impl Default for DirectoryListSort {
+    fn default() -> Self {
+        Self {
+            field: DirectorySortField::Name,
+            direction: DirectorySortDirection::Asc,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
-pub struct DirectorySnapshot {
+pub struct DirectoryPage {
     pub current_directory_path: String,
     pub parent_directory_path: Option<String>,
     pub entries: Vec<DirectoryEntry>,
-    pub selected_path: Option<String>,
+    pub total_entry_count: usize,
+    pub offset: usize,
+    pub limit: usize,
+    pub has_more: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct DirectoryEntry {
     pub path: String,
+    pub canonical_path: String,
     pub name: String,
     pub is_directory: bool,
     pub size_bytes: u64,

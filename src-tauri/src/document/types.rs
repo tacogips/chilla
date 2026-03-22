@@ -7,6 +7,7 @@ pub struct DocumentSnapshot {
     pub path: String,
     pub file_name: String,
     pub source_text: String,
+    pub source_html: String,
     pub html: String,
     pub headings: Vec<HeadingNode>,
     pub revision_token: RevisionToken,

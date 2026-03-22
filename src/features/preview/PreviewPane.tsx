@@ -17,9 +17,87 @@ interface PreviewPaneProps {
   readonly colorScheme: ColorScheme;
 }
 
+const ASCIINEMA_HOSTNAME = "asciinema.org";
+const ASCIINEMA_RECORDING_PATH_PATTERN = /^\/a\/([A-Za-z0-9_-]+)\/?$/;
+
 let mermaidModulePromise:
   | Promise<(typeof import("mermaid"))["default"]>
   | undefined;
+
+interface MermaidThemeVariables {
+  readonly background: string;
+  readonly primaryColor: string;
+  readonly primaryTextColor: string;
+  readonly primaryBorderColor: string;
+  readonly secondaryColor: string;
+  readonly secondaryTextColor: string;
+  readonly secondaryBorderColor: string;
+  readonly tertiaryColor: string;
+  readonly tertiaryTextColor: string;
+  readonly tertiaryBorderColor: string;
+  readonly noteBkgColor: string;
+  readonly noteTextColor: string;
+  readonly noteBorderColor: string;
+  readonly lineColor: string;
+  readonly textColor: string;
+  readonly mainBkg: string;
+  readonly nodeBkg: string;
+  readonly nodeBorder: string;
+  readonly clusterBkg: string;
+  readonly clusterBorder: string;
+  readonly defaultLinkColor: string;
+  readonly titleColor: string;
+  readonly edgeLabelBackground: string;
+  readonly nodeTextColor: string;
+}
+
+function readCssVariable(name: string): string {
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+
+  if (value === "") {
+    throw new Error(`Missing CSS custom property: ${name}`);
+  }
+
+  return value;
+}
+
+export function mermaidThemeVariables(): MermaidThemeVariables {
+  const surface = readCssVariable("--markdown-surface");
+  const preBackground = readCssVariable("--markdown-pre-bg");
+  const foreground = readCssVariable("--markdown-fg");
+  const heading = readCssVariable("--markdown-heading");
+  const muted = readCssVariable("--markdown-muted");
+  const border = readCssVariable("--markdown-border");
+
+  return {
+    background: surface,
+    primaryColor: preBackground,
+    primaryTextColor: foreground,
+    primaryBorderColor: border,
+    secondaryColor: preBackground,
+    secondaryTextColor: foreground,
+    secondaryBorderColor: border,
+    tertiaryColor: preBackground,
+    tertiaryTextColor: foreground,
+    tertiaryBorderColor: border,
+    noteBkgColor: preBackground,
+    noteTextColor: foreground,
+    noteBorderColor: border,
+    lineColor: border,
+    textColor: foreground,
+    mainBkg: preBackground,
+    nodeBkg: preBackground,
+    nodeBorder: border,
+    clusterBkg: preBackground,
+    clusterBorder: border,
+    defaultLinkColor: muted,
+    titleColor: heading,
+    edgeLabelBackground: surface,
+    nodeTextColor: foreground,
+  };
+}
 
 async function getMermaid() {
   mermaidModulePromise ??= import("mermaid").then(({ default: mermaid }) => {
@@ -27,10 +105,6 @@ async function getMermaid() {
   });
 
   return mermaidModulePromise;
-}
-
-function mermaidTheme(colorScheme: ColorScheme): "dark" | "neutral" {
-  return colorScheme === "dark" ? "dark" : "neutral";
 }
 
 async function enhanceMermaid(
@@ -59,10 +133,15 @@ async function enhanceMermaid(
   }
 
   const mermaid = await getMermaid();
+  // TODO: Mermaid theme/style overrides are still not fully taking effect here.
+  // Revisit the preview rendering approach once we confirm which Mermaid config
+  // keys are honored by `run()` in this embedded rendering path.
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: "strict",
-    theme: mermaidTheme(colorScheme),
+    darkMode: colorScheme === "dark",
+    theme: "base",
+    themeVariables: mermaidThemeVariables(),
   });
   const nodes = Array.from(container.querySelectorAll<HTMLElement>(".mermaid"));
 
@@ -107,6 +186,107 @@ async function enhancePreviewMedia(
   }
 }
 
+function extractAsciinemaRecordingId(rawUrl: string): string | null {
+  let parsedUrl: URL;
+
+  try {
+    parsedUrl = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+
+  if (
+    parsedUrl.protocol !== "https:" ||
+    parsedUrl.hostname !== ASCIINEMA_HOSTNAME
+  ) {
+    return null;
+  }
+
+  return (
+    parsedUrl.pathname.match(ASCIINEMA_RECORDING_PATH_PATTERN)?.[1] ?? null
+  );
+}
+
+function isAsciinemaPosterImage(
+  image: HTMLImageElement,
+  recordingId: string,
+): boolean {
+  const source = image.getAttribute("src");
+
+  if (source === null) {
+    return false;
+  }
+
+  let parsedUrl: URL;
+
+  try {
+    parsedUrl = new URL(source);
+  } catch {
+    return false;
+  }
+
+  return (
+    parsedUrl.protocol === "https:" &&
+    parsedUrl.hostname === ASCIINEMA_HOSTNAME &&
+    parsedUrl.pathname === `/a/${recordingId}.svg`
+  );
+}
+
+function enhanceAsciinemaEmbeds(container: HTMLElement): void {
+  const links = Array.from(
+    container.querySelectorAll<HTMLAnchorElement>("a[href]"),
+  );
+
+  for (const link of links) {
+    const href = link.getAttribute("href");
+
+    if (href === null) {
+      continue;
+    }
+
+    const recordingId = extractAsciinemaRecordingId(href);
+
+    if (recordingId === null) {
+      continue;
+    }
+
+    const posterImage = link.querySelector<HTMLImageElement>("img[src]");
+
+    if (
+      posterImage === null ||
+      !isAsciinemaPosterImage(posterImage, recordingId)
+    ) {
+      continue;
+    }
+
+    const figure = document.createElement("figure");
+    figure.className = "preview-media preview-media--asciinema";
+
+    const embedContainer = document.createElement("div");
+    embedContainer.className = "preview-asciinema";
+    embedContainer.dataset["asciinemaId"] = recordingId;
+
+    const script = document.createElement("script");
+    script.async = true;
+    script.id = `asciicast-${recordingId}`;
+    script.src = `https://asciinema.org/a/${recordingId}.js`;
+    embedContainer.append(script);
+
+    const caption = document.createElement("figcaption");
+    caption.className = "preview-asciinema__fallback";
+
+    const fallbackLink = document.createElement("a");
+    fallbackLink.href = href;
+    fallbackLink.rel = "noopener noreferrer";
+    fallbackLink.target = "_blank";
+    fallbackLink.textContent = "Open recording in browser";
+    caption.append(fallbackLink);
+
+    figure.append(embedContainer, caption);
+    link.replaceWith(figure);
+  }
+}
+
 async function enhancePreviewContent(
   container: HTMLElement,
   documentPath: string | null,
@@ -123,6 +303,7 @@ async function enhancePreviewContent(
     }
   }
 
+  enhanceAsciinemaEmbeds(container);
   await enhancePreviewMedia(container, documentPath);
   await enhanceMermaid(container, colorScheme);
 }
@@ -211,7 +392,7 @@ export function PreviewPane(props: PreviewPaneProps) {
       <div class="pane__body preview">
         <div
           ref={containerRef}
-          class="preview__content"
+          class="preview__content markdown-body"
           innerHTML={props.html}
         />
       </div>

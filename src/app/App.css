@@ -41,6 +41,15 @@
   --banner-error-fg: #fecaca;
   --folder-icon: #fb923c;
   --folder-name: #fdba74;
+  --markdown-surface: #0d1117;
+  --markdown-fg: #c9d1d9;
+  --markdown-heading: #f0f6fc;
+  --markdown-muted: #8b949e;
+  --markdown-border: #30363d;
+  --markdown-inline-code-bg: rgb(110 118 129 / 0.4);
+  --markdown-pre-bg: #161b22;
+  --markdown-table-stripe: rgb(110 118 129 / 0.1);
+  --markdown-blockquote-border: #3b434b;
 }
 
 [data-theme="light"] {
@@ -74,6 +83,15 @@
   --banner-error-fg: #991b1b;
   --folder-icon: #ea580c;
   --folder-name: #9a3412;
+  --markdown-surface: #ffffff;
+  --markdown-fg: #1f2328;
+  --markdown-heading: #1f2328;
+  --markdown-muted: #59636e;
+  --markdown-border: #d0d7de;
+  --markdown-inline-code-bg: rgb(175 184 193 / 0.2);
+  --markdown-pre-bg: #f6f8fa;
+  --markdown-table-stripe: #f6f8fa;
+  --markdown-blockquote-border: #d0d7de;
   /* File-view preview column: pure white so syntax blocks match InspiredGitHub / white pre backgrounds */
   --file-preview-surface: #ffffff;
 }
@@ -412,6 +430,7 @@ button {
   margin: 0;
   padding: var(--preview-content-block-padding)
     var(--preview-content-inline-padding);
+  background: var(--markdown-surface);
 }
 
 .markdown-raw-body__content,
@@ -421,16 +440,20 @@ button {
 
 .markdown-source {
   margin: 0;
+  color: var(--markdown-fg);
+}
+
+.markdown-source pre {
+  margin: 0;
+  border: 1px solid var(--markdown-border);
+  border-radius: 6px;
+  background: var(--markdown-pre-bg);
+}
+
+.markdown-source code {
   font-family: var(--font-mono);
   font-size: 0.86rem;
   line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--text-muted);
-}
-
-.workspace__markdown-raw-pane .markdown-source {
-  color: var(--text-muted);
 }
 
 /* Light mode: main document column uses a white surface for preview / raw. */
@@ -556,10 +579,27 @@ button {
 
 .preview {
   margin: 0;
-  padding: var(--preview-content-block-padding)
-    var(--preview-content-inline-padding);
-  color: var(--text-muted);
-  line-height: 1.65;
+  padding: 16px;
+  background: var(--markdown-surface);
+  color: var(--markdown-fg);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* Keep github-markdown-css aligned with the app theme instead of WebKit's
+   prefers-color-scheme result in packaged builds. */
+.preview__content.markdown-body {
+  color-scheme: inherit;
+  color: var(--markdown-fg);
+  background: transparent;
+  --fgColor-accent: var(--preview-link);
+  --fgColor-default: var(--markdown-fg);
+  --fgColor-muted: var(--markdown-muted);
+  --bgColor-default: var(--markdown-surface);
+  --bgColor-muted: var(--markdown-pre-bg);
+  --bgColor-neutral-muted: var(--markdown-inline-code-bg);
+  --borderColor-default: var(--markdown-border);
+  --borderColor-muted: var(--markdown-border);
 }
 
 .preview a {
@@ -573,7 +613,9 @@ button {
 }
 
 .preview img,
-.preview video {
+.preview video,
+.preview iframe,
+.preview embed {
   max-width: 100%;
   border-radius: var(--radius-sm);
 }
@@ -581,6 +623,32 @@ button {
 .preview video {
   width: 100%;
   background: #000;
+}
+
+.preview iframe,
+.preview embed {
+  width: 100%;
+  border: 0;
+}
+
+.preview-media--asciinema {
+  margin: 0.8rem 0;
+}
+
+.preview-asciinema {
+  min-height: 23rem;
+}
+
+.preview-asciinema iframe {
+  min-height: 23rem;
+  aspect-ratio: 16 / 10;
+  background: #000;
+}
+
+.preview-asciinema__fallback {
+  margin-top: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--text-subtle);
 }
 
 /* File-view PDF / video: fill the document pane below the header. */
@@ -716,48 +784,137 @@ button {
 .preview h4,
 .preview h5,
 .preview h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
   scroll-margin-top: 0.5rem;
-  color: var(--text);
+  color: var(--markdown-heading);
   font-weight: 600;
+  line-height: 1.25;
+}
+
+.preview h1,
+.preview h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--markdown-border);
+}
+
+.preview h1 {
+  font-size: 2em;
+}
+
+.preview h2 {
+  font-size: 1.5em;
+}
+
+.preview h3 {
+  font-size: 1.25em;
+}
+
+.preview h4 {
+  font-size: 1em;
+}
+
+.preview > :first-child {
+  margin-top: 0;
 }
 
 .preview p {
-  color: var(--text-muted);
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: var(--markdown-fg);
+}
+
+.preview ul,
+.preview ol {
+  margin-top: 0;
+  margin-bottom: 16px;
+  padding-left: 2em;
+}
+
+.preview li + li {
+  margin-top: 0.25em;
+}
+
+.preview li > p {
+  margin-top: 16px;
+}
+
+.preview hr {
+  height: 0.25em;
+  margin: 24px 0;
+  padding: 0;
+  border: 0;
+  background: var(--markdown-border);
 }
 
 .preview pre {
   overflow: auto;
-  margin: 0.4rem 0;
-  padding: 0.45rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-app);
+  margin-top: 0;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--markdown-border);
+  border-radius: 6px;
+  background: var(--markdown-pre-bg);
 }
 
 .preview code {
   font-family: var(--font-mono);
   font-size: 0.88em;
   color: var(--preview-code-fg);
+  padding: 0.2em 0.4em;
+  border-radius: 6px;
+  background: var(--markdown-inline-code-bg);
 }
 
 .preview pre code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--preview-pre-code-fg);
 }
 
 .preview blockquote {
-  margin: 0.4rem 0;
-  padding-left: 0.65rem;
-  border-left: 3px solid var(--accent);
-  color: var(--text-subtle);
+  margin: 0 0 16px;
+  padding: 0 1em;
+  border-left: 0.25em solid var(--markdown-blockquote-border);
+  color: var(--markdown-muted);
 }
 
 .preview .mermaid {
   overflow-x: auto;
-  margin: 0.4rem 0;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-app);
-  padding: 0.45rem;
+  margin: 0 0 16px;
+  border-radius: 6px;
+  border: 1px solid var(--markdown-border);
+  background: var(--markdown-surface);
+  padding: 16px;
+}
+
+.preview table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin-bottom: 16px;
+  overflow: auto;
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+
+.preview table th,
+.preview table td {
+  padding: 6px 13px;
+  border: 1px solid var(--markdown-border);
+}
+
+.preview table tr {
+  background: var(--markdown-surface);
+}
+
+.preview table tr:nth-child(2n) {
+  background: var(--markdown-table-stripe);
+}
+
+.preview table th {
+  font-weight: 600;
 }
 
 .file-browser {
@@ -926,6 +1083,13 @@ button {
   line-height: 1.35;
   word-break: break-all;
   pointer-events: none;
+}
+
+.file-browser__status {
+  margin: 0;
+  padding: 0.38rem 0.4rem 0.5rem;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
 }
 
 .file-preview {

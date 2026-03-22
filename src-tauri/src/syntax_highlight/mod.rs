@@ -78,10 +78,20 @@ fn resolve_syntax<'a>(
         return ss.find_syntax_plain_text();
     };
 
-    let lower = raw.to_ascii_lowercase();
+    let lower = canonical_lang_token(raw);
     ss.find_syntax_by_extension(&lower)
         .or_else(|| ss.find_syntax_by_token(&lower))
         .unwrap_or_else(|| ss.find_syntax_plain_text())
+}
+
+fn canonical_lang_token(raw: &str) -> String {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        // syntect's default bundle lacks dedicated TypeScript grammars, so use JavaScript.
+        "ts" | "typescript" | "tsx" | "jsx" => "js".to_string(),
+        "shell" | "shellscript" | "console" => "sh".to_string(),
+        "md" => "markdown".to_string(),
+        other => other.to_string(),
+    }
 }
 
 fn escaped_fallback(source: &str) -> String {
@@ -119,7 +129,11 @@ pub fn highlight_markdown_fence(
 
 #[cfg(test)]
 mod tests {
-    use super::syntax_set;
+    use std::path::Path;
+
+    use crate::syntax_highlight::SyntaxUiTheme;
+
+    use super::{highlight_file_source, highlight_markdown_fence, syntax_set};
 
     #[test]
     fn default_syntax_set_includes_toml_and_json() {
@@ -131,6 +145,35 @@ mod tests {
         assert!(
             ss.find_syntax_by_extension("json").is_some(),
             "expected JSON grammar",
+        );
+    }
+
+    #[test]
+    fn highlights_markdown_files_with_markdown_syntax() {
+        let html = highlight_file_source(
+            "# Title\n\n- item\n",
+            Path::new("README.md"),
+            SyntaxUiTheme::Dark,
+        );
+
+        assert!(html.contains("<pre"));
+        assert!(
+            html.contains("style=") && html.contains("<span"),
+            "expected syntect-highlighted markdown HTML, got: {html}"
+        );
+    }
+
+    #[test]
+    fn highlights_typescript_fences_via_javascript_alias() {
+        let html = highlight_markdown_fence(
+            "const message: string = \"hello\";\nconsole.log(message);\n",
+            Some("typescript"),
+            SyntaxUiTheme::Dark,
+        );
+
+        assert!(
+            html.contains("style=") && html.contains("<span"),
+            "expected syntax-highlighted HTML for typescript fence, got: {html}"
         );
     }
 }

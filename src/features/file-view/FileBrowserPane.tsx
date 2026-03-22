@@ -13,15 +13,10 @@ import { Portal } from "solid-js/web";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import type {
   DirectoryEntry,
-  DirectorySnapshot,
+  DirectoryListSort,
 } from "../../lib/tauri/document";
 import { middleEllipsisForWidth } from "./middleEllipsis";
-import {
-  DEFAULT_FILE_TREE_SORT,
-  describeFileTreeSort,
-  sortDirectoryEntries,
-  type FileTreeSortState,
-} from "./sort";
+import { DEFAULT_FILE_TREE_SORT, describeFileTreeSort } from "./sort";
 
 function FolderGlyph() {
   return (
@@ -67,8 +62,20 @@ export interface FileBrowserSelectOptions {
 
 interface FileBrowserPaneProps {
   readonly active: boolean;
-  readonly directory: DirectorySnapshot | null;
+  readonly directory: {
+    readonly current_directory_path: string;
+    readonly parent_directory_path: string | null;
+    readonly entries: readonly DirectoryEntry[];
+    readonly total_entry_count: number;
+  } | null;
+  readonly sort: DirectoryListSort;
+  readonly query: string;
   readonly selectedPath: string | null;
+  readonly canLoadMore: boolean;
+  readonly isLoadingMore: boolean;
+  readonly onChangeQuery: (nextQuery: string) => void;
+  readonly onChangeSort: (nextSort: DirectoryListSort) => void;
+  readonly onLoadMore: () => void;
   readonly onSelectEntry: (
     entry: DirectoryEntry,
     options?: FileBrowserSelectOptions,
@@ -193,12 +200,9 @@ function focusListButtonForPath(
 }
 
 export function FileBrowserPane(props: FileBrowserPaneProps) {
+  let bodyEl: HTMLDivElement | undefined;
   let listEl: HTMLUListElement | undefined;
   const filterInputId = createUniqueId();
-  const [filterText, setFilterText] = createSignal("");
-  const [sortState, setSortState] = createSignal<FileTreeSortState>(
-    DEFAULT_FILE_TREE_SORT,
-  );
   const [nameTooltip, setNameTooltip] = createSignal<NameTooltipState | null>(
     null,
   );
@@ -208,6 +212,12 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
 
   const blurFilterInput = (): void => {
     filterInputFromDom()?.blur();
+  };
+
+  const isFilterInputFocused = (): boolean => {
+    const filterInput = filterInputFromDom();
+
+    return filterInput !== null && document.activeElement === filterInput;
   };
 
   const resolveFileBrowserListEl = (): HTMLUListElement | undefined => {
@@ -220,40 +230,37 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
     );
   };
 
-  const filteredEntries = createMemo(() => {
-    const entries = props.directory?.entries ?? [];
+  const filteredEntries = createMemo(() => props.directory?.entries ?? []);
 
-    const q = filterText().trim().toLowerCase();
-    const sorted = sortDirectoryEntries(entries, sortState());
-
-    if (q === "") {
-      return sorted;
-    }
-
-    return sorted.filter((entry) => entry.name.toLowerCase().includes(q));
-  });
-
-  const totalEntryCount = createMemo(
+  const loadedEntryCount = createMemo(
     () => props.directory?.entries.length ?? 0,
+  );
+  const totalEntryCount = createMemo(
+    () => props.directory?.total_entry_count ?? 0,
   );
 
   const filterSummary = createMemo(() => {
+    const loaded = loadedEntryCount();
     const total = totalEntryCount();
     const shown = filteredEntries().length;
-    const trimmed = filterText().trim();
+    const trimmed = props.query.trim();
 
     if (total === 0) {
       return "0 entries";
     }
 
     if (trimmed === "") {
-      return `${total} ${total === 1 ? "entry" : "entries"}`;
+      if (loaded === total) {
+        return `${total} ${total === 1 ? "entry" : "entries"}`;
+      }
+
+      return `${loaded} of ${total} loaded`;
     }
 
-    return `${shown} of ${total} ${total === 1 ? "entry" : "entries"}`;
+    return `${shown} of ${loaded} loaded (${total} total)`;
   });
 
-  const sortSummary = createMemo(() => describeFileTreeSort(sortState()));
+  const sortSummary = createMemo(() => describeFileTreeSort(props.sort));
 
   const isFileBrowserShortcutTarget = (target: EventTarget | null): boolean => {
     return (
@@ -263,15 +270,28 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
 
   const applySort = (
     event: KeyboardEvent,
-    nextSort: FileTreeSortState,
+    nextSort: DirectoryListSort,
   ): boolean => {
     if (!isFileBrowserShortcutTarget(event.target)) {
       return false;
     }
 
     event.preventDefault();
-    setSortState(nextSort);
+    props.onChangeSort(nextSort);
     return true;
+  };
+
+  const requestMoreEntriesIfNeeded = (): void => {
+    if (!props.canLoadMore || props.isLoadingMore || bodyEl === undefined) {
+      return;
+    }
+
+    const remaining =
+      bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight;
+
+    if (remaining <= 240) {
+      props.onLoadMore();
+    }
   };
 
   const focusFirstListButton = (
@@ -314,12 +334,10 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
     immediatePreview?: boolean,
   ) => {
     if (clearFilter) {
-      setFilterText("");
+      props.onChangeQuery("");
     }
 
-    const entries = clearFilter
-      ? (props.directory?.entries ?? [])
-      : filteredEntries();
+    const entries = props.directory?.entries ?? [];
 
     if (entries.length === 0) {
       blurFilterInput();
@@ -336,27 +354,19 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
 
   createEffect(
     on(
-      () => props.directory?.current_directory_path ?? null,
-      (cwd, previousCwd) => {
-        if (previousCwd !== undefined && cwd !== previousCwd) {
-          setFilterText("");
-        }
-      },
-    ),
-  );
-
-  createEffect(
-    on(
       () =>
         props.active
           ? {
               cwd: props.directory?.current_directory_path ?? null,
               selectedPath: props.selectedPath,
-              filteredCount: filteredEntries().length,
             }
           : null,
       (state) => {
         if (state === null || state.cwd === null) {
+          return;
+        }
+
+        if (isFilterInputFocused()) {
           return;
         }
 
@@ -366,6 +376,24 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
               resolveFileBrowserListEl(),
               state.selectedPath,
             );
+          });
+        });
+      },
+    ),
+  );
+
+  createEffect(
+    on(
+      () => ({
+        loaded: loadedEntryCount(),
+        total: totalEntryCount(),
+        selectedPath: props.selectedPath,
+        query: props.query,
+      }),
+      () => {
+        queueMicrotask(() => {
+          requestAnimationFrame(() => {
+            requestMoreEntriesIfNeeded();
           });
         });
       },
@@ -470,6 +498,9 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
         if (nextEntry !== undefined) {
           event.preventDefault();
           props.onSelectEntry(nextEntry);
+          if (nextIndex >= entries.length - 20) {
+            props.onLoadMore();
+          }
         }
       };
 
@@ -570,7 +601,15 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
           {filterSummary()} | {sortSummary()}
         </span>
       </header>
-      <div class="pane__body file-browser">
+      <div
+        class="pane__body file-browser"
+        ref={(element) => {
+          bodyEl = element ?? undefined;
+        }}
+        onScroll={() => {
+          requestMoreEntriesIfNeeded();
+        }}
+      >
         <div
           class={`file-browser__path${
             props.directory !== null &&
@@ -595,9 +634,9 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
             title="Focus filter: /   First row: Enter or Ctrl+M   Clear filter & first row: Esc   Sort: a/A name, e/E extension, m/M mtime, s/S size"
             autocomplete="off"
             spellcheck={false}
-            value={filterText()}
+            value={props.query}
             onInput={(event) => {
-              setFilterText(event.currentTarget.value);
+              props.onChangeQuery(event.currentTarget.value);
             }}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
@@ -708,6 +747,14 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
                   </li>
                 )}
               </For>
+              <Show when={props.isLoadingMore}>
+                <li class="file-browser__status">Loading more entries...</li>
+              </Show>
+              <Show when={props.canLoadMore && !props.isLoadingMore}>
+                <li class="file-browser__status">
+                  Scroll or move down to load more
+                </li>
+              </Show>
             </ul>
           </Show>
         </Show>

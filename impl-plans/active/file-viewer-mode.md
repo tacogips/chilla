@@ -228,3 +228,21 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
 **Notes**: The play overlay remains keyboard reachable, and the autoplay request id is now consumed once per preview load so repeated reactive updates do not retrigger stale playback requests.
+
+### Session: 2026-03-21 JST
+**Tasks Completed**: Aligned packaged-build behavior with the Tauri custom-protocol requirement used by this repository's Cargo/Nix path; adjusted the global `Y` shortcut to copy the currently selected file-browser path; tightened preview/raw-pane layout with shared inner-width wrappers; updated README to match the shipped shortcut and build behavior.
+**Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: `task nix-build` was reverified after the packaged-build fix. The current implementation now treats the selected browser entry, not only the open document, as the source of truth for copy-path behavior in file view mode.
+
+### Session: 2026-03-22 JST
+**Tasks Completed**: Switched the file-view directory IPC contract to stateless server-side sorting plus paged reads (`path`, `sort`, `offset`, `limit`); capped directory pages at 200 entries; added canonical row paths so the frontend can match startup or parent-navigation selections without server session state; updated the frontend file browser to lazy-load additional pages while preserving keyboard navigation and active selection.
+**Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: Default sorting no longer requires metadata reads for the entire directory before the first render, which improves large-directory behavior such as `/nix/store`. Verification passed with `bun run typecheck`, `bun run test`, `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml`, `CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml`, and `CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`.
+
+### Session: 2026-03-22 JST
+**Tasks Completed**: Restored file-tree filtering to the stateless server contract via a `query` parameter so searches cover not-yet-loaded entries; updated the browser mock, frontend state, and file browser input to use server-filtered pages instead of local filtering; added regressions proving the filter keeps focus while typing and can surface `notes-220.md` without loading all prior pages.
+**Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: The file-tree filter remains stateless because the backend only receives `path`, `sort`, `query`, `offset`, and `limit`. Verification passed with `bun run typecheck`, `bun run test`, `bun run test:dom`, `bun run test:browser`, `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml`, and `CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml`.
