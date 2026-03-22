@@ -17,6 +17,9 @@ interface PreviewPaneProps {
   readonly colorScheme: ColorScheme;
 }
 
+const ASCIINEMA_HOSTNAME = "asciinema.org";
+const ASCIINEMA_RECORDING_PATH_PATTERN = /^\/a\/([A-Za-z0-9_-]+)\/?$/;
+
 let mermaidModulePromise:
   | Promise<(typeof import("mermaid"))["default"]>
   | undefined;
@@ -107,6 +110,105 @@ async function enhancePreviewMedia(
   }
 }
 
+function extractAsciinemaRecordingId(rawUrl: string): string | null {
+  let parsedUrl: URL;
+
+  try {
+    parsedUrl = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+
+  if (
+    parsedUrl.protocol !== "https:" ||
+    parsedUrl.hostname !== ASCIINEMA_HOSTNAME
+  ) {
+    return null;
+  }
+
+  return parsedUrl.pathname.match(ASCIINEMA_RECORDING_PATH_PATTERN)?.[1] ?? null;
+}
+
+function isAsciinemaPosterImage(
+  image: HTMLImageElement,
+  recordingId: string,
+): boolean {
+  const source = image.getAttribute("src");
+
+  if (source === null) {
+    return false;
+  }
+
+  let parsedUrl: URL;
+
+  try {
+    parsedUrl = new URL(source);
+  } catch {
+    return false;
+  }
+
+  return (
+    parsedUrl.protocol === "https:" &&
+    parsedUrl.hostname === ASCIINEMA_HOSTNAME &&
+    parsedUrl.pathname === `/a/${recordingId}.svg`
+  );
+}
+
+function enhanceAsciinemaEmbeds(container: HTMLElement): void {
+  const links = Array.from(
+    container.querySelectorAll<HTMLAnchorElement>("a[href]"),
+  );
+
+  for (const link of links) {
+    const href = link.getAttribute("href");
+
+    if (href === null) {
+      continue;
+    }
+
+    const recordingId = extractAsciinemaRecordingId(href);
+
+    if (recordingId === null) {
+      continue;
+    }
+
+    const posterImage = link.querySelector<HTMLImageElement>("img[src]");
+
+    if (
+      posterImage === null ||
+      !isAsciinemaPosterImage(posterImage, recordingId)
+    ) {
+      continue;
+    }
+
+    const figure = document.createElement("figure");
+    figure.className = "preview-media preview-media--asciinema";
+
+    const embedContainer = document.createElement("div");
+    embedContainer.className = "preview-asciinema";
+    embedContainer.dataset["asciinemaId"] = recordingId;
+
+    const script = document.createElement("script");
+    script.async = true;
+    script.id = `asciicast-${recordingId}`;
+    script.src = `https://asciinema.org/a/${recordingId}.js`;
+    embedContainer.append(script);
+
+    const caption = document.createElement("figcaption");
+    caption.className = "preview-asciinema__fallback";
+
+    const fallbackLink = document.createElement("a");
+    fallbackLink.href = href;
+    fallbackLink.rel = "noopener noreferrer";
+    fallbackLink.target = "_blank";
+    fallbackLink.textContent = "Open recording in browser";
+    caption.append(fallbackLink);
+
+    figure.append(embedContainer, caption);
+    link.replaceWith(figure);
+  }
+}
+
 async function enhancePreviewContent(
   container: HTMLElement,
   documentPath: string | null,
@@ -123,6 +225,7 @@ async function enhancePreviewContent(
     }
   }
 
+  enhanceAsciinemaEmbeds(container);
   await enhancePreviewMedia(container, documentPath);
   await enhanceMermaid(container, colorScheme);
 }

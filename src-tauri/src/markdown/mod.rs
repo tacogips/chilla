@@ -108,9 +108,137 @@ fn parser_options() -> Options {
 
 fn sanitize_event(event: Event<'_>) -> Event<'_> {
     match event {
-        Event::Html(html) | Event::InlineHtml(html) => Event::Text(html),
+        Event::Html(html) | Event::InlineHtml(html) => sanitize_raw_html_event(html),
         other => other,
     }
+}
+
+fn sanitize_raw_html_event(html: CowStr<'_>) -> Event<'_> {
+    match sanitize_allowed_raw_html(html.as_ref()) {
+        Some(safe_html) => Event::Html(CowStr::from(safe_html)),
+        None => Event::Text(html),
+    }
+}
+
+fn sanitize_allowed_raw_html(raw_html: &str) -> Option<String> {
+    sanitize_raw_img_tag(raw_html)
+}
+
+fn sanitize_raw_img_tag(raw_html: &str) -> Option<String> {
+    let trimmed = raw_html.trim();
+
+    if !trimmed.starts_with("<img") || trimmed.starts_with("</") || !trimmed.ends_with('>') {
+        return None;
+    }
+
+    let attr_source = trimmed
+        .strip_prefix("<img")?
+        .strip_suffix('>')?
+        .trim_end_matches('/')
+        .trim();
+    let attributes = parse_html_attributes(attr_source);
+    let src = attributes.get("src")?.trim();
+
+    if src.is_empty() {
+        return None;
+    }
+
+    let mut html = format!("<img src=\"{}\"", escape_html_attribute(src));
+
+    if let Some(alt) = attributes.get("alt").map(|value| value.trim()) {
+        html.push_str(&format!(" alt=\"{}\"", escape_html_attribute(alt)));
+    }
+
+    if let Some(title) = attributes.get("title").map(|value| value.trim()) {
+        html.push_str(&format!(" title=\"{}\"", escape_html_attribute(title)));
+    }
+
+    html.push_str(" />");
+    Some(html)
+}
+
+fn parse_html_attributes(value: &str) -> BTreeMap<String, String> {
+    let mut attributes = BTreeMap::new();
+    let bytes = value.as_bytes();
+    let mut cursor = 0usize;
+
+    while cursor < bytes.len() {
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+
+        if cursor >= bytes.len() {
+            break;
+        }
+
+        let name_start = cursor;
+
+        while cursor < bytes.len()
+            && !bytes[cursor].is_ascii_whitespace()
+            && bytes[cursor] != b'='
+            && bytes[cursor] != b'/'
+        {
+            cursor += 1;
+        }
+
+        if name_start == cursor {
+            cursor += 1;
+            continue;
+        }
+
+        let name = value[name_start..cursor].trim().to_ascii_lowercase();
+
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+
+        if cursor >= bytes.len() || bytes[cursor] != b'=' {
+            continue;
+        }
+
+        cursor += 1;
+
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+
+        if cursor >= bytes.len() {
+            break;
+        }
+
+        let quote = bytes[cursor];
+        let attr_value = if quote == b'"' || quote == b'\'' {
+            cursor += 1;
+            let value_start = cursor;
+
+            while cursor < bytes.len() && bytes[cursor] != quote {
+                cursor += 1;
+            }
+
+            let parsed = value[value_start..cursor].to_string();
+
+            if cursor < bytes.len() {
+                cursor += 1;
+            }
+
+            parsed
+        } else {
+            let value_start = cursor;
+
+            while cursor < bytes.len()
+                && !bytes[cursor].is_ascii_whitespace()
+                && bytes[cursor] != b'/'
+            {
+                cursor += 1;
+            }
+
+            value[value_start..cursor].to_string()
+        };
+
+        attributes.insert(name, attr_value);
+    }
+
+    attributes
 }
 
 fn render_html_with_heading_ids(
@@ -624,5 +752,32 @@ mod tests {
         assert!(rendered
             .html
             .contains("<img src=\"./fixtures/preview.png\" alt=\"Preview image\""));
+    }
+
+    #[test]
+    fn preserves_safe_raw_html_img_tags() {
+        let rendered = render_markdown("<img src=\"etc/msrv-badge.svg\">", SyntaxUiTheme::Dark);
+
+        assert!(rendered.html.contains("<img src=\"etc/msrv-badge.svg\" />"));
+    }
+
+    #[test]
+    fn strips_unsafe_attributes_from_raw_html_img_tags() {
+        let rendered = render_markdown(
+            "<img src=\"etc/msrv-badge.svg\" alt=\"MSRV\" onerror=\"alert(1)\">",
+            SyntaxUiTheme::Dark,
+        );
+
+        assert!(rendered
+            .html
+            .contains("<img src=\"etc/msrv-badge.svg\" alt=\"MSRV\" />"));
+        assert!(!rendered.html.contains("onerror"));
+    }
+
+    #[test]
+    fn leaves_other_raw_html_as_text() {
+        let rendered = render_markdown("<span>unsafe</span>", SyntaxUiTheme::Dark);
+
+        assert!(rendered.html.contains("&lt;span&gt;unsafe&lt;/span&gt;"));
     }
 }

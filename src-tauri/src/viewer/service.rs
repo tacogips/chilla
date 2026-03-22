@@ -147,9 +147,7 @@ impl ViewerService {
             DirectorySortField::Mtime | DirectorySortField::Size => {
                 let mut records = read_directory_entry_records(&current_directory_path)?;
                 if let Some(query) = normalized_query.as_deref() {
-                    records.retain(|entry| {
-                        directory_entry_matches_query(&entry.seed.name, query)
-                    });
+                    records.retain(|entry| directory_entry_matches_query(&entry.seed.name, query));
                 }
                 records.sort_by(|left, right| compare_directory_entry_records(left, right, sort));
 

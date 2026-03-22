@@ -573,7 +573,9 @@ button {
 }
 
 .preview img,
-.preview video {
+.preview video,
+.preview iframe,
+.preview embed {
   max-width: 100%;
   border-radius: var(--radius-sm);
 }
@@ -581,6 +583,32 @@ button {
 .preview video {
   width: 100%;
   background: #000;
+}
+
+.preview iframe,
+.preview embed {
+  width: 100%;
+  border: 0;
+}
+
+.preview-media--asciinema {
+  margin: 0.8rem 0;
+}
+
+.preview-asciinema {
+  min-height: 23rem;
+}
+
+.preview-asciinema iframe {
+  min-height: 23rem;
+  aspect-ratio: 16 / 10;
+  background: #000;
+}
+
+.preview-asciinema__fallback {
+  margin-top: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--text-subtle);
 }
 
 /* File-view PDF / video: fill the document pane below the header. */
