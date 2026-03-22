@@ -69,9 +69,11 @@ interface FileBrowserPaneProps {
     readonly total_entry_count: number;
   } | null;
   readonly sort: DirectoryListSort;
+  readonly query: string;
   readonly selectedPath: string | null;
   readonly canLoadMore: boolean;
   readonly isLoadingMore: boolean;
+  readonly onChangeQuery: (nextQuery: string) => void;
   readonly onChangeSort: (nextSort: DirectoryListSort) => void;
   readonly onLoadMore: () => void;
   readonly onSelectEntry: (
@@ -201,7 +203,6 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
   let bodyEl: HTMLDivElement | undefined;
   let listEl: HTMLUListElement | undefined;
   const filterInputId = createUniqueId();
-  const [filterText, setFilterText] = createSignal("");
   const [nameTooltip, setNameTooltip] = createSignal<NameTooltipState | null>(
     null,
   );
@@ -211,6 +212,12 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
 
   const blurFilterInput = (): void => {
     filterInputFromDom()?.blur();
+  };
+
+  const isFilterInputFocused = (): boolean => {
+    const filterInput = filterInputFromDom();
+
+    return filterInput !== null && document.activeElement === filterInput;
   };
 
   const resolveFileBrowserListEl = (): HTMLUListElement | undefined => {
@@ -223,16 +230,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
     );
   };
 
-  const filteredEntries = createMemo(() => {
-    const entries = props.directory?.entries ?? [];
-    const q = filterText().trim().toLowerCase();
-
-    if (q === "") {
-      return entries;
-    }
-
-    return entries.filter((entry) => entry.name.toLowerCase().includes(q));
-  });
+  const filteredEntries = createMemo(() => props.directory?.entries ?? []);
 
   const loadedEntryCount = createMemo(
     () => props.directory?.entries.length ?? 0,
@@ -245,7 +243,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
     const loaded = loadedEntryCount();
     const total = totalEntryCount();
     const shown = filteredEntries().length;
-    const trimmed = filterText().trim();
+    const trimmed = props.query.trim();
 
     if (total === 0) {
       return "0 entries";
@@ -336,12 +334,10 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
     immediatePreview?: boolean,
   ) => {
     if (clearFilter) {
-      setFilterText("");
+      props.onChangeQuery("");
     }
 
-    const entries = clearFilter
-      ? (props.directory?.entries ?? [])
-      : filteredEntries();
+    const entries = props.directory?.entries ?? [];
 
     if (entries.length === 0) {
       blurFilterInput();
@@ -358,27 +354,19 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
 
   createEffect(
     on(
-      () => props.directory?.current_directory_path ?? null,
-      (cwd, previousCwd) => {
-        if (previousCwd !== undefined && cwd !== previousCwd) {
-          setFilterText("");
-        }
-      },
-    ),
-  );
-
-  createEffect(
-    on(
       () =>
         props.active
           ? {
               cwd: props.directory?.current_directory_path ?? null,
               selectedPath: props.selectedPath,
-              filteredCount: filteredEntries().length,
             }
           : null,
       (state) => {
         if (state === null || state.cwd === null) {
+          return;
+        }
+
+        if (isFilterInputFocused()) {
           return;
         }
 
@@ -400,7 +388,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
         loaded: loadedEntryCount(),
         total: totalEntryCount(),
         selectedPath: props.selectedPath,
-        filterText: filterText(),
+        query: props.query,
       }),
       () => {
         queueMicrotask(() => {
@@ -646,9 +634,9 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
             title="Focus filter: /   First row: Enter or Ctrl+M   Clear filter & first row: Esc   Sort: a/A name, e/E extension, m/M mtime, s/S size"
             autocomplete="off"
             spellcheck={false}
-            value={filterText()}
+            value={props.query}
             onInput={(event) => {
-              setFilterText(event.currentTarget.value);
+              props.onChangeQuery(event.currentTarget.value);
             }}
             onKeyDown={(event) => {
               if (event.key === "Escape") {

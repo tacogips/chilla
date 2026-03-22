@@ -345,6 +345,7 @@ function browserMockGetStartupContext(): StartupContext {
 function browserMockListDirectory(
   path: string,
   sort: DirectoryListSort,
+  query: string,
   offset: number,
   limit: number,
 ): DirectoryPage {
@@ -355,7 +356,13 @@ function browserMockListDirectory(
     throw new Error(`missing browser mock fixture for ${path}`);
   }
 
-  const sorted = [...fixture.entries].sort((left, right) =>
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = fixture.entries.filter((entry) =>
+    normalizedQuery === ""
+      ? true
+      : entry.name.toLowerCase().includes(normalizedQuery),
+  );
+  const sorted = [...filtered].sort((left, right) =>
     compareDirectoryEntriesForMock(left, right, sort),
   );
   const normalizedOffset = Math.max(0, offset);
@@ -487,17 +494,19 @@ export async function getStartupContext(): Promise<StartupContext> {
 export async function listDirectory(
   path: string,
   sort: DirectoryListSort,
+  query: string,
   offset: number,
   limit: number,
 ): Promise<DirectoryPage> {
   if (isBrowserMockEnabled()) {
-    return browserMockListDirectory(path, sort, offset, limit);
+    return browserMockListDirectory(path, sort, query, offset, limit);
   }
 
   try {
     return await invoke<DirectoryPage>("list_directory", {
       path,
       sort,
+      query,
       offset,
       limit,
     });

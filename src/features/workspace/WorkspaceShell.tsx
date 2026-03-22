@@ -431,6 +431,7 @@ interface LoadedDirectoryState {
   readonly total_entry_count: number;
   readonly next_offset: number;
   readonly sort: DirectoryListSort;
+  readonly query: string;
 }
 
 function defaultFocusedEntryPath(
@@ -518,6 +519,7 @@ export function WorkspaceShell() {
   const [directorySort, setDirectorySort] = createSignal<DirectoryListSort>(
     DEFAULT_FILE_TREE_SORT,
   );
+  const [directoryQuery, setDirectoryQuery] = createSignal("");
   const [selectedBrowserPath, setSelectedBrowserPath] = createSignal<
     string | null
   >(null);
@@ -575,12 +577,13 @@ export function WorkspaceShell() {
     path: string,
     selectedPath: string | null,
     sort: DirectoryListSort = directorySort(),
+    query: string = directoryQuery(),
   ) => {
     clearSelectionPreviewDebounce();
     const requestId = ++directoryRequestId;
     setLoadingMoreDirectoryEntries(false);
 
-    let nextPage = await listDirectory(path, sort, 0, DIRECTORY_PAGE_SIZE);
+    let nextPage = await listDirectory(path, sort, query, 0, DIRECTORY_PAGE_SIZE);
 
     if (requestId !== directoryRequestId) {
       return;
@@ -593,6 +596,7 @@ export function WorkspaceShell() {
       total_entry_count: nextPage.total_entry_count,
       next_offset: nextPage.offset + nextPage.entries.length,
       sort,
+      query,
     };
 
     while (
@@ -607,6 +611,7 @@ export function WorkspaceShell() {
       nextPage = await listDirectory(
         path,
         sort,
+        query,
         nextState.next_offset,
         DIRECTORY_PAGE_SIZE,
       );
@@ -622,6 +627,7 @@ export function WorkspaceShell() {
         total_entry_count: nextPage.total_entry_count,
         next_offset: nextPage.offset + nextPage.entries.length,
         sort,
+        query,
       };
     }
 
@@ -650,6 +656,7 @@ export function WorkspaceShell() {
       const nextPage = await listDirectory(
         currentDirectory.current_directory_path,
         currentDirectory.sort,
+        currentDirectory.query,
         currentDirectory.next_offset,
         DIRECTORY_PAGE_SIZE,
       );
@@ -687,6 +694,7 @@ export function WorkspaceShell() {
             total_entry_count: nextPage.total_entry_count,
             next_offset: nextPage.offset + nextPage.entries.length,
             sort: previous.sort,
+            query: previous.query,
           };
         });
       });
@@ -797,6 +805,7 @@ export function WorkspaceShell() {
 
   const handleInitialLoad = async () => {
     setLoading(true);
+    setDirectoryQuery("");
 
     try {
       const nextStartupContext = await getStartupContext();
@@ -884,6 +893,7 @@ export function WorkspaceShell() {
         currentDirectory.current_directory_path,
         selectedBrowserPath(),
         nextSort,
+        directoryQuery(),
       );
     } catch (error: unknown) {
       setErrorMessage(
@@ -927,7 +937,8 @@ export function WorkspaceShell() {
       try {
         stopWatchingCurrentDocument();
         clearDocumentArea();
-        await loadDirectoryState(entry.path, null);
+        setDirectoryQuery("");
+        await loadDirectoryState(entry.path, null, directorySort(), "");
       } catch (error: unknown) {
         setErrorMessage(
           error instanceof Error ? error.message : "Failed to open directory",
@@ -962,7 +973,8 @@ export function WorkspaceShell() {
     try {
       stopWatchingCurrentDocument();
       clearDocumentArea();
-      await loadDirectoryState(parentDirectory, currentDirectory ?? null);
+      setDirectoryQuery("");
+      await loadDirectoryState(parentDirectory, currentDirectory ?? null, directorySort(), "");
     } catch (error: unknown) {
       setErrorMessage(
         error instanceof Error
@@ -992,6 +1004,30 @@ export function WorkspaceShell() {
       currentDirectory.entries.length < currentDirectory.total_entry_count
     );
   });
+
+  const handleChangeDirectoryQuery = async (nextQuery: string) => {
+    const currentDirectory = directoryState();
+    setDirectoryQuery(nextQuery);
+
+    if (currentDirectory === null) {
+      return;
+    }
+
+    try {
+      await loadDirectoryState(
+        currentDirectory.current_directory_path,
+        selectedBrowserPath(),
+        currentDirectory.sort,
+        nextQuery,
+      );
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to filter directory entries",
+      );
+    }
+  };
 
   const viewerGridClassName = createMemo(() => {
     const toc = isTocOpen() && md() !== null;
@@ -1340,6 +1376,7 @@ export function WorkspaceShell() {
               active={true}
               directory={directoryState()}
               sort={directorySort()}
+              query={directoryQuery()}
               selectedPath={selectedBrowserPath()}
               canLoadMore={canLoadMoreDirectoryEntries()}
               isLoadingMore={isLoadingMoreDirectoryEntries()}
@@ -1348,6 +1385,9 @@ export function WorkspaceShell() {
               }
               onChangeSort={(nextSort) => {
                 void handleChangeDirectorySort(nextSort);
+              }}
+              onChangeQuery={(nextQuery) => {
+                void handleChangeDirectoryQuery(nextQuery);
               }}
               onLoadMore={() => {
                 void loadMoreDirectoryEntries();

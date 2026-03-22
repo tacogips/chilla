@@ -110,16 +110,21 @@ impl ViewerService {
         &self,
         path: &Path,
         sort: DirectoryListSort,
+        query: Option<&str>,
         offset: usize,
         limit: usize,
     ) -> AppResult<DirectoryPage> {
         let current_directory_path = canonicalize_directory_path(path)?;
         let parent_directory_path = current_directory_path.parent().map(display_path);
         let page_limit = normalize_directory_page_limit(limit);
+        let normalized_query = normalize_directory_query(query);
 
         match sort.field {
             DirectorySortField::Name | DirectorySortField::Extension => {
                 let mut seeds = read_directory_entry_seeds(&current_directory_path)?;
+                if let Some(query) = normalized_query.as_deref() {
+                    seeds.retain(|entry| directory_entry_matches_query(&entry.name, query));
+                }
                 seeds.sort_by(|left, right| compare_directory_entry_seeds(left, right, sort));
 
                 let total_entry_count = seeds.len();
@@ -141,6 +146,11 @@ impl ViewerService {
             }
             DirectorySortField::Mtime | DirectorySortField::Size => {
                 let mut records = read_directory_entry_records(&current_directory_path)?;
+                if let Some(query) = normalized_query.as_deref() {
+                    records.retain(|entry| {
+                        directory_entry_matches_query(&entry.seed.name, query)
+                    });
+                }
                 records.sort_by(|left, right| compare_directory_entry_records(left, right, sort));
 
                 let total_entry_count = records.len();
@@ -347,6 +357,17 @@ fn normalize_directory_page_limit(limit: usize) -> usize {
     }
 
     limit.min(MAX_DIRECTORY_PAGE_SIZE)
+}
+
+fn normalize_directory_query(query: Option<&str>) -> Option<String> {
+    query
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_ascii_lowercase)
+}
+
+fn directory_entry_matches_query(name: &str, query: &str) -> bool {
+    name.to_ascii_lowercase().contains(query)
 }
 
 fn page_bounds(total_entries: usize, offset: usize, limit: usize) -> (usize, usize) {
@@ -761,7 +782,7 @@ mod tests {
         fs::write(test_dir.path().join("bravo.txt"), "bravo").expect("write bravo");
 
         let snapshot = ViewerService::new()
-            .list_directory(test_dir.path(), default_directory_sort(), 0, 200)
+            .list_directory(test_dir.path(), default_directory_sort(), None, 0, 200)
             .expect("directory snapshot");
 
         let names = snapshot
@@ -799,10 +820,10 @@ mod tests {
         }
 
         let first_page = ViewerService::new()
-            .list_directory(test_dir.path(), default_directory_sort(), 0, 200)
+            .list_directory(test_dir.path(), default_directory_sort(), None, 0, 200)
             .expect("first page");
         let second_page = ViewerService::new()
-            .list_directory(test_dir.path(), default_directory_sort(), 200, 200)
+            .list_directory(test_dir.path(), default_directory_sort(), None, 200, 200)
             .expect("second page");
 
         assert_eq!(first_page.entries.len(), 200);
@@ -829,7 +850,7 @@ mod tests {
         symlink(&target, &link).expect("symlink");
 
         let snapshot = ViewerService::new()
-            .list_directory(test_dir.path(), default_directory_sort(), 0, 200)
+            .list_directory(test_dir.path(), default_directory_sort(), None, 0, 200)
             .expect("directory snapshot");
 
         let paths: Vec<String> = snapshot.entries.iter().map(|e| e.path.clone()).collect();
@@ -869,6 +890,32 @@ mod tests {
             link_entry.canonical_path,
             target_canonical.display().to_string()
         );
+    }
+
+    #[test]
+    fn list_directory_filters_before_pagination() {
+        let test_dir = TestDir::new();
+        for index in 0..205 {
+            fs::write(test_dir.path().join(format!("file-{index:03}.txt")), "x")
+                .expect("write paged test file");
+        }
+        fs::write(test_dir.path().join("needle-target.txt"), "needle")
+            .expect("write filter target");
+
+        let page = ViewerService::new()
+            .list_directory(
+                test_dir.path(),
+                default_directory_sort(),
+                Some("needle-target"),
+                0,
+                200,
+            )
+            .expect("filtered page");
+
+        assert_eq!(page.total_entry_count, 1);
+        assert_eq!(page.entries.len(), 1);
+        assert_eq!(page.entries[0].name, "needle-target.txt");
+        assert!(!page.has_more);
     }
 
     #[test]

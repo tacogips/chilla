@@ -240,3 +240,9 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
 **Notes**: Default sorting no longer requires metadata reads for the entire directory before the first render, which improves large-directory behavior such as `/nix/store`. Verification passed with `bun run typecheck`, `bun run test`, `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml`, `CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml`, and `CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`.
+
+### Session: 2026-03-22 JST
+**Tasks Completed**: Restored file-tree filtering to the stateless server contract via a `query` parameter so searches cover not-yet-loaded entries; updated the browser mock, frontend state, and file browser input to use server-filtered pages instead of local filtering; added regressions proving the filter keeps focus while typing and can surface `notes-220.md` without loading all prior pages.
+**Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: The file-tree filter remains stateless because the backend only receives `path`, `sort`, `query`, `offset`, and `limit`. Verification passed with `bun run typecheck`, `bun run test`, `bun run test:dom`, `bun run test:browser`, `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml`, and `CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml`.

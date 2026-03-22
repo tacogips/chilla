@@ -57,4 +57,65 @@ describe("WorkspaceShell browser mock", () => {
       .element(page.getByRole("button", { name: "notes-220.md" }))
       .toBeInTheDocument();
   });
+
+  test("keeps the filter input focused while typing multiple characters", async () => {
+    await expect.element(page.getByText("/mock/workspace")).toBeInTheDocument();
+
+    const filterInput = document.querySelector<HTMLInputElement>(
+      ".file-browser__filter",
+    );
+
+    if (filterInput === null) {
+      throw new Error("missing file browser filter");
+    }
+
+    filterInput.focus();
+    updateInputValue(filterInput, "n");
+
+    await expect.poll(() => ({
+      value: filterInput.value,
+      isFocused: document.activeElement === filterInput,
+    })).toEqual({
+      value: "n",
+      isFocused: true,
+    });
+
+    updateInputValue(filterInput, "no");
+
+    await expect.poll(() => ({
+      value: filterInput.value,
+      isFocused: document.activeElement === filterInput,
+    })).toEqual({
+      value: "no",
+      isFocused: true,
+    });
+  });
+
+  test("finds entries beyond the first page through server-side filtering", async () => {
+    await expect.element(page.getByText("/mock/workspace")).toBeInTheDocument();
+
+    const filterInput = document.querySelector<HTMLInputElement>(
+      ".file-browser__filter",
+    );
+
+    if (filterInput === null) {
+      throw new Error("missing file browser filter");
+    }
+
+    filterInput.focus();
+    updateInputValue(filterInput, "notes-220");
+
+    await expect.poll(() => ({
+      value: filterInput.value,
+      hasMatch: document.body.textContent?.includes("notes-220.md") ?? false,
+    })).toEqual({
+      value: "notes-220",
+      hasMatch: true,
+    });
+  });
 });
+
+function updateInputValue(input: HTMLInputElement, value: string): void {
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}

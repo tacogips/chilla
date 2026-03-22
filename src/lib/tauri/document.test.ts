@@ -6,12 +6,14 @@ describe("browser mock document adapter", () => {
     const firstPage = __browserMock.listDirectory(
       "/mock/workspace",
       { field: "name", direction: "asc" },
+      "",
       0,
       200,
     );
     const secondPage = __browserMock.listDirectory(
       "/mock/workspace",
       { field: "name", direction: "asc" },
+      "",
       200,
       200,
     );
@@ -27,6 +29,7 @@ describe("browser mock document adapter", () => {
     const page = __browserMock.listDirectory(
       "/mock/workspace",
       { field: "name", direction: "asc" },
+      "",
       0,
       20,
     );
@@ -37,5 +40,19 @@ describe("browser mock document adapter", () => {
       "docs",
       "image.png",
     ]);
+  });
+
+  it("filters before pagination in the browser mock", () => {
+    const page = __browserMock.listDirectory(
+      "/mock/workspace",
+      { field: "name", direction: "asc" },
+      "notes-220",
+      0,
+      200,
+    );
+
+    expect(page.total_entry_count).toBe(1);
+    expect(page.entries.map((entry) => entry.name)).toEqual(["notes-220.md"]);
+    expect(page.has_more).toBe(false);
   });
 });

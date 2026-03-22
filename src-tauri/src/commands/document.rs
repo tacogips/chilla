@@ -26,6 +26,7 @@ pub struct MarkdownPreviewOutput {
 pub struct ListDirectoryInput {
     pub path: String,
     pub sort: Option<DirectoryListSort>,
+    pub query: Option<String>,
     pub offset: Option<usize>,
     pub limit: Option<usize>,
 }
@@ -58,6 +59,7 @@ pub fn get_startup_context(state: State<'_, AppState>) -> Result<StartupContext,
 pub fn list_directory(
     path: Option<String>,
     sort: Option<DirectoryListSort>,
+    query: Option<String>,
     offset: Option<usize>,
     limit: Option<usize>,
     input: Option<ListDirectoryInput>,
@@ -73,6 +75,10 @@ pub fn list_directory(
         .and_then(|value| value.sort)
         .or(sort)
         .unwrap_or_default();
+    let resolved_query = input
+        .as_ref()
+        .and_then(|value| value.query.clone())
+        .or(query);
     let resolved_offset = input
         .as_ref()
         .and_then(|value| value.offset)
@@ -89,6 +95,7 @@ pub fn list_directory(
         .list_directory(
             Path::new(&resolved_path),
             resolved_sort,
+            resolved_query.as_deref(),
             resolved_offset,
             resolved_limit,
         )
