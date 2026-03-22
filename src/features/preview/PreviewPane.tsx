@@ -133,6 +133,9 @@ async function enhanceMermaid(
   }
 
   const mermaid = await getMermaid();
+  // TODO: Mermaid theme/style overrides are still not fully taking effect here.
+  // Revisit the preview rendering approach once we confirm which Mermaid config
+  // keys are honored by `run()` in this embedded rendering path.
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: "strict",
