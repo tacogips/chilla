@@ -1,4 +1,4 @@
-# chilla
+# chila: Markdown-focused desktop file viewer
 
 <img src="doc/empty-state-cat.png" alt="Pixel-art cat peeking in from the side" width="320" />
 
