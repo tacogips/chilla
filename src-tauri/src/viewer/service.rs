@@ -204,7 +204,9 @@ impl ViewerService {
             return self.open_text_preview(&file_path, mime_type, ui_theme);
         }
 
-        if is_text_preview_extension(&file_path) {
+        if is_text_preview_extension(&file_path)
+            || syntax_highlight::should_treat_path_as_text(&file_path)
+        {
             return self.open_text_preview(&file_path, mime_type, ui_theme);
         }
 
@@ -272,7 +274,15 @@ impl ViewerService {
     ) -> AppResult<FilePreview> {
         let file_bytes = fs::read(path).map_err(|source| AppError::io("read", path, source))?;
         let source_text = String::from_utf8_lossy(&file_bytes);
-        let html = syntax_highlight::highlight_file_source(&source_text, path, ui_theme);
+        let syntax_name = syntax_highlight::describe_file_syntax(path);
+        let highlighted_html =
+            syntax_highlight::highlight_file_source(&source_text, path, ui_theme);
+        let html = format!(
+            "<section class=\"file-preview file-preview--text\"><p class=\"file-preview__meta\">Syntax: {} | Detected type: {}</p>{}</section>",
+            escape_html_text(&syntax_name),
+            escape_html_text(&mime_type),
+            highlighted_html,
+        );
 
         Ok(FilePreview::Text {
             path: display_path(path),
@@ -1012,6 +1022,7 @@ mod tests {
             .expect("text preview")
         {
             FilePreview::Text { html, .. } => {
+                assert!(html.contains("Syntax: Plain Text | Detected type:"));
                 assert!(html.contains("<pre"));
                 assert!(html.contains("plain text"));
                 assert!(
@@ -1094,6 +1105,52 @@ mod tests {
                 );
             }
             _ => panic!("expected text preview for TOML"),
+        }
+    }
+
+    #[test]
+    fn open_file_preview_treats_shell_and_nix_sources_as_text() {
+        let test_dir = TestDir::new();
+        let shell_path = test_dir.path().join("install.sh");
+        let zsh_path = test_dir.path().join("zsh");
+        let nix_path = test_dir.path().join("flake.nix");
+
+        fs::write(&shell_path, "#!/usr/bin/env bash\necho shell\n").expect("write shell");
+        fs::write(&zsh_path, "echo zsh\n").expect("write zsh");
+        fs::write(
+            &nix_path,
+            "{\n  description = \"demo\";\n  outputs = { self }: { };\n}\n",
+        )
+        .expect("write nix");
+
+        match ViewerService::new()
+            .open_file_preview(&shell_path, SyntaxUiTheme::Dark)
+            .expect("shell preview")
+        {
+            FilePreview::Text { html, .. } => {
+                assert!(html.contains("Syntax: Shell | Detected type:"));
+            }
+            _ => panic!("expected text preview for shell"),
+        }
+
+        match ViewerService::new()
+            .open_file_preview(&zsh_path, SyntaxUiTheme::Dark)
+            .expect("zsh preview")
+        {
+            FilePreview::Text { html, .. } => {
+                assert!(html.contains("Syntax: Shell | Detected type:"));
+            }
+            _ => panic!("expected text preview for zsh"),
+        }
+
+        match ViewerService::new()
+            .open_file_preview(&nix_path, SyntaxUiTheme::Dark)
+            .expect("nix preview")
+        {
+            FilePreview::Text { html, .. } => {
+                assert!(html.contains("Syntax: Nix | Detected type:"));
+            }
+            _ => panic!("expected text preview for nix"),
         }
     }
 }

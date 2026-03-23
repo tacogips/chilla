@@ -74,7 +74,13 @@ fn resolve_syntax<'a>(
         }
     }
 
-    let Some(raw) = lang_token.map(str::trim).filter(|s| !s.is_empty()) else {
+    let raw = lang_token
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .or_else(|| path.and_then(path_syntax_token));
+
+    let Some(raw) = raw.as_deref() else {
         return ss.find_syntax_plain_text();
     };
 
@@ -92,6 +98,72 @@ fn canonical_lang_token(raw: &str) -> String {
         "md" => "markdown".to_string(),
         other => other.to_string(),
     }
+}
+
+fn path_syntax_token(path: &Path) -> Option<String> {
+    let file_name = path.file_name()?.to_str()?.to_ascii_lowercase();
+
+    if matches!(
+        file_name.as_str(),
+        ".bashrc"
+            | ".bash_profile"
+            | ".bash_login"
+            | ".bash_logout"
+            | ".bash_aliases"
+            | ".profile"
+            | ".zshenv"
+            | ".zprofile"
+            | ".zshrc"
+            | ".zlogin"
+            | ".zlogout"
+            | "bash"
+            | "sh"
+            | "zsh"
+    ) {
+        return Some("sh".to_string());
+    }
+
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.to_ascii_lowercase())
+        .and_then(|extension| match extension.as_str() {
+            "bash" | "env" | "ksh" | "nix" | "sh" | "zsh" => Some(extension),
+            _ => None,
+        })
+}
+
+fn display_syntax_name(name: &str) -> String {
+    let lower = name.to_ascii_lowercase();
+
+    if lower.contains("shell") || lower.contains("bash") || lower.contains("zsh") {
+        return "Shell".to_string();
+    }
+
+    name.to_string()
+}
+
+fn path_syntax_display_name(path: &Path) -> Option<String> {
+    match path_syntax_token(path)?.as_str() {
+        "bash" | "env" | "ksh" | "sh" | "zsh" => Some("Shell".to_string()),
+        "nix" => Some("Nix".to_string()),
+        other => Some(display_syntax_name(other)),
+    }
+}
+
+pub fn describe_file_syntax(path: &Path) -> String {
+    let ss = syntax_set();
+    let syntax = resolve_syntax(ss, None, Some(path));
+
+    if syntax.name != ss.find_syntax_plain_text().name {
+        return display_syntax_name(&syntax.name);
+    }
+
+    path_syntax_display_name(path).unwrap_or_else(|| "Plain Text".to_string())
+}
+
+pub fn should_treat_path_as_text(path: &Path) -> bool {
+    let syntax_name = describe_file_syntax(path);
+    syntax_name != "Plain Text"
 }
 
 fn escaped_fallback(source: &str) -> String {
@@ -133,7 +205,9 @@ mod tests {
 
     use crate::syntax_highlight::SyntaxUiTheme;
 
-    use super::{highlight_file_source, highlight_markdown_fence, syntax_set};
+    use super::{
+        describe_file_syntax, highlight_file_source, highlight_markdown_fence, syntax_set,
+    };
 
     #[test]
     fn default_syntax_set_includes_toml_and_json() {
@@ -175,5 +249,12 @@ mod tests {
             html.contains("style=") && html.contains("<span"),
             "expected syntax-highlighted HTML for typescript fence, got: {html}"
         );
+    }
+
+    #[test]
+    fn describes_shell_and_nix_paths_with_user_facing_labels() {
+        assert_eq!(describe_file_syntax(Path::new("install.sh")), "Shell");
+        assert_eq!(describe_file_syntax(Path::new("zsh")), "Shell");
+        assert_eq!(describe_file_syntax(Path::new("flake.nix")), "Nix");
     }
 }
