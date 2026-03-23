@@ -50,6 +50,7 @@ dist
 
 ## tmps
 result
+/release/
 **/tmp
 
 ## Coverage
