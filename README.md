@@ -1,12 +1,12 @@
-# chila: Markdown-focused desktop file viewer
+# chila: yazi-like GUI file viewer with Markdown preview
 
 <img src="doc/empty-state-cat.png" alt="Pixel-art cat peeking in from the side" width="320" />
 
-`chilla` is a Tauri + Bun desktop file viewer with a Markdown-focused reading experience. It opens directories and files from the command line, shows a flat file tree, and renders Markdown, text, images, video, and PDF content inside a desktop UI built with Solid.js and Rust.
+`chilla` is a yazi-like GUI file viewer built with Tauri, Bun, Solid.js, and Rust. It opens directories and files from the command line, shows a flat file tree, and previews Markdown, text, images, video, and PDF content inside a desktop UI.
 
 ## Current Product Shape
 
-The repository design documents started from a Markdown workbench concept, then evolved toward a mixed file-view mode. The current implementation is closer to a desktop viewer/browser than a full Markdown editor:
+The repository design documents started from a Markdown workbench concept, then evolved toward a mixed file-view mode. The current implementation is closer to a yazi-like desktop viewer/browser than a full Markdown editor:
 
 - `chilla` with no arguments opens the current working directory.
 - `chilla <dir>` opens that directory in file-view mode.
