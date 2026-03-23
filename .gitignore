@@ -50,7 +50,9 @@ dist
 
 ## tmps
 result
-/release/
+/release/*
+!/release/
+!/release/README.md
 **/tmp
 
 ## Coverage

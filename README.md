@@ -185,6 +185,38 @@ nix run . --
 nix run . -- README.md
 ```
 
+## Installing from Release Artifacts
+
+The repository now includes a root-level `install.sh` that follows the common "curl the latest release and install it" pattern:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash
+```
+
+Specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash -s -- v0.1.0
+```
+
+Uninstall:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash -s -- uninstall
+```
+
+Installer behavior:
+
+- resolves the current platform as one of `aarch64-darwin`, `x86_64-darwin`, `aarch64-linux`, or `x86_64-linux`
+- prefers a matching archive in a local `release/` directory when present
+- otherwise downloads the latest GitHub release asset named `chilla-v<version>-<target>.tar.gz`
+- installs the extracted release tree under `~/.local/share/chilla/releases/`
+- updates `~/.local/bin/chilla` to point at the installed wrapper
+- can update the user's shell profile with a managed PATH block unless `--no-modify-path` is used
+- supports `./install.sh uninstall` to remove the installed files and managed PATH block
+
+The current Nix-based release artifact is a directory tree containing `bin/chilla`, not a `.app` bundle or `.dmg`. It may still depend on `/nix/store` runtime paths on the target machine.
+
 ## Verification Status
 
 The following commands were confirmed passing while preparing this README:
