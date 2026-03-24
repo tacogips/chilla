@@ -583,7 +583,13 @@ export function WorkspaceShell() {
     const requestId = ++directoryRequestId;
     setLoadingMoreDirectoryEntries(false);
 
-    let nextPage = await listDirectory(path, sort, query, 0, DIRECTORY_PAGE_SIZE);
+    let nextPage = await listDirectory(
+      path,
+      sort,
+      query,
+      0,
+      DIRECTORY_PAGE_SIZE,
+    );
 
     if (requestId !== directoryRequestId) {
       return;
@@ -974,7 +980,12 @@ export function WorkspaceShell() {
       stopWatchingCurrentDocument();
       clearDocumentArea();
       setDirectoryQuery("");
-      await loadDirectoryState(parentDirectory, currentDirectory ?? null, directorySort(), "");
+      await loadDirectoryState(
+        parentDirectory,
+        currentDirectory ?? null,
+        directorySort(),
+        "",
+      );
     } catch (error: unknown) {
       setErrorMessage(
         error instanceof Error

@@ -19,6 +19,7 @@ describe("PreviewPane", () => {
     rootStyle.removeProperty("--markdown-heading");
     rootStyle.removeProperty("--markdown-muted");
     rootStyle.removeProperty("--markdown-border");
+    rootStyle.removeProperty("--font-sans");
     document.body.innerHTML = "";
   });
 
@@ -55,6 +56,52 @@ describe("PreviewPane", () => {
       expect(script).not.toBeNull();
       expect(document.body.textContent).toContain("Open recording in browser");
     });
+  });
+
+  it("renders KaTeX markup for pulldown-cmark math spans", async () => {
+    const root = document.getElementById("root");
+
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty("--markdown-surface", "#ffffff");
+    rootStyle.setProperty("--markdown-pre-bg", "#f6f8fa");
+    rootStyle.setProperty("--markdown-fg", "#1f2328");
+    rootStyle.setProperty("--markdown-heading", "#0f172a");
+    rootStyle.setProperty("--markdown-muted", "#59636e");
+    rootStyle.setProperty("--markdown-border", "#d0d7de");
+
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath={null}
+          html={[
+            '<p>Inline <span class="math math-inline">x^2</span> and block</p>',
+            '<p><span class="math math-display">\\sum_{i=1}^n i</span></p>',
+          ].join("")}
+          selectedAnchorId={null}
+          visible={true}
+        />
+      ),
+      root,
+    );
+
+    await waitFor(() => {
+      const roots = document.querySelectorAll(".preview__content .katex");
+      expect(roots.length).toBe(2);
+    });
+
+    const preview = document.querySelector(".preview__content");
+    expect(preview).not.toBeNull();
+
+    const inlineMath = preview?.querySelector(".math.math-inline .katex");
+    expect(inlineMath).not.toBeNull();
+    expect(inlineMath?.classList.contains("katex-display")).toBe(false);
+
+    expect(preview?.querySelector(".katex-display")).not.toBeNull();
   });
 
   it("leaves ordinary linked images unchanged", async () => {
@@ -100,6 +147,7 @@ describe("PreviewPane", () => {
     rootStyle.setProperty("--markdown-heading", "#0f172a");
     rootStyle.setProperty("--markdown-muted", "#59636e");
     rootStyle.setProperty("--markdown-border", "#d0d7de");
+    rootStyle.setProperty("--font-sans", '"Segoe UI", sans-serif');
 
     expect(mermaidThemeVariables()).toEqual({
       background: "#ffffff",
@@ -126,6 +174,8 @@ describe("PreviewPane", () => {
       titleColor: "#0f172a",
       edgeLabelBackground: "#ffffff",
       nodeTextColor: "#1f2328",
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "16px",
     });
   });
 });

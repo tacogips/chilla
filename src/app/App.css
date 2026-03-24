@@ -2,9 +2,12 @@
 :root {
   --radius-sm: 4px;
   --radius-md: 6px;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-    "Noto Sans", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", Menlo, Consolas,
+    monospace;
   --preview-content-min-width: 36rem;
   --preview-content-inline-padding: clamp(0.125rem, 1vw, 0.6rem);
   --preview-content-block-padding: 0.35rem;
@@ -229,7 +232,9 @@ button {
   font-size: 0;
   line-height: 0;
   cursor: pointer;
-  transition: color 120ms ease, background 120ms ease;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .workspace__mode:hover:not(:disabled) {
@@ -259,7 +264,10 @@ button {
   background: var(--bg-elevated);
   color: var(--text-muted);
   line-height: 0;
-  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease;
 }
 
 .workspace__theme-toggle:hover {
@@ -309,7 +317,10 @@ button {
   color: var(--text-muted);
   font-size: 0;
   line-height: 0;
-  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease;
 }
 
 .workspace__window-button:hover {
@@ -333,7 +344,10 @@ button {
   color: var(--text);
   font-size: 0.68rem;
   font-weight: 500;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .button:hover:not(:disabled) {
@@ -395,7 +409,10 @@ button {
 }
 
 .workspace__body--viewer--toc {
-  grid-template-columns: minmax(10rem, 15rem) minmax(10rem, 15rem) minmax(0, 1fr);
+  grid-template-columns: minmax(10rem, 15rem) minmax(10rem, 15rem) minmax(
+      0,
+      1fr
+    );
   min-width: calc(10rem + 10rem + 14rem);
 }
 
@@ -457,24 +474,44 @@ button {
 }
 
 /* Light mode: main document column uses a white surface for preview / raw. */
-[data-theme="light"] .workspace__body--viewer .workspace__document-column > .pane {
+[data-theme="light"]
+  .workspace__body--viewer
+  .workspace__document-column
+  > .pane {
   background: var(--file-preview-surface);
 }
 
-[data-theme="light"] .workspace__body--viewer .workspace__document-column > .pane .pane__header {
+[data-theme="light"]
+  .workspace__body--viewer
+  .workspace__document-column
+  > .pane
+  .pane__header {
   background: var(--file-preview-surface);
 }
 
-[data-theme="light"] .workspace__body--viewer .workspace__document-column .pane__body.preview {
+[data-theme="light"]
+  .workspace__body--viewer
+  .workspace__document-column
+  .pane__body.preview {
   background: var(--file-preview-surface);
 }
 
-[data-theme="light"] .workspace__body--viewer .workspace__document-column .file-preview--binary,
-[data-theme="light"] .workspace__body--viewer .workspace__document-column .file-preview--text {
+[data-theme="light"]
+  .workspace__body--viewer
+  .workspace__document-column
+  .file-preview--binary,
+[data-theme="light"]
+  .workspace__body--viewer
+  .workspace__document-column
+  .file-preview--text {
   background: var(--file-preview-surface);
 }
 
-[data-theme="light"] .workspace__body--viewer .workspace__document-column .preview pre {
+[data-theme="light"]
+  .workspace__body--viewer
+  .workspace__document-column
+  .preview
+  pre {
   background-color: var(--file-preview-surface) !important;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -562,7 +599,9 @@ button {
   background: transparent;
   color: var(--text-muted);
   font-size: 0.78rem;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .toc__button:hover,
@@ -586,12 +625,14 @@ button {
   line-height: 1.5;
 }
 
-/* Keep github-markdown-css aligned with the app theme instead of WebKit's
-   prefers-color-scheme result in packaged builds. */
-.preview__content.markdown-body {
-  color-scheme: inherit;
-  color: var(--markdown-fg);
-  background: transparent;
+/* Override github-markdown-css colour tokens so the preview follows
+   data-theme instead of the OS prefers-color-scheme media query.
+   Specificity (0,3,0) + !important on painted properties guarantees
+   we win over any @media block inside the library stylesheet. */
+[data-theme="dark"] .preview__content.markdown-body {
+  color-scheme: dark !important;
+  color: var(--markdown-fg) !important;
+  background-color: var(--markdown-surface) !important;
   --fgColor-accent: var(--preview-link);
   --fgColor-default: var(--markdown-fg);
   --fgColor-muted: var(--markdown-muted);
@@ -600,6 +641,44 @@ button {
   --bgColor-neutral-muted: var(--markdown-inline-code-bg);
   --borderColor-default: var(--markdown-border);
   --borderColor-muted: var(--markdown-border);
+}
+
+[data-theme="light"] .preview__content.markdown-body {
+  color-scheme: light !important;
+  color: var(--markdown-fg) !important;
+  background-color: var(--markdown-surface) !important;
+  --fgColor-accent: var(--preview-link);
+  --fgColor-default: var(--markdown-fg);
+  --fgColor-muted: var(--markdown-muted);
+  --bgColor-default: var(--markdown-surface);
+  --bgColor-muted: var(--markdown-pre-bg);
+  --bgColor-neutral-muted: var(--markdown-inline-code-bg);
+  --borderColor-default: var(--markdown-border);
+  --borderColor-muted: var(--markdown-border);
+}
+
+.preview__content.markdown-body blockquote {
+  color: var(--markdown-muted);
+  border-left-color: var(--markdown-blockquote-border);
+}
+
+.preview__content.markdown-body code,
+.preview__content.markdown-body tt {
+  background-color: var(--markdown-inline-code-bg);
+}
+
+.preview__content.markdown-body .highlight pre,
+.preview__content.markdown-body pre {
+  background-color: var(--markdown-pre-bg);
+}
+
+.preview__content.markdown-body table tr {
+  background-color: var(--markdown-surface);
+  border-top-color: var(--markdown-border);
+}
+
+.preview__content.markdown-body table tr:nth-child(2n) {
+  background-color: var(--markdown-table-stripe);
 }
 
 .preview a {
@@ -629,6 +708,12 @@ button {
 .preview embed {
   width: 100%;
   border: 0;
+}
+
+.preview .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
 }
 
 .preview-media--asciinema {
@@ -690,7 +775,8 @@ button {
   overflow: auto;
 }
 
-.pane__body.preview.preview--embedded-video.preview--video-external-linux .preview-media--video {
+.pane__body.preview.preview--embedded-video.preview--video-external-linux
+  .preview-media--video {
   width: 100%;
 }
 
@@ -712,11 +798,7 @@ button {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: linear-gradient(
-    to bottom,
-    rgb(0 0 0 / 0.35),
-    rgb(0 0 0 / 0.2)
-  );
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.35), rgb(0 0 0 / 0.2));
   pointer-events: none;
 }
 
@@ -761,7 +843,9 @@ button {
   overflow: hidden;
 }
 
-.workspace__document-column .pane__body.preview:has(.preview-pdf-frame) .preview-media--pdf {
+.workspace__document-column
+  .pane__body.preview:has(.preview-pdf-frame)
+  .preview-media--pdf {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -769,7 +853,9 @@ button {
   margin: 0;
 }
 
-.workspace__document-column .pane__body.preview:has(.preview-pdf-frame) .preview-pdf-frame {
+.workspace__document-column
+  .pane__body.preview:has(.preview-pdf-frame)
+  .preview-pdf-frame {
   flex: 1;
   min-height: 0;
   width: 100%;

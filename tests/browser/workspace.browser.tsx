@@ -72,23 +72,27 @@ describe("WorkspaceShell browser mock", () => {
     filterInput.focus();
     updateInputValue(filterInput, "n");
 
-    await expect.poll(() => ({
-      value: filterInput.value,
-      isFocused: document.activeElement === filterInput,
-    })).toEqual({
-      value: "n",
-      isFocused: true,
-    });
+    await expect
+      .poll(() => ({
+        value: filterInput.value,
+        isFocused: document.activeElement === filterInput,
+      }))
+      .toEqual({
+        value: "n",
+        isFocused: true,
+      });
 
     updateInputValue(filterInput, "no");
 
-    await expect.poll(() => ({
-      value: filterInput.value,
-      isFocused: document.activeElement === filterInput,
-    })).toEqual({
-      value: "no",
-      isFocused: true,
-    });
+    await expect
+      .poll(() => ({
+        value: filterInput.value,
+        isFocused: document.activeElement === filterInput,
+      }))
+      .toEqual({
+        value: "no",
+        isFocused: true,
+      });
   });
 
   test("finds entries beyond the first page through server-side filtering", async () => {
@@ -105,13 +109,15 @@ describe("WorkspaceShell browser mock", () => {
     filterInput.focus();
     updateInputValue(filterInput, "notes-220");
 
-    await expect.poll(() => ({
-      value: filterInput.value,
-      hasMatch: document.body.textContent?.includes("notes-220.md") ?? false,
-    })).toEqual({
-      value: "notes-220",
-      hasMatch: true,
-    });
+    await expect
+      .poll(() => ({
+        value: filterInput.value,
+        hasMatch: document.body.textContent?.includes("notes-220.md") ?? false,
+      }))
+      .toEqual({
+        value: "notes-220",
+        hasMatch: true,
+      });
   });
 });
 

@@ -7,7 +7,9 @@ describe("browser mock document adapter", () => {
 
     expect(snapshot.source_html).toContain("<pre");
     expect(snapshot.source_html).toContain("<code>");
-    expect(snapshot.source_html).toContain("This document is served by the browser mock adapter.");
+    expect(snapshot.source_html).toContain(
+      "This document is served by the browser mock adapter.",
+    );
   });
 
   it("returns paged root directory data", () => {

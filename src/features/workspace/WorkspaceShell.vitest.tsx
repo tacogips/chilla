@@ -127,7 +127,10 @@ function updateInputValue(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-async function waitFor(assertion: () => void, timeoutMs = 2_000): Promise<void> {
+async function waitFor(
+  assertion: () => void,
+  timeoutMs = 2_000,
+): Promise<void> {
   const start = Date.now();
 
   while (true) {
