@@ -252,6 +252,9 @@
             gh
             go-task
           ]
+          ++ lib.optionals pkgs.stdenv.isLinux [
+            xorg.xorgserver
+          ]
           ++ [ bun ];
         in
         {
