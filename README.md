@@ -213,7 +213,7 @@ curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | b
 Specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash -s -- v0.1.0
+curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash -s -- v0.1.1
 ```
 
 Uninstall:

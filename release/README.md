@@ -25,10 +25,10 @@ Example:
 ```text
 release/
 ├── README.md
-├── chilla-v0.1.0-aarch64-darwin.tar.gz
-├── chilla-v0.1.0-aarch64-darwin.sha256
-├── chilla-v0.1.0-x86_64-linux.tar.gz
-└── chilla-v0.1.0-x86_64-linux.sha256
+├── chilla-v0.1.1-aarch64-darwin.tar.gz
+├── chilla-v0.1.1-aarch64-darwin.sha256
+├── chilla-v0.1.1-x86_64-linux.tar.gz
+└── chilla-v0.1.1-x86_64-linux.sha256
 ```
 
 ## Archive contents
@@ -38,7 +38,7 @@ Each tarball must expand to a top-level directory whose name matches the tarball
 Example:
 
 ```text
-chilla-v0.1.0-x86_64-linux/
+chilla-v0.1.1-x86_64-linux/
 ├── bin/chilla
 └── lib/
 ```
@@ -52,20 +52,20 @@ The `.sha256` file must checksum the tarball itself, not `bin/chilla`.
 Example:
 
 ```bash
-shasum -a 256 release/chilla-v0.1.0-x86_64-linux.tar.gz | \
-  awk '{ print $1 "  chilla-v0.1.0-x86_64-linux.tar.gz" }' \
-  > release/chilla-v0.1.0-x86_64-linux.sha256
+shasum -a 256 release/chilla-v0.1.1-x86_64-linux.tar.gz | \
+  awk '{ print $1 "  chilla-v0.1.1-x86_64-linux.tar.gz" }' \
+  > release/chilla-v0.1.1-x86_64-linux.sha256
 ```
 
 ## Packaging example
 
 ```bash
 mkdir -p release
-cp -RL result release/chilla-v0.1.0-x86_64-linux
-tar -C release -czf release/chilla-v0.1.0-x86_64-linux.tar.gz chilla-v0.1.0-x86_64-linux
-shasum -a 256 release/chilla-v0.1.0-x86_64-linux.tar.gz | \
-  awk '{ print $1 "  chilla-v0.1.0-x86_64-linux.tar.gz" }' \
-  > release/chilla-v0.1.0-x86_64-linux.sha256
+cp -RL result release/chilla-v0.1.1-x86_64-linux
+tar -C release -czf release/chilla-v0.1.1-x86_64-linux.tar.gz chilla-v0.1.1-x86_64-linux
+shasum -a 256 release/chilla-v0.1.1-x86_64-linux.tar.gz | \
+  awk '{ print $1 "  chilla-v0.1.1-x86_64-linux.tar.gz" }' \
+  > release/chilla-v0.1.1-x86_64-linux.sha256
 ```
 
 ## Installer usage
@@ -74,7 +74,7 @@ The installer can use this directory directly:
 
 ```bash
 ./install.sh
-./install.sh v0.1.0
+./install.sh v0.1.1
 ./install.sh uninstall
 ```
 
