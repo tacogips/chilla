@@ -234,6 +234,29 @@ Installer behavior:
 
 The current Nix-based release artifact is a directory tree containing `bin/chilla`, not a `.app` bundle or `.dmg`. It may still depend on `/nix/store` runtime paths on the target machine.
 
+## Installing with Homebrew Cask
+
+The repository now includes a tap-ready cask definition at `Casks/chilla.rb` for the current macOS Apple Silicon release artifact.
+
+Homebrew will not install a cask directly from this repository path. To make it installable with `brew install --cask`, publish the file in a tap repository such as `tacogips/homebrew-tap` under:
+
+```text
+Casks/chilla.rb
+```
+
+Typical usage after publishing the tap:
+
+```bash
+brew tap tacogips/tap
+brew install --cask chilla
+```
+
+Current caveats:
+
+- the cask installs the existing `aarch64-darwin` release tarball, not a `.app` bundle
+- it is currently constrained to Apple Silicon via Homebrew `depends_on arch: :arm64`
+- the packaged binary may still depend on `/nix/store` runtime libraries, so this is suitable for a custom tap but not yet a polished standalone macOS distribution
+
 ## Verification Status
 
 The following commands were confirmed passing while preparing this README:
