@@ -172,7 +172,7 @@ If `gh release create` partially succeeds or leaves a draft in an odd state, ins
 If the repository ships a custom Homebrew cask:
 
 - keep end-user installation instructions in `README.md` limited to the user commands such as `brew tap ...` and `brew install --cask ...`
-- keep maintainer-only details about publishing `Casks/chilla.rb` into the tap repository out of the user-facing README
+- keep maintainer-only details about the tap repository out of the user-facing README
 - update the tap repository, for example `tacogips/homebrew-tap`, when the release URL, checksum, version, or architecture coverage changes
 - treat `release/README.md` and this skill as the right place for tap-maintenance notes
 

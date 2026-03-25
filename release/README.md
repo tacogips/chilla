@@ -82,7 +82,7 @@ If a matching local archive exists in `release/`, the installer prefers it over 
 
 ## Homebrew Cask
 
-This repository also includes a tap-ready cask definition at `Casks/chilla.rb`.
+The custom Homebrew cask lives in the tap repository `tacogips/homebrew-tap`.
 
 That cask currently points at the published macOS Apple Silicon tarball:
 
@@ -92,7 +92,7 @@ chilla-v<version>-aarch64-darwin.tar.gz
 
 The cask links `bin/chilla` into Homebrew's `bin` directory using the `binary` artifact stanza rather than installing a `.app` bundle. Because the Darwin artifact is still produced from the Nix package output, the cask should be treated as a custom-tap convenience install and not as a fully self-contained macOS app distribution.
 
-To make the cask installable with Homebrew, publish it in a tap repository such as `tacogips/homebrew-tap` under `Casks/chilla.rb`, then users can install it with:
+Users can install it with:
 
 ```bash
 brew tap tacogips/tap
