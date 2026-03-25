@@ -236,15 +236,7 @@ The current Nix-based release artifact is a directory tree containing `bin/chill
 
 ## Installing with Homebrew Cask
 
-The repository now includes a tap-ready cask definition at `Casks/chilla.rb` for the current macOS Apple Silicon release artifact.
-
-Homebrew will not install a cask directly from this repository path. To make it installable with `brew install --cask`, publish the file in a tap repository such as `tacogips/homebrew-tap` under:
-
-```text
-Casks/chilla.rb
-```
-
-Typical usage after publishing the tap:
+Install with:
 
 ```bash
 brew tap tacogips/tap

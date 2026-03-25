@@ -167,6 +167,15 @@ gh release view v<version> --repo tacogips/chilla --json url,isDraft,assets
 
 If `gh release create` partially succeeds or leaves a draft in an odd state, inspect the release with `gh api repos/tacogips/chilla/releases` and repair it before reporting success.
 
+## Homebrew Tap Maintenance
+
+If the repository ships a custom Homebrew cask:
+
+- keep end-user installation instructions in `README.md` limited to the user commands such as `brew tap ...` and `brew install --cask ...`
+- keep maintainer-only details about publishing `Casks/chilla.rb` into the tap repository out of the user-facing README
+- update the tap repository, for example `tacogips/homebrew-tap`, when the release URL, checksum, version, or architecture coverage changes
+- treat `release/README.md` and this skill as the right place for tap-maintenance notes
+
 ## Download-and-Run Verification
 
 When asked to verify the published artifact:
