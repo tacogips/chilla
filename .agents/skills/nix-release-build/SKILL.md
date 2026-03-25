@@ -176,6 +176,60 @@ If the repository ships a custom Homebrew cask:
 - update the tap repository, for example `tacogips/homebrew-tap`, when the release URL, checksum, version, or architecture coverage changes
 - treat `release/README.md` and this skill as the right place for tap-maintenance notes
 
+### Current Repository Layout
+
+- the operational Homebrew cask does not live in this repository
+- the cask source of truth lives in the tap repository `tacogips/homebrew-tap`
+- users install from that tap with:
+
+```bash
+brew tap tacogips/tap
+brew install --cask chilla
+```
+
+### When the Cask Must Be Updated
+
+Update the tap repository whenever any of the following change:
+
+- the release version
+- the GitHub release asset filename
+- the asset checksum
+- the supported macOS architectures
+- the install artifact type, for example moving from `.tar.gz` to `.dmg` or `.zip`
+
+### Current Cask Shape
+
+The current cask is expected to:
+
+- target the published Darwin GitHub release asset
+- use a `binary` artifact that links `bin/chilla`
+- constrain installation to Apple Silicon if only the `aarch64-darwin` artifact is published
+- include caveats that the current artifact is Nix-dependent and not a self-contained `.app`
+
+### Maintainer Workflow After Publishing a Release
+
+After a new macOS release is published:
+
+1. Compute or copy the SHA-256 for the Darwin release tarball.
+2. Update the cask in `tacogips/homebrew-tap`.
+3. Commit and push the tap change.
+4. Verify the cask from Homebrew using the tap, not from a local path in this repository.
+
+Representative verification commands:
+
+```bash
+brew tap tacogips/tap
+brew info --cask tacogips/tap/chilla
+HOMEBREW_NO_AUTO_UPDATE=1 brew install --cask tacogips/tap/chilla
+brew uninstall --cask chilla
+```
+
+### Documentation Boundary
+
+- `README.md` should stay user-facing
+- `release/README.md` can describe the existence and behavior of the Homebrew cask
+- this skill should carry maintainer guidance about when and how to update `tacogips/homebrew-tap`
+
 ## Download-and-Run Verification
 
 When asked to verify the published artifact:
