@@ -103,6 +103,7 @@ fn parser_options() -> Options {
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_TASKLISTS);
+    options.insert(Options::ENABLE_MATH);
     options
 }
 
@@ -724,6 +725,30 @@ mod tests {
 
         assert!(rendered.html.contains("language-mermaid"));
         assert!(rendered.html.contains("graph TD;"));
+    }
+
+    #[test]
+    fn emits_math_spans_for_dollar_latex() {
+        let rendered = render_markdown(
+            r"Inline $x^2$ and display $$\int_0^1 x\,dx$$",
+            SyntaxUiTheme::Dark,
+        );
+
+        assert!(rendered.html.contains(r#"class="math math-inline""#));
+        assert!(rendered.html.contains(r#"class="math math-display""#));
+        assert!(rendered.html.contains("x^2"));
+        assert!(rendered.html.contains(r"\int_0^1"));
+    }
+
+    #[test]
+    fn escapes_html_inside_math_spans() {
+        let rendered = render_markdown(r"$a < b$", SyntaxUiTheme::Dark);
+
+        assert!(
+            rendered.html.contains("a &lt; b"),
+            "expected escaped less-than in math span, got: {}",
+            rendered.html
+        );
     }
 
     #[test]

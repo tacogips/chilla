@@ -111,7 +111,7 @@ Commands:
   uninstall             Remove the installed chilla files and managed PATH block.
 
 Arguments:
-  version               Optional GitHub release tag such as v0.1.0 or 0.1.0.
+  version               Optional GitHub release tag such as v0.1.1 or 0.1.1.
 
 Options:
   --repo <owner/name>           GitHub repository to download from.
@@ -125,10 +125,10 @@ Options:
 
 Examples:
   ./install.sh
-  ./install.sh v0.1.0
+  ./install.sh v0.1.1
   ./install.sh --target x86_64-linux
   ./install.sh uninstall
-  curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash -s -- v0.1.0
+  curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash -s -- v0.1.1
 EOF
 }
 

@@ -10,6 +10,9 @@ This directory contains reference materials for system design and implementation
 | Rust API Guidelines | https://rust-lang.github.io/api-guidelines/ | Rust API design best practices |
 | Rust Design Patterns | https://rust-unofficial.github.io/patterns/ | Common Rust design patterns |
 | Tauri Documentation | https://tauri.app/ | Official Tauri framework documentation |
+| Tauri WebDriver Tests | https://v2.tauri.app/develop/tests/webdriver/ | Official Tauri WebDriver and `tauri-driver` guide |
+| Tauri WebDriver CI | https://v2.tauri.app/develop/tests/webdriver/ci/ | Official CI guidance for WebDriver-based Tauri tests |
+| Tauri Discussion 3768 | https://github.com/orgs/tauri-apps/discussions/3768 | Community discussion about integrating `tauri-driver` |
 | SolidJS Documentation | https://docs.solidjs.com/ | Official Solid.js framework documentation |
 | Mermaid Documentation | https://mermaid.js.org/ | Official Mermaid syntax and rendering documentation |
 | Bun Documentation | https://bun.sh/docs | Official Bun runtime and package manager documentation |

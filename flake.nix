@@ -146,7 +146,7 @@
 
           frontendDist = pkgs.stdenvNoCC.mkDerivation {
             pname = "chilla-frontend";
-            version = "0.1.0";
+            version = "0.1.1";
             src = cleanedSource;
 
             nativeBuildInputs = [
@@ -183,7 +183,7 @@
 
           cargoArtifacts = craneLib.buildDepsOnly {
             pname = "chilla-artifacts";
-            version = "0.1.0";
+            version = "0.1.1";
             src = tauriBuildSource;
             cargoExtraArgs = "--manifest-path src-tauri/Cargo.toml";
             buildInputs = commonBuildInputs;
@@ -192,7 +192,7 @@
 
           chilla = craneLib.buildPackage {
             pname = "chilla";
-            version = "0.1.0";
+            version = "0.1.1";
             src = tauriBuildSource;
             inherit cargoArtifacts;
             cargoExtraArgs = "--manifest-path src-tauri/Cargo.toml";
@@ -252,6 +252,9 @@
             gh
             go-task
           ]
+          ++ lib.optionals pkgs.stdenv.isLinux [
+            xorg.xorgserver
+          ]
           ++ [ bun ];
         in
         {
@@ -260,7 +263,7 @@
 
             clippy = craneLib.cargoClippy {
               pname = "chilla-clippy";
-              version = "0.1.0";
+              version = "0.1.1";
               src = tauriBuildSource;
               inherit cargoArtifacts;
               cargoExtraArgs = "--manifest-path src-tauri/Cargo.toml";
@@ -271,7 +274,7 @@
 
             fmt = craneLib.cargoFmt {
               pname = "chilla-fmt";
-              version = "0.1.0";
+              version = "0.1.1";
               src = tauriBuildSource;
               cargoFmtExtraArgs = "--manifest-path src-tauri/Cargo.toml";
             };

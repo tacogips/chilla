@@ -29,6 +29,11 @@ tasks:
       - bun run test
       - CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml
 
+  test-tauri-e2e-linux:
+    desc: Run Linux desktop E2E verification with tauri-driver
+    cmds:
+      - bun run test:tauri:e2e:linux
+
   check:
     desc: Run frontend typecheck and cargo check
     cmds:

@@ -19,6 +19,7 @@ describe("PreviewPane", () => {
     rootStyle.removeProperty("--markdown-heading");
     rootStyle.removeProperty("--markdown-muted");
     rootStyle.removeProperty("--markdown-border");
+    rootStyle.removeProperty("--font-sans");
     document.body.innerHTML = "";
   });
 
@@ -57,6 +58,52 @@ describe("PreviewPane", () => {
     });
   });
 
+  it("renders KaTeX markup for pulldown-cmark math spans", async () => {
+    const root = document.getElementById("root");
+
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty("--markdown-surface", "#ffffff");
+    rootStyle.setProperty("--markdown-pre-bg", "#f6f8fa");
+    rootStyle.setProperty("--markdown-fg", "#1f2328");
+    rootStyle.setProperty("--markdown-heading", "#0f172a");
+    rootStyle.setProperty("--markdown-muted", "#59636e");
+    rootStyle.setProperty("--markdown-border", "#d0d7de");
+
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath={null}
+          html={[
+            '<p>Inline <span class="math math-inline">x^2</span> and block</p>',
+            '<p><span class="math math-display">\\sum_{i=1}^n i</span></p>',
+          ].join("")}
+          selectedAnchorId={null}
+          visible={true}
+        />
+      ),
+      root,
+    );
+
+    await waitFor(() => {
+      const roots = document.querySelectorAll(".preview__content .katex");
+      expect(roots.length).toBe(2);
+    });
+
+    const preview = document.querySelector(".preview__content");
+    expect(preview).not.toBeNull();
+
+    const inlineMath = preview?.querySelector(".math.math-inline .katex");
+    expect(inlineMath).not.toBeNull();
+    expect(inlineMath?.classList.contains("katex-display")).toBe(false);
+
+    expect(preview?.querySelector(".katex-display")).not.toBeNull();
+  });
+
   it("leaves ordinary linked images unchanged", async () => {
     const root = document.getElementById("root");
 
@@ -91,7 +138,13 @@ describe("PreviewPane", () => {
     });
   });
 
-  it("maps Mermaid theme colors from the active CSS custom properties", () => {
+  it("maps Mermaid theme colors from the active preview element", () => {
+    const root = document.getElementById("root");
+
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+
     const rootStyle = document.documentElement.style;
 
     rootStyle.setProperty("--markdown-surface", "#ffffff");
@@ -100,32 +153,54 @@ describe("PreviewPane", () => {
     rootStyle.setProperty("--markdown-heading", "#0f172a");
     rootStyle.setProperty("--markdown-muted", "#59636e");
     rootStyle.setProperty("--markdown-border", "#d0d7de");
+    rootStyle.setProperty("--font-sans", '"Segoe UI", sans-serif');
 
-    expect(mermaidThemeVariables()).toEqual({
-      background: "#ffffff",
-      primaryColor: "#f6f8fa",
-      primaryTextColor: "#1f2328",
-      primaryBorderColor: "#d0d7de",
-      secondaryColor: "#f6f8fa",
-      secondaryTextColor: "#1f2328",
-      secondaryBorderColor: "#d0d7de",
-      tertiaryColor: "#f6f8fa",
-      tertiaryTextColor: "#1f2328",
-      tertiaryBorderColor: "#d0d7de",
-      noteBkgColor: "#f6f8fa",
-      noteTextColor: "#1f2328",
-      noteBorderColor: "#d0d7de",
-      lineColor: "#d0d7de",
-      textColor: "#1f2328",
-      mainBkg: "#f6f8fa",
-      nodeBkg: "#f6f8fa",
-      nodeBorder: "#d0d7de",
-      clusterBkg: "#f6f8fa",
-      clusterBorder: "#d0d7de",
-      defaultLinkColor: "#59636e",
-      titleColor: "#0f172a",
-      edgeLabelBackground: "#ffffff",
-      nodeTextColor: "#1f2328",
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath={null}
+          html="<p>Mermaid theme probe</p>"
+          selectedAnchorId={null}
+          visible={true}
+        />
+      ),
+      root,
+    );
+
+    const preview = document.querySelector(".preview__content");
+
+    if (!(preview instanceof HTMLElement)) {
+      throw new Error("missing preview content element");
+    }
+
+    expect(mermaidThemeVariables(preview)).toEqual({
+      background: "#0d1117",
+      primaryColor: "#161b22",
+      primaryTextColor: "#c9d1d9",
+      primaryBorderColor: "#30363d",
+      secondaryColor: "#161b22",
+      secondaryTextColor: "#c9d1d9",
+      secondaryBorderColor: "#30363d",
+      tertiaryColor: "#161b22",
+      tertiaryTextColor: "#c9d1d9",
+      tertiaryBorderColor: "#30363d",
+      noteBkgColor: "#161b22",
+      noteTextColor: "#c9d1d9",
+      noteBorderColor: "#30363d",
+      lineColor: "#30363d",
+      textColor: "#c9d1d9",
+      mainBkg: "#161b22",
+      nodeBkg: "#161b22",
+      nodeBorder: "#30363d",
+      clusterBkg: "#161b22",
+      clusterBorder: "#30363d",
+      defaultLinkColor: "#8b949e",
+      titleColor: "#f0f6fc",
+      edgeLabelBackground: "#0d1117",
+      nodeTextColor: "#c9d1d9",
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "16px",
     });
   });
 });

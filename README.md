@@ -136,6 +136,7 @@ task dev
 task build
 task nix-build
 task test
+task test-tauri-e2e-linux
 task check
 task clippy
 task fmt
@@ -148,11 +149,27 @@ bun run dev
 bun run build
 bun run typecheck
 bun run test
+bun run test:tauri:e2e:linux
 CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 `task build` compiles the Tauri backend with Cargo `--release`.
 `task nix-build` builds the default flake package via `nix build .#chilla`, which also uses crane's release-profile Cargo path for the packaged desktop binary.
+
+### Linux desktop E2E
+
+The repository also includes a Linux-only desktop smoke test that runs the real Tauri app through `tauri-driver`:
+
+```bash
+CARGO_TERM_QUIET=true cargo install tauri-driver --locked
+bun run test:tauri:e2e:linux
+```
+
+Notes:
+
+- `WebKitWebDriver` is expected on `PATH`. The Nix dev shell provides it via `webkitgtk_4_1`.
+- If `DISPLAY` is not set, the runner falls back to `Xvfb` when available.
+- The smoke test opens the real workspace, filters to `README.md`, and verifies the rendered Markdown preview.
 
 ## Running the App
 
@@ -196,7 +213,7 @@ curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | b
 Specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash -s -- v0.1.0
+curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash -s -- v0.1.1
 ```
 
 Uninstall:

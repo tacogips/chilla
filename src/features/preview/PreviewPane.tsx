@@ -1,7 +1,10 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { dirname, join, normalize } from "@tauri-apps/api/path";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { createEffect, on, onCleanup, onMount } from "solid-js";
+import katex from "katex";
+import "katex/dist/katex.min.css";
+import "github-markdown-css/github-markdown.css";
+import { createEffect, on, onCleanup, onMount, type JSX } from "solid-js";
 import type { ColorScheme } from "../../lib/theme";
 import {
   isDefaultBrowserUrl,
@@ -15,6 +18,65 @@ interface PreviewPaneProps {
   readonly selectedAnchorId: string | null;
   readonly documentPath: string | null;
   readonly colorScheme: ColorScheme;
+}
+
+interface MarkdownThemePalette {
+  readonly surface: string;
+  readonly foreground: string;
+  readonly heading: string;
+  readonly muted: string;
+  readonly border: string;
+  readonly inlineCodeBackground: string;
+  readonly preBackground: string;
+  readonly tableStripe: string;
+  readonly blockquoteBorder: string;
+}
+
+function markdownThemePalette(colorScheme: ColorScheme): MarkdownThemePalette {
+  if (colorScheme === "dark") {
+    return {
+      surface: "#0d1117",
+      foreground: "#c9d1d9",
+      heading: "#f0f6fc",
+      muted: "#8b949e",
+      border: "#30363d",
+      inlineCodeBackground: "rgb(110 118 129 / 0.4)",
+      preBackground: "#161b22",
+      tableStripe: "rgb(110 118 129 / 0.1)",
+      blockquoteBorder: "#3b434b",
+    };
+  }
+
+  return {
+    surface: "#ffffff",
+    foreground: "#1f2328",
+    heading: "#1f2328",
+    muted: "#59636e",
+    border: "#d0d7de",
+    inlineCodeBackground: "rgb(175 184 193 / 0.2)",
+    preBackground: "#f6f8fa",
+    tableStripe: "#f6f8fa",
+    blockquoteBorder: "#d0d7de",
+  };
+}
+
+function previewThemeStyle(colorScheme: ColorScheme): JSX.CSSProperties {
+  const palette = markdownThemePalette(colorScheme);
+
+  return {
+    "--markdown-surface": palette.surface,
+    "--markdown-fg": palette.foreground,
+    "--markdown-heading": palette.heading,
+    "--markdown-muted": palette.muted,
+    "--markdown-border": palette.border,
+    "--markdown-inline-code-bg": palette.inlineCodeBackground,
+    "--markdown-pre-bg": palette.preBackground,
+    "--markdown-table-stripe": palette.tableStripe,
+    "--markdown-blockquote-border": palette.blockquoteBorder,
+    "background-color": palette.surface,
+    color: palette.foreground,
+    "color-scheme": colorScheme,
+  };
 }
 
 const ASCIINEMA_HOSTNAME = "asciinema.org";
@@ -49,27 +111,38 @@ interface MermaidThemeVariables {
   readonly titleColor: string;
   readonly edgeLabelBackground: string;
   readonly nodeTextColor: string;
+  readonly fontFamily: string;
+  readonly fontSize: string;
 }
 
-function readCssVariable(name: string): string {
-  const value = getComputedStyle(document.documentElement)
+function readCssVariable(source: Element, name: string): string {
+  const value = getComputedStyle(source).getPropertyValue(name).trim();
+
+  if (value !== "") {
+    return value;
+  }
+
+  const rootValue = getComputedStyle(document.documentElement)
     .getPropertyValue(name)
     .trim();
 
-  if (value === "") {
-    throw new Error(`Missing CSS custom property: ${name}`);
+  if (rootValue !== "") {
+    return rootValue;
   }
 
-  return value;
+  throw new Error(`Missing CSS custom property: ${name}`);
 }
 
-export function mermaidThemeVariables(): MermaidThemeVariables {
-  const surface = readCssVariable("--markdown-surface");
-  const preBackground = readCssVariable("--markdown-pre-bg");
-  const foreground = readCssVariable("--markdown-fg");
-  const heading = readCssVariable("--markdown-heading");
-  const muted = readCssVariable("--markdown-muted");
-  const border = readCssVariable("--markdown-border");
+export function mermaidThemeVariables(
+  source: Element = document.documentElement,
+): MermaidThemeVariables {
+  const surface = readCssVariable(source, "--markdown-surface");
+  const preBackground = readCssVariable(source, "--markdown-pre-bg");
+  const foreground = readCssVariable(source, "--markdown-fg");
+  const heading = readCssVariable(source, "--markdown-heading");
+  const muted = readCssVariable(source, "--markdown-muted");
+  const border = readCssVariable(source, "--markdown-border");
+  const fontFamily = readCssVariable(source, "--font-sans");
 
   return {
     background: surface,
@@ -96,7 +169,52 @@ export function mermaidThemeVariables(): MermaidThemeVariables {
     titleColor: heading,
     edgeLabelBackground: surface,
     nodeTextColor: foreground,
+    fontFamily,
+    fontSize: "16px",
   };
+}
+
+function mermaidThemeCss(source: Element): string {
+  const palette = mermaidThemeVariables(source);
+
+  return `
+    .label text,
+    .nodeLabel,
+    .edgeLabel,
+    .cluster-label text,
+    .flowchartTitleText {
+      fill: ${palette.primaryTextColor} !important;
+      color: ${palette.primaryTextColor} !important;
+      font-family: ${palette.fontFamily} !important;
+    }
+
+    .edgeLabel rect {
+      fill: ${palette.background} !important;
+      opacity: 1 !important;
+    }
+
+    .node rect,
+    .node circle,
+    .node ellipse,
+    .node polygon,
+    .node path,
+    .cluster rect,
+    .actor,
+    .labelBox,
+    .note,
+    .note rect {
+      fill: ${palette.primaryColor} !important;
+      stroke: ${palette.primaryBorderColor} !important;
+    }
+
+    .edgePath .path,
+    .flowchart-link,
+    marker path,
+    .messageLine0,
+    .messageLine1 {
+      stroke: ${palette.primaryBorderColor} !important;
+    }
+  `;
 }
 
 async function getMermaid() {
@@ -107,10 +225,39 @@ async function getMermaid() {
   return mermaidModulePromise;
 }
 
+function enhanceKaTeX(container: HTMLElement): void {
+  const inlineNodes = container.querySelectorAll<HTMLElement>(
+    "span.math.math-inline",
+  );
+  for (const element of inlineNodes) {
+    const tex = element.textContent ?? "";
+    if (tex.trim() === "") {
+      continue;
+    }
+    katex.render(tex, element, { displayMode: false, throwOnError: false });
+  }
+
+  const displayNodes = container.querySelectorAll<HTMLElement>(
+    "span.math.math-display",
+  );
+  for (const element of displayNodes) {
+    const tex = element.textContent ?? "";
+    if (tex.trim() === "") {
+      continue;
+    }
+    katex.render(tex, element, { displayMode: true, throwOnError: false });
+  }
+}
+
 async function enhanceMermaid(
   container: HTMLElement,
   colorScheme: ColorScheme,
+  isCurrent: () => boolean,
 ) {
+  if (!isCurrent()) {
+    return;
+  }
+
   const mermaidBlocks = Array.from(
     container.querySelectorAll("pre > code.language-mermaid"),
   );
@@ -133,17 +280,24 @@ async function enhanceMermaid(
   }
 
   const mermaid = await getMermaid();
-  // TODO: Mermaid theme/style overrides are still not fully taking effect here.
-  // Revisit the preview rendering approach once we confirm which Mermaid config
-  // keys are honored by `run()` in this embedded rendering path.
+
+  if (!isCurrent()) {
+    return;
+  }
+
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: "strict",
     darkMode: colorScheme === "dark",
-    theme: "base",
-    themeVariables: mermaidThemeVariables(),
+    theme: colorScheme === "dark" ? "dark" : "neutral",
+    themeVariables: mermaidThemeVariables(container),
+    themeCSS: mermaidThemeCss(container),
   });
   const nodes = Array.from(container.querySelectorAll<HTMLElement>(".mermaid"));
+
+  if (!isCurrent()) {
+    return;
+  }
 
   if (nodes.length > 0) {
     await mermaid.run({ nodes });
@@ -291,7 +445,12 @@ async function enhancePreviewContent(
   container: HTMLElement,
   documentPath: string | null,
   colorScheme: ColorScheme,
+  isCurrent: () => boolean,
 ) {
+  if (!isCurrent()) {
+    return;
+  }
+
   for (const link of Array.from(
     container.querySelectorAll<HTMLAnchorElement>("a[href]"),
   )) {
@@ -303,13 +462,24 @@ async function enhancePreviewContent(
     }
   }
 
+  if (!isCurrent()) {
+    return;
+  }
+
   enhanceAsciinemaEmbeds(container);
   await enhancePreviewMedia(container, documentPath);
-  await enhanceMermaid(container, colorScheme);
+
+  if (!isCurrent()) {
+    return;
+  }
+
+  enhanceKaTeX(container);
+  await enhanceMermaid(container, colorScheme, isCurrent);
 }
 
 export function PreviewPane(props: PreviewPaneProps) {
   let containerRef: HTMLDivElement | undefined;
+  let enhancementRunId = 0;
 
   onMount(() => {
     const container = containerRef;
@@ -360,16 +530,24 @@ export function PreviewPane(props: PreviewPaneProps) {
           return;
         }
 
+        const currentRunId = ++enhancementRunId;
         container.innerHTML = html;
 
-        void enhancePreviewContent(container, documentPath, colorScheme).catch(
-          () => {
-            // Leave the rendered markup intact if asset or Mermaid enhancement fails.
-          },
-        );
+        void enhancePreviewContent(
+          container,
+          documentPath,
+          colorScheme,
+          () => currentRunId === enhancementRunId,
+        ).catch(() => {
+          // Leave the rendered markup intact if asset or Mermaid enhancement fails.
+        });
       },
     ),
   );
+
+  onCleanup(() => {
+    enhancementRunId += 1;
+  });
 
   createEffect(() => {
     const anchorId = props.selectedAnchorId;
@@ -389,10 +567,14 @@ export function PreviewPane(props: PreviewPaneProps) {
         <span class="pane__title">Preview</span>
         <span>Rendered HTML</span>
       </header>
-      <div class="pane__body preview">
+      <div
+        class="pane__body preview"
+        style={previewThemeStyle(props.colorScheme)}
+      >
         <div
           ref={containerRef}
           class="preview__content markdown-body"
+          style={previewThemeStyle(props.colorScheme)}
           innerHTML={props.html}
         />
       </div>

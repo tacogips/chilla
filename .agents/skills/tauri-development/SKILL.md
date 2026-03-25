@@ -65,6 +65,9 @@ For mixed Tauri work, verify:
 - Bun/frontend checks: `bun run typecheck` and `bun run test` when available
 - Rust/backend checks: `CARGO_TERM_QUIET=true cargo check`, `CARGO_TERM_QUIET=true cargo test`
 - Cross-boundary behavior: command names, payload fields, and error mapping still match
+- Linux desktop runtime behavior: `bun run test:tauri:e2e:linux` when the user asks for real
+  Linux E2E verification or when the bug depends on startup/filesystem/window behavior that a
+  browser mock cannot prove
 
 If the change touches only one side, still review whether a contract change was introduced implicitly.
 

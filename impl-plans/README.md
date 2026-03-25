@@ -5,6 +5,7 @@ This directory contains implementation plans that translate design documents int
 ## Purpose
 
 Implementation plans bridge design documents (what to build) and actual code (how to build). They provide:
+
 - Clear deliverables without code
 - Trait and function specifications
 - Dependency mapping for concurrent execution
@@ -27,26 +28,28 @@ impl-plans/
 
 **IMPORTANT**: Implementation plan files must stay under 400 lines to prevent OOM errors.
 
-| Metric | Limit |
-|--------|-------|
-| Line count | MAX 400 lines |
+| Metric           | Limit         |
+| ---------------- | ------------- |
+| Line count       | MAX 400 lines |
 | Modules per plan | MAX 8 modules |
-| Tasks per plan | MAX 10 tasks |
+| Tasks per plan   | MAX 10 tasks  |
 
 Large features are split into multiple related plans with cross-references.
 
 ## Active Plans
 
-| Plan | Status | Design Reference | Last Updated |
-|------|--------|------------------|--------------|
-| `markdown-workbench-first-slice.md` | Ready | `design-docs/specs/design-markdown-workbench.md` | 2026-03-19 |
-| `file-viewer-mode.md` | In Progress | `design-docs/specs/design-file-viewer-mode.md` | 2026-03-19 |
+| Plan                                | Status      | Design Reference                                                       | Last Updated |
+| ----------------------------------- | ----------- | ---------------------------------------------------------------------- | ------------ |
+| `markdown-workbench-first-slice.md` | Ready       | `design-docs/specs/design-markdown-workbench.md`                       | 2026-03-19   |
+| `file-viewer-mode.md`               | In Progress | `design-docs/specs/design-file-viewer-mode.md`                         | 2026-03-19   |
 
 ## Completed Plans
 
-| Plan | Completed | Design Reference |
-|------|-----------|------------------|
-| (No completed plans yet) | - | - |
+| Plan                           | Completed  | Design Reference                                             |
+| ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `linux-tauri-e2e-webdriver.md` | 2026-03-24 | `design-docs/specs/notes.md#linux-tauri-webdriver-e2e-notes` |
+| `browser-tests-to-tauri-e2e.md` | 2026-03-24 | `design-docs/specs/notes.md#browser-test-migration-to-tauri-e2e-notes` |
+| `real-runtime-only-verification.md` | 2026-03-24 | `design-docs/specs/notes.md#real-runtime-only-verification-notes` |
 
 ## Phase Dependencies (for impl-exec-auto)
 
@@ -55,11 +58,11 @@ Only plans from eligible phases should be read to minimize context loading.
 
 ### Phase Status
 
-| Phase | Status | Depends On |
-|-------|--------|------------|
-| 1 | READY | - |
-| 2 | BLOCKED | Phase 1 |
-| 3 | BLOCKED | Phase 2 |
+| Phase | Status  | Depends On |
+| ----- | ------- | ---------- |
+| 1     | READY   | -          |
+| 2     | BLOCKED | Phase 1    |
+| 3     | BLOCKED | Phase 2    |
 
 ### Phase to Plans Mapping
 
