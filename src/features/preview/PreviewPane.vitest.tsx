@@ -138,7 +138,13 @@ describe("PreviewPane", () => {
     });
   });
 
-  it("maps Mermaid theme colors from the active CSS custom properties", () => {
+  it("maps Mermaid theme colors from the active preview element", () => {
+    const root = document.getElementById("root");
+
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+
     const rootStyle = document.documentElement.style;
 
     rootStyle.setProperty("--markdown-surface", "#ffffff");
@@ -149,31 +155,50 @@ describe("PreviewPane", () => {
     rootStyle.setProperty("--markdown-border", "#d0d7de");
     rootStyle.setProperty("--font-sans", '"Segoe UI", sans-serif');
 
-    expect(mermaidThemeVariables()).toEqual({
-      background: "#ffffff",
-      primaryColor: "#f6f8fa",
-      primaryTextColor: "#1f2328",
-      primaryBorderColor: "#d0d7de",
-      secondaryColor: "#f6f8fa",
-      secondaryTextColor: "#1f2328",
-      secondaryBorderColor: "#d0d7de",
-      tertiaryColor: "#f6f8fa",
-      tertiaryTextColor: "#1f2328",
-      tertiaryBorderColor: "#d0d7de",
-      noteBkgColor: "#f6f8fa",
-      noteTextColor: "#1f2328",
-      noteBorderColor: "#d0d7de",
-      lineColor: "#d0d7de",
-      textColor: "#1f2328",
-      mainBkg: "#f6f8fa",
-      nodeBkg: "#f6f8fa",
-      nodeBorder: "#d0d7de",
-      clusterBkg: "#f6f8fa",
-      clusterBorder: "#d0d7de",
-      defaultLinkColor: "#59636e",
-      titleColor: "#0f172a",
-      edgeLabelBackground: "#ffffff",
-      nodeTextColor: "#1f2328",
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath={null}
+          html="<p>Mermaid theme probe</p>"
+          selectedAnchorId={null}
+          visible={true}
+        />
+      ),
+      root,
+    );
+
+    const preview = document.querySelector(".preview__content");
+
+    if (!(preview instanceof HTMLElement)) {
+      throw new Error("missing preview content element");
+    }
+
+    expect(mermaidThemeVariables(preview)).toEqual({
+      background: "#0d1117",
+      primaryColor: "#161b22",
+      primaryTextColor: "#c9d1d9",
+      primaryBorderColor: "#30363d",
+      secondaryColor: "#161b22",
+      secondaryTextColor: "#c9d1d9",
+      secondaryBorderColor: "#30363d",
+      tertiaryColor: "#161b22",
+      tertiaryTextColor: "#c9d1d9",
+      tertiaryBorderColor: "#30363d",
+      noteBkgColor: "#161b22",
+      noteTextColor: "#c9d1d9",
+      noteBorderColor: "#30363d",
+      lineColor: "#30363d",
+      textColor: "#c9d1d9",
+      mainBkg: "#161b22",
+      nodeBkg: "#161b22",
+      nodeBorder: "#30363d",
+      clusterBkg: "#161b22",
+      clusterBorder: "#30363d",
+      defaultLinkColor: "#8b949e",
+      titleColor: "#f0f6fc",
+      edgeLabelBackground: "#0d1117",
+      nodeTextColor: "#c9d1d9",
       fontFamily: '"Segoe UI", sans-serif',
       fontSize: "16px",
     });

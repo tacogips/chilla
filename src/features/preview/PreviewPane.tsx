@@ -115,26 +115,34 @@ interface MermaidThemeVariables {
   readonly fontSize: string;
 }
 
-function readCssVariable(name: string): string {
-  const value = getComputedStyle(document.documentElement)
+function readCssVariable(source: Element, name: string): string {
+  const value = getComputedStyle(source).getPropertyValue(name).trim();
+
+  if (value !== "") {
+    return value;
+  }
+
+  const rootValue = getComputedStyle(document.documentElement)
     .getPropertyValue(name)
     .trim();
 
-  if (value === "") {
-    throw new Error(`Missing CSS custom property: ${name}`);
+  if (rootValue !== "") {
+    return rootValue;
   }
 
-  return value;
+  throw new Error(`Missing CSS custom property: ${name}`);
 }
 
-export function mermaidThemeVariables(): MermaidThemeVariables {
-  const surface = readCssVariable("--markdown-surface");
-  const preBackground = readCssVariable("--markdown-pre-bg");
-  const foreground = readCssVariable("--markdown-fg");
-  const heading = readCssVariable("--markdown-heading");
-  const muted = readCssVariable("--markdown-muted");
-  const border = readCssVariable("--markdown-border");
-  const fontFamily = readCssVariable("--font-sans");
+export function mermaidThemeVariables(
+  source: Element = document.documentElement,
+): MermaidThemeVariables {
+  const surface = readCssVariable(source, "--markdown-surface");
+  const preBackground = readCssVariable(source, "--markdown-pre-bg");
+  const foreground = readCssVariable(source, "--markdown-fg");
+  const heading = readCssVariable(source, "--markdown-heading");
+  const muted = readCssVariable(source, "--markdown-muted");
+  const border = readCssVariable(source, "--markdown-border");
+  const fontFamily = readCssVariable(source, "--font-sans");
 
   return {
     background: surface,
@@ -166,9 +174,8 @@ export function mermaidThemeVariables(): MermaidThemeVariables {
   };
 }
 
-function mermaidThemeCss(colorScheme: ColorScheme): string {
-  const palette = markdownThemePalette(colorScheme);
-  const fontFamily = readCssVariable("--font-sans");
+function mermaidThemeCss(source: Element): string {
+  const palette = mermaidThemeVariables(source);
 
   return `
     .label text,
@@ -176,13 +183,13 @@ function mermaidThemeCss(colorScheme: ColorScheme): string {
     .edgeLabel,
     .cluster-label text,
     .flowchartTitleText {
-      fill: ${palette.foreground} !important;
-      color: ${palette.foreground} !important;
-      font-family: ${fontFamily} !important;
+      fill: ${palette.primaryTextColor} !important;
+      color: ${palette.primaryTextColor} !important;
+      font-family: ${palette.fontFamily} !important;
     }
 
     .edgeLabel rect {
-      fill: ${palette.surface} !important;
+      fill: ${palette.background} !important;
       opacity: 1 !important;
     }
 
@@ -196,8 +203,8 @@ function mermaidThemeCss(colorScheme: ColorScheme): string {
     .labelBox,
     .note,
     .note rect {
-      fill: ${palette.preBackground} !important;
-      stroke: ${palette.border} !important;
+      fill: ${palette.primaryColor} !important;
+      stroke: ${palette.primaryBorderColor} !important;
     }
 
     .edgePath .path,
@@ -205,7 +212,7 @@ function mermaidThemeCss(colorScheme: ColorScheme): string {
     marker path,
     .messageLine0,
     .messageLine1 {
-      stroke: ${palette.border} !important;
+      stroke: ${palette.primaryBorderColor} !important;
     }
   `;
 }
@@ -245,7 +252,12 @@ function enhanceKaTeX(container: HTMLElement): void {
 async function enhanceMermaid(
   container: HTMLElement,
   colorScheme: ColorScheme,
+  isCurrent: () => boolean,
 ) {
+  if (!isCurrent()) {
+    return;
+  }
+
   const mermaidBlocks = Array.from(
     container.querySelectorAll("pre > code.language-mermaid"),
   );
@@ -268,15 +280,24 @@ async function enhanceMermaid(
   }
 
   const mermaid = await getMermaid();
+
+  if (!isCurrent()) {
+    return;
+  }
+
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: "strict",
     darkMode: colorScheme === "dark",
     theme: colorScheme === "dark" ? "dark" : "neutral",
-    themeVariables: mermaidThemeVariables(),
-    themeCSS: mermaidThemeCss(colorScheme),
+    themeVariables: mermaidThemeVariables(container),
+    themeCSS: mermaidThemeCss(container),
   });
   const nodes = Array.from(container.querySelectorAll<HTMLElement>(".mermaid"));
+
+  if (!isCurrent()) {
+    return;
+  }
 
   if (nodes.length > 0) {
     await mermaid.run({ nodes });
@@ -424,7 +445,12 @@ async function enhancePreviewContent(
   container: HTMLElement,
   documentPath: string | null,
   colorScheme: ColorScheme,
+  isCurrent: () => boolean,
 ) {
+  if (!isCurrent()) {
+    return;
+  }
+
   for (const link of Array.from(
     container.querySelectorAll<HTMLAnchorElement>("a[href]"),
   )) {
@@ -436,14 +462,24 @@ async function enhancePreviewContent(
     }
   }
 
+  if (!isCurrent()) {
+    return;
+  }
+
   enhanceAsciinemaEmbeds(container);
   await enhancePreviewMedia(container, documentPath);
+
+  if (!isCurrent()) {
+    return;
+  }
+
   enhanceKaTeX(container);
-  await enhanceMermaid(container, colorScheme);
+  await enhanceMermaid(container, colorScheme, isCurrent);
 }
 
 export function PreviewPane(props: PreviewPaneProps) {
   let containerRef: HTMLDivElement | undefined;
+  let enhancementRunId = 0;
 
   onMount(() => {
     const container = containerRef;
@@ -494,16 +530,24 @@ export function PreviewPane(props: PreviewPaneProps) {
           return;
         }
 
+        const currentRunId = ++enhancementRunId;
         container.innerHTML = html;
 
-        void enhancePreviewContent(container, documentPath, colorScheme).catch(
-          () => {
-            // Leave the rendered markup intact if asset or Mermaid enhancement fails.
-          },
-        );
+        void enhancePreviewContent(
+          container,
+          documentPath,
+          colorScheme,
+          () => currentRunId === enhancementRunId,
+        ).catch(() => {
+          // Leave the rendered markup intact if asset or Mermaid enhancement fails.
+        });
       },
     ),
   );
+
+  onCleanup(() => {
+    enhancementRunId += 1;
+  });
 
   createEffect(() => {
     const anchorId = props.selectedAnchorId;
