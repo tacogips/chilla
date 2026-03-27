@@ -80,8 +80,16 @@ function isVideoPath(filePath: string): boolean {
   return /\.(mp4|m4v|mov|webm|ogv)$/i.test(filePath);
 }
 
+function isAudioPath(filePath: string): boolean {
+  return /\.(aac|flac|m4a|mp3|oga|ogg|opus|wav)$/i.test(filePath);
+}
+
 function mediaStreamUrl(preview: FilePreview | null): string | null {
-  if (preview?.kind !== "audio" && preview?.kind !== "video") {
+  if (
+    preview === null ||
+    !("stream_url" in preview) ||
+    (!isAudioPreview(preview) && !isVideoPreview(preview))
+  ) {
     return null;
   }
 
@@ -491,6 +499,40 @@ function previewHtml(preview: FilePreview | null): string {
     preview?.html ??
     '<section class="file-preview-empty"><p class="file-preview-empty__title">No file selected</p><p class="file-preview-empty__hint">Pick a file in the file tree to open it here.</p></section>'
   );
+}
+
+function previewMimeType(preview: FilePreview | null): string {
+  return preview?.mime_type ?? "";
+}
+
+function isAudioPreview(preview: FilePreview | null): boolean {
+  const mimeType = previewMimeType(preview);
+  const path = preview?.path ?? "";
+  return (
+    preview?.kind === "audio" ||
+    mimeType.startsWith("audio/") ||
+    isAudioPath(path)
+  );
+}
+
+function isVideoPreview(preview: FilePreview | null): boolean {
+  const mimeType = previewMimeType(preview);
+  const path = preview?.path ?? "";
+  return (
+    preview?.kind === "video" ||
+    mimeType.startsWith("video/") ||
+    isVideoPath(path)
+  );
+}
+
+function isPdfPreview(preview: FilePreview | null): boolean {
+  return preview?.kind === "pdf" || previewMimeType(preview) === "application/pdf";
+}
+
+function isMediaFilePreview(
+  preview: FilePreview | null,
+): preview is Extract<FilePreview, { path: string; file_name: string }> {
+  return isAudioPreview(preview) || isVideoPreview(preview);
 }
 
 interface LoadedDirectoryState {
@@ -1552,9 +1594,9 @@ export function WorkspaceShell() {
               when={
                 md() === null &&
                 fp() !== null &&
-                fp()!.kind !== "video" &&
-                fp()!.kind !== "audio" &&
-                fp()!.kind !== "pdf"
+                !isVideoPreview(fp()) &&
+                !isAudioPreview(fp()) &&
+                !isPdfPreview(fp())
               }
             >
               <PreviewPane
@@ -1566,7 +1608,7 @@ export function WorkspaceShell() {
               />
             </Show>
 
-            <Show when={md() === null && fp() !== null && fp()!.kind === "pdf"}>
+            <Show when={md() === null && isPdfPreview(fp())}>
               <PdfFilePreviewPane
                 path={fp()!.path}
                 fileName={fp()!.file_name}
@@ -1576,17 +1618,16 @@ export function WorkspaceShell() {
             <Show
               when={
                 md() === null &&
-                fp() !== null &&
-                (fp()!.kind === "video" || fp()!.kind === "audio")
+                isMediaFilePreview(fp())
               }
             >
               <MediaFilePreviewPane
-                kind={fp()!.kind === "audio" ? "audio" : "video"}
+                kind={isAudioPreview(fp()) ? "audio" : "video"}
                 path={fp()!.path}
                 streamUrl={mediaStreamUrl(fp())}
                 fileName={fp()!.file_name}
                 autoplayRequestId={
-                  fp()!.kind === "video" ? videoAutoplayRequestId() : 0
+                  isVideoPreview(fp()) ? videoAutoplayRequestId() : 0
                 }
               />
             </Show>

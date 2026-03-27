@@ -64,6 +64,7 @@ impl MediaStreamService {
         let canonical_path = std::fs::canonicalize(path)
             .map_err(|source| AppError::io("canonicalize media stream path", path, source))?;
         let token = self.new_entry_token(&canonical_path);
+        let canonical_path_display = canonical_path.display().to_string();
         let entry = MediaStreamEntry {
             path: canonical_path,
             mime_type: mime_type.to_string(),
@@ -73,6 +74,14 @@ impl MediaStreamService {
             .write()
             .map_err(|_| AppError::State("failed to lock media stream registry for write".to_string()))?
             .insert(token.clone(), entry);
+
+        eprintln!(
+            "[media-stream] register path={} mime_type={} token={} url=http://{STREAM_HOST}:{}/media/{token}",
+            canonical_path_display,
+            mime_type,
+            token,
+            self.port
+        );
 
         Ok(format!("http://{STREAM_HOST}:{}/media/{token}", self.port))
     }
@@ -146,7 +155,20 @@ fn handle_connection(
         }
     }
 
+    eprintln!(
+        "[media-stream] request method={} target={} range={}",
+        method,
+        target,
+        range_header.as_deref().unwrap_or("-")
+    );
+
     if method != "GET" && method != "HEAD" {
+        eprintln!(
+            "[media-stream] response status=405 path={} method={} target={}",
+            target,
+            method,
+            target
+        );
         write_response(
             &mut stream,
             "405 Method Not Allowed",
@@ -157,6 +179,12 @@ fn handle_connection(
     }
 
     let Some(token) = media_token_from_target(target) else {
+        eprintln!(
+            "[media-stream] response status=404 path={} method={} target={}",
+            target,
+            method,
+            target
+        );
         write_response(
             &mut stream,
             "404 Not Found",
@@ -171,6 +199,12 @@ fn handle_connection(
         .ok()
         .and_then(|registry| registry.get(token).cloned())
     else {
+        eprintln!(
+            "[media-stream] response status=404 path={} method={} token={}",
+            target,
+            method,
+            token
+        );
         write_response(
             &mut stream,
             "404 Not Found",
@@ -204,6 +238,11 @@ fn serve_file(
         Ok(None) => ("200 OK", 0, file_len.saturating_sub(1)),
         Err(()) => {
             let content_range = format!("bytes */{file_len}");
+            eprintln!(
+                "[media-stream] response status=416 path={} range={}",
+                entry.path.display(),
+                range_header.unwrap_or("-")
+            );
             write_response(
                 stream,
                 "416 Range Not Satisfiable",
@@ -243,11 +282,27 @@ fn serve_file(
         .collect::<Vec<_>>();
 
     if is_head || content_length == 0 {
+        eprintln!(
+            "[media-stream] response status={} path={} range={} head={}",
+            status,
+            entry.path.display(),
+            range_header.unwrap_or("-"),
+            is_head
+        );
         write_response(stream, status, &header_refs, None)?;
         return Ok(());
     }
 
     file.seek(SeekFrom::Start(start))?;
+    eprintln!(
+        "[media-stream] response status={} path={} range={} head={} bytes={}-{}",
+        status,
+        entry.path.display(),
+        range_header.unwrap_or("-"),
+        is_head,
+        start,
+        end
+    );
     write_response_head(stream, status, &header_refs)?;
     copy_n_bytes(&mut file, stream, content_length)
 }

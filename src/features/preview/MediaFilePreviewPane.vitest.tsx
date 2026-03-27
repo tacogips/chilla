@@ -354,8 +354,8 @@ describe("MediaFilePreviewPane", () => {
     );
   });
 
-  it("falls back to a blob URL for desktop local-stream playback failures", async () => {
-    linuxWebKitDesktop = true;
+  it("falls back to a blob URL for macOS audio stream failures", async () => {
+    macDesktopWebView = true;
 
     const root = document.getElementById("root");
 
@@ -369,15 +369,14 @@ describe("MediaFilePreviewPane", () => {
     }));
     const createObjectUrlMock = vi
       .spyOn(URL, "createObjectURL")
-      .mockReturnValue("blob:linux-inline-audio");
-
+      .mockReturnValue("blob:mac-inline-audio");
     vi.stubGlobal("fetch", fetchMock);
 
     dispose = render(
       () => (
         <MediaFilePreviewPane
           kind="audio"
-          path="/tmp/demo.mp3"
+          path={GENERIC_UPPERCASE_MP3_PATH}
           streamUrl="http://127.0.0.1:41234/media/demo-token"
           fileName="demo.mp3"
           autoplayRequestId={0}
@@ -400,6 +399,7 @@ describe("MediaFilePreviewPane", () => {
       "http://127.0.0.1:41234/media/demo-token",
     );
     expect(createObjectUrlMock).toHaveBeenCalledOnce();
-    expect(media.getAttribute("src")).toBe("blob:linux-inline-audio");
+    expect(media.getAttribute("src")).toBe("blob:mac-inline-audio");
+    expect(document.querySelector(".preview-video__error")).toBeNull();
   });
 });

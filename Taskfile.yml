@@ -13,10 +13,24 @@ tasks:
       - pkill -f "$PWD/node_modules/.bin/vite" || true
       - pkill -f "$PWD/target/debug/chilla" || true
 
+  clean-node-modules:
+    desc: Remove frontend dependencies and Bun/Vite build caches
+    cmds:
+      - rm -rf node_modules
+      - rm -rf .vite
+
   dev:
     desc: Run the desktop app in development mode
     cmds:
       - task: dev-stop
+      - rm -rf src-tauri/target/debug
+      - bun run tauri dev
+
+  dev-clean:
+    desc: Run the desktop app in development mode after building frontend assets
+    cmds:
+      - task: dev-stop
+      - bun run build
       - rm -rf src-tauri/target/debug
       - bun run tauri dev
 

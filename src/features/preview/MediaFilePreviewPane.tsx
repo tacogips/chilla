@@ -178,11 +178,11 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
       return;
     }
 
-    const assetSrc = resolvedMediaSrc();
     const generation = loadGeneration;
 
     try {
-      const response = await fetch(assetSrc);
+      const source = resolvedMediaSrc();
+      const response = await fetch(source);
 
       if (!response.ok) {
         throw new Error(`Failed to load media: HTTP ${response.status}`);
@@ -354,11 +354,7 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
                 onCanPlay={() => {
                   const media = mediaElement;
 
-                  if (
-                    !playRequested ||
-                    media === undefined ||
-                    !media.paused
-                  ) {
+                  if (!playRequested || media === undefined || !media.paused) {
                     return;
                   }
 
