@@ -203,6 +203,33 @@ describe("PreviewPane", () => {
       fontSize: "16px",
     });
   });
+
+  it("renders a custom subtitle when provided", () => {
+    const root = document.getElementById("root");
+
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath={null}
+          html="<p>Plain text preview</p>"
+          selectedAnchorId={null}
+          subtitle="File type: text/plain | File size: 10 B"
+          visible={true}
+        />
+      ),
+      root,
+    );
+
+    expect(document.body.textContent).toContain(
+      "File type: text/plain | File size: 10 B",
+    );
+    expect(document.body.textContent).not.toContain("Rendered HTML");
+  });
 });
 
 async function waitFor(

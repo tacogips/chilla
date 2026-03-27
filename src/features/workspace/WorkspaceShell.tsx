@@ -40,7 +40,7 @@ import type { FileBrowserSelectOptions } from "../file-view/FileBrowserPane";
 import { DEFAULT_FILE_TREE_SORT, DIRECTORY_PAGE_SIZE } from "../file-view/sort";
 import { PreviewPane } from "../preview/PreviewPane";
 import { PdfFilePreviewPane } from "../preview/PdfFilePreviewPane";
-import { VideoFilePreviewPane } from "../preview/VideoFilePreviewPane";
+import { MediaFilePreviewPane } from "../preview/MediaFilePreviewPane";
 import { TocPane } from "../toc/TocPane";
 import type { WorkspaceSelection } from "./state";
 
@@ -58,13 +58,18 @@ function resolveCurrentWindow() {
 const SELECTION_PREVIEW_DEBOUNCE_MS = 500;
 /** Binary / media previews: shorter wait while keeping debounce for text and Markdown. */
 const SELECTION_PREVIEW_DEBOUNCE_FAST_MS = 120;
+const SMALL_MEDIA_SEEK_SECONDS = 5;
 
 function selectionPreviewDebounceMsForPath(filePath: string): number {
   if (/\.(pdf|png|apng|jpe?g|gif|webp)$/i.test(filePath)) {
     return SELECTION_PREVIEW_DEBOUNCE_FAST_MS;
   }
 
-  if (/\.(mp4|m4v|mov|webm|ogv)$/i.test(filePath)) {
+  if (
+    /\.(mp4|m4v|mov|webm|ogv|aac|flac|m4a|mp3|oga|ogg|opus|wav)$/i.test(
+      filePath,
+    )
+  ) {
     return SELECTION_PREVIEW_DEBOUNCE_FAST_MS;
   }
 
@@ -75,7 +80,12 @@ function isVideoPath(filePath: string): boolean {
   return /\.(mp4|m4v|mov|webm|ogv)$/i.test(filePath);
 }
 
+function isAudioPath(filePath: string): boolean {
+  return /\.(aac|flac|m4a|mp3|oga|ogg|opus|wav)$/i.test(filePath);
+}
+
 type MarkdownPane = "raw" | "preview";
+type InferredPreviewKind = "audio" | "video" | "pdf" | "default";
 type ShortcutDefinition = {
   readonly keys: readonly string[];
   readonly description: string;
@@ -109,14 +119,24 @@ const SHORTCUT_SECTIONS: readonly {
         description: "Scroll document up",
       },
       {
-        keys: ["J", "↓"],
+        keys: ["J"],
         description:
-          "Scroll the active file view down one line when the file tree is hidden",
+          "When the file tree is hidden, move forward in the active document; media seeks 5 seconds",
       },
       {
-        keys: ["K", "↑"],
+        keys: ["K"],
         description:
-          "Scroll the active file view up one line when the file tree is hidden",
+          "When the file tree is hidden, move backward in the active document; media seeks 5 seconds",
+      },
+      {
+        keys: ["↓"],
+        description:
+          "Scroll the active text/Markdown document down one line when the file tree is hidden",
+      },
+      {
+        keys: ["↑"],
+        description:
+          "Scroll the active text/Markdown document up one line when the file tree is hidden",
       },
       {
         keys: ["Shift", "L"],
@@ -197,12 +217,25 @@ const SHORTCUT_SECTIONS: readonly {
     ],
   },
   {
-    title: "Video preview (file open)",
+    title: "Media preview (file open)",
     shortcuts: [
       {
         keys: ["Space"],
         description:
           "Play / pause (macOS/Windows when focus is outside the player), or open in default player (Linux)",
+      },
+      {
+        keys: ["J", "K"],
+        description:
+          "When the file tree is hidden, seek forward / back 5 seconds",
+      },
+      {
+        keys: ["Ctrl", "D"],
+        description: "Seek forward 15 seconds",
+      },
+      {
+        keys: ["Ctrl", "U"],
+        description: "Seek back 15 seconds",
       },
     ],
   },
@@ -387,6 +420,22 @@ function getActiveDocumentScrollBody(): HTMLElement | null {
   return pane.querySelector<HTMLElement>(".pane__body");
 }
 
+function getActiveDocumentMediaElement(): HTMLMediaElement | null {
+  const body = getActiveDocumentScrollBody();
+
+  if (body === null) {
+    return null;
+  }
+
+  const media = body.querySelector("video, audio");
+
+  return media instanceof HTMLMediaElement ? media : null;
+}
+
+function hasActiveDocumentMediaElement(): boolean {
+  return getActiveDocumentMediaElement() !== null;
+}
+
 function scrollActiveDocumentPane(direction: 1 | -1): void {
   const body = getActiveDocumentScrollBody();
 
@@ -413,6 +462,23 @@ function nudgeActiveDocumentPane(direction: 1 | -1): void {
   body.scrollTop += delta;
 }
 
+function seekActiveDocumentMediaElement(direction: 1 | -1): void {
+  const media = getActiveDocumentMediaElement();
+
+  if (media === null) {
+    return;
+  }
+
+  const unclampedTime =
+    media.currentTime + direction * SMALL_MEDIA_SEEK_SECONDS;
+  const duration = media.duration;
+  const nextTime = Number.isFinite(duration)
+    ? Math.min(Math.max(unclampedTime, 0), duration)
+    : Math.max(unclampedTime, 0);
+
+  media.currentTime = nextTime;
+}
+
 function previewPath(preview: FilePreview | null): string | null {
   return preview?.path ?? null;
 }
@@ -422,6 +488,93 @@ function previewHtml(preview: FilePreview | null): string {
     preview?.html ??
     '<section class="file-preview-empty"><p class="file-preview-empty__title">No file selected</p><p class="file-preview-empty__hint">Pick a file in the file tree to open it here.</p></section>'
   );
+}
+
+function previewMimeType(preview: FilePreview | null): string {
+  return preview?.mime_type ?? "";
+}
+
+function formatPreviewSize(sizeBytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = sizeBytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  if (unitIndex === 0) {
+    return `${sizeBytes} ${units[unitIndex]}`;
+  }
+
+  return `${size.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function previewSubtitle(preview: FilePreview | null): string {
+  if (preview?.kind === "text") {
+    return `File type: ${preview.file_type} | File size: ${formatPreviewSize(preview.size_bytes)}`;
+  }
+
+  if (preview?.kind === "binary") {
+    return `File type: Binary | File size: ${formatPreviewSize(preview.size_bytes)}`;
+  }
+
+  return "Rendered HTML";
+}
+
+function inferPreviewKind(preview: FilePreview | null): InferredPreviewKind {
+  if (preview === null) {
+    return "default";
+  }
+
+  const mimeType = previewMimeType(preview);
+  const path = preview?.path ?? "";
+
+  if (
+    preview.kind === "audio" ||
+    mimeType.startsWith("audio/") ||
+    isAudioPath(path)
+  ) {
+    return "audio";
+  }
+
+  if (
+    preview.kind === "video" ||
+    mimeType.startsWith("video/") ||
+    isVideoPath(path)
+  ) {
+    return "video";
+  }
+
+  if (preview.kind === "pdf" || mimeType === "application/pdf") {
+    return "pdf";
+  }
+
+  return "default";
+}
+
+function mediaPreviewKind(
+  preview: FilePreview | null,
+): "audio" | "video" | null {
+  const kind = inferPreviewKind(preview);
+  return kind === "audio" || kind === "video" ? kind : null;
+}
+
+function mediaStreamUrl(preview: FilePreview | null): string | null {
+  switch (preview?.kind) {
+    case "audio":
+    case "video":
+      return preview.stream_url;
+    default:
+      return null;
+  }
+}
+
+function isMediaFilePreview(
+  preview: FilePreview | null,
+): preview is Extract<FilePreview, { path: string; file_name: string }> {
+  return mediaPreviewKind(preview) !== null;
 }
 
 interface LoadedDirectoryState {
@@ -504,7 +657,15 @@ function matchesShortcut(
     readonly shift?: boolean;
   } = {},
 ) {
-  return event.key.toLowerCase() === key && hasExactModifiers(event, modifiers);
+  const shortcutCode =
+    key.length === 1 && key >= "a" && key <= "z"
+      ? `Key${key.toUpperCase()}`
+      : null;
+
+  return (
+    (event.key.toLowerCase() === key || event.code === shortcutCode) &&
+    hasExactModifiers(event, modifiers)
+  );
 }
 
 export function WorkspaceShell() {
@@ -1118,13 +1279,17 @@ export function WorkspaceShell() {
 
       if (matchesShortcut(event, "d", { ctrl: true })) {
         event.preventDefault();
-        scrollActiveDocumentPane(1);
+        if (!hasActiveDocumentMediaElement()) {
+          scrollActiveDocumentPane(1);
+        }
         return;
       }
 
       if (matchesShortcut(event, "u", { ctrl: true })) {
         event.preventDefault();
-        scrollActiveDocumentPane(-1);
+        if (!hasActiveDocumentMediaElement()) {
+          scrollActiveDocumentPane(-1);
+        }
         return;
       }
 
@@ -1135,13 +1300,35 @@ export function WorkspaceShell() {
       }
 
       if (!isFileTreeOpen()) {
-        if (matchesShortcut(event, "j") || event.key === "ArrowDown") {
+        const hasActiveMedia = hasActiveDocumentMediaElement();
+
+        if (matchesShortcut(event, "j")) {
+          event.preventDefault();
+          if (hasActiveMedia) {
+            seekActiveDocumentMediaElement(1);
+          } else {
+            nudgeActiveDocumentPane(1);
+          }
+          return;
+        }
+
+        if (matchesShortcut(event, "k")) {
+          event.preventDefault();
+          if (hasActiveMedia) {
+            seekActiveDocumentMediaElement(-1);
+          } else {
+            nudgeActiveDocumentPane(-1);
+          }
+          return;
+        }
+
+        if (!hasActiveMedia && event.key === "ArrowDown") {
           event.preventDefault();
           nudgeActiveDocumentPane(1);
           return;
         }
 
-        if (matchesShortcut(event, "k") || event.key === "ArrowUp") {
+        if (!hasActiveMedia && event.key === "ArrowUp") {
           event.preventDefault();
           nudgeActiveDocumentPane(-1);
           return;
@@ -1449,8 +1636,7 @@ export function WorkspaceShell() {
               when={
                 md() === null &&
                 fp() !== null &&
-                fp()!.kind !== "video" &&
-                fp()!.kind !== "pdf"
+                inferPreviewKind(fp()) === "default"
               }
             >
               <PreviewPane
@@ -1458,24 +1644,29 @@ export function WorkspaceShell() {
                 documentPath={previewPath(fp())}
                 html={previewHtml(fp())}
                 selectedAnchorId={null}
+                subtitle={previewSubtitle(fp())}
                 visible={true}
               />
             </Show>
 
-            <Show when={md() === null && fp() !== null && fp()!.kind === "pdf"}>
+            <Show when={md() === null && inferPreviewKind(fp()) === "pdf"}>
               <PdfFilePreviewPane
                 path={fp()!.path}
                 fileName={fp()!.file_name}
               />
             </Show>
 
-            <Show
-              when={md() === null && fp() !== null && fp()!.kind === "video"}
-            >
-              <VideoFilePreviewPane
+            <Show when={md() === null && isMediaFilePreview(fp())}>
+              <MediaFilePreviewPane
+                kind={mediaPreviewKind(fp())!}
                 path={fp()!.path}
+                streamUrl={mediaStreamUrl(fp())}
                 fileName={fp()!.file_name}
-                autoplayRequestId={videoAutoplayRequestId()}
+                autoplayRequestId={
+                  mediaPreviewKind(fp()) === "video"
+                    ? videoAutoplayRequestId()
+                    : 0
+                }
               />
             </Show>
 

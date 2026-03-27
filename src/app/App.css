@@ -693,6 +693,7 @@ button {
 
 .preview img,
 .preview video,
+.preview audio,
 .preview iframe,
 .preview embed {
   max-width: 100%;
@@ -736,9 +737,10 @@ button {
   color: var(--text-subtle);
 }
 
-/* File-view PDF / video: fill the document pane below the header. */
+/* File-view PDF / media: fill the document pane below the header. */
 .pane__body.preview.preview--embedded-pdf,
-.pane__body.preview.preview--embedded-video {
+.pane__body.preview.preview--embedded-video,
+.pane__body.preview.preview--embedded-audio {
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -765,6 +767,21 @@ button {
   width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+.pane__body.preview.preview--embedded-audio {
+  justify-content: center;
+  padding: 1.25rem;
+}
+
+.pane__body.preview.preview--embedded-audio .preview-media--audio {
+  margin: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.pane__body.preview.preview--embedded-audio audio {
+  width: min(100%, 42rem);
 }
 
 .pane__body.preview.preview--embedded-video.preview--video-external-linux {
@@ -1143,32 +1160,54 @@ button {
 }
 
 .file-browser__name {
+  position: relative;
   flex: 1;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+  --file-browser-name-scroll-distance: 0px;
+  --file-browser-name-scroll-duration: 4s;
 }
 
-.file-browser__name-display {
+.file-browser__name-static {
   display: block;
   overflow: hidden;
   white-space: nowrap;
 }
 
-.file-browser__name-tooltip {
-  z-index: 80;
-  margin: 0;
-  padding: 0.28rem 0.45rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
-  color: var(--text);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14);
-  font-family: var(--font-sans);
-  font-size: 0.72rem;
-  line-height: 1.35;
-  word-break: break-all;
+.file-browser__name-marquee {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  white-space: nowrap;
+  opacity: 0;
   pointer-events: none;
+  transform: translateX(0);
+  will-change: transform;
+}
+
+.file-browser__button:focus .file-browser__name[data-overflowing="true"] .file-browser__name-static {
+  opacity: 0;
+}
+
+.file-browser__button:focus .file-browser__name[data-overflowing="true"] .file-browser__name-marquee {
+  opacity: 1;
+  animation: file-browser-name-marquee var(--file-browser-name-scroll-duration)
+    linear infinite alternate;
+}
+
+@keyframes file-browser-name-marquee {
+  0%,
+  18% {
+    transform: translateX(0);
+  }
+
+  82%,
+  100% {
+    transform: translateX(calc(-1 * var(--file-browser-name-scroll-distance)));
+  }
 }
 
 .file-browser__status {

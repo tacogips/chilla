@@ -9,7 +9,6 @@ import {
   onCleanup,
   onMount,
 } from "solid-js";
-import { Portal } from "solid-js/web";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import type {
   DirectoryEntry,
@@ -87,26 +86,26 @@ interface FileBrowserPaneProps {
   readonly onNavigateToParent: () => void;
 }
 
-interface NameTooltipState {
-  readonly name: string;
-  readonly top: number;
-  readonly left: number;
-  readonly maxWidth: number;
-}
-
 function FileBrowserEntryName(props: { readonly name: string }) {
   let outer: HTMLSpanElement | undefined;
+  let marquee: HTMLSpanElement | undefined;
   let observer: ResizeObserver | undefined;
 
   const [shown, setShown] = createSignal(props.name);
+  const [overflowPx, setOverflowPx] = createSignal(0);
 
   const recompute = () => {
-    const el = outer;
-    if (el === undefined) {
+    const outerEl = outer;
+    const marqueeEl = marquee;
+    if (outerEl === undefined || marqueeEl === undefined) {
       return;
     }
-    const width = el.clientWidth;
-    const font = getComputedStyle(el).font;
+
+    const width = outerEl.clientWidth;
+    const font = getComputedStyle(outerEl).font;
+    const nextOverflow = Math.max(0, marqueeEl.scrollWidth - width);
+
+    setOverflowPx(nextOverflow);
     setShown(
       width <= 0 ? props.name : middleEllipsisForWidth(props.name, width, font),
     );
@@ -121,9 +120,21 @@ function FileBrowserEntryName(props: { readonly name: string }) {
     observer?.disconnect();
     observer = undefined;
     outer = el;
+
     if (el !== undefined) {
       observer = new ResizeObserver(recompute);
       observer.observe(el);
+      if (marquee !== undefined) {
+        observer.observe(marquee);
+      }
+      queueMicrotask(recompute);
+    }
+  };
+
+  const setMarqueeRef = (el: HTMLSpanElement | undefined) => {
+    marquee = el;
+    if (el !== undefined) {
+      observer?.observe(el);
       queueMicrotask(recompute);
     }
   };
@@ -132,16 +143,34 @@ function FileBrowserEntryName(props: { readonly name: string }) {
     observer?.disconnect();
   });
 
-  const truncated = () => shown() !== props.name;
+  const isOverflowing = createMemo(() => overflowPx() > 0);
+  const scrollDuration = createMemo(() => {
+    return `${Math.max(4, overflowPx() / 28).toFixed(2)}s`;
+  });
 
   return (
-    <span class="file-browser__name" ref={setOuterRef}>
+    <span
+      class="file-browser__name"
+      ref={setOuterRef}
+      data-overflowing={isOverflowing() ? "true" : "false"}
+      style={{
+        "--file-browser-name-scroll-distance": `${overflowPx()}px`,
+        "--file-browser-name-scroll-duration": scrollDuration(),
+      }}
+    >
       <span
-        class="file-browser__name-display"
+        class="file-browser__name-static"
         data-file-name-display=""
-        data-truncated={truncated() ? "true" : "false"}
+        data-truncated={isOverflowing() ? "true" : "false"}
       >
         {shown()}
+      </span>
+      <span
+        class="file-browser__name-marquee"
+        ref={setMarqueeRef}
+        aria-hidden="true"
+      >
+        {props.name}
       </span>
     </span>
   );
@@ -203,9 +232,6 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
   let bodyEl: HTMLDivElement | undefined;
   let listEl: HTMLUListElement | undefined;
   const filterInputId = createUniqueId();
-  const [nameTooltip, setNameTooltip] = createSignal<NameTooltipState | null>(
-    null,
-  );
 
   const filterInputFromDom = (): HTMLInputElement | null =>
     document.getElementById(filterInputId) as HTMLInputElement | null;
@@ -552,49 +578,8 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
     });
   });
 
-  const updateNameTooltipFromButton = (
-    button: HTMLButtonElement,
-    fullName: string,
-  ) => {
-    const display = button.querySelector<HTMLElement>(
-      "[data-file-name-display]",
-    );
-    if (display?.dataset["truncated"] !== "true") {
-      setNameTooltip(null);
-      return;
-    }
-    const rect = button.getBoundingClientRect();
-    setNameTooltip({
-      name: fullName,
-      top: rect.bottom + 6,
-      left: rect.left,
-      maxWidth: Math.max(rect.width, 240),
-    });
-  };
-
   return (
     <section class="pane">
-      <Portal>
-        <Show when={nameTooltip()}>
-          {(tip) => {
-            const t = tip();
-            return (
-              <div
-                class="file-browser__name-tooltip"
-                role="tooltip"
-                style={{
-                  position: "fixed",
-                  top: `${t.top}px`,
-                  left: `${t.left}px`,
-                  "max-width": `min(90vw, ${t.maxWidth}px)`,
-                }}
-              >
-                {t.name}
-              </div>
-            );
-          }}
-        </Show>
-      </Portal>
       <header class="pane__header">
         <span class="pane__title">File View</span>
         <span>
@@ -728,15 +713,6 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
                             playVideo: true,
                           });
                         }
-                      }}
-                      onFocusIn={(event) => {
-                        updateNameTooltipFromButton(
-                          event.currentTarget,
-                          entry.name,
-                        );
-                      }}
-                      onFocusOut={() => {
-                        setNameTooltip(null);
                       }}
                     >
                       <span class="file-browser__icon" aria-hidden="true">

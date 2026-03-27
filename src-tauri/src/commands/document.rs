@@ -14,6 +14,61 @@ fn format_command_error(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
+fn register_media_stream_url(
+    path: &str,
+    mime_type: &str,
+    state: &AppState,
+) -> Result<String, String> {
+    state
+        .media_stream_service()
+        .register_media_stream(Path::new(path), mime_type)
+        .map_err(format_command_error)
+}
+
+fn attach_media_stream_url(preview: FilePreview, state: &AppState) -> Result<FilePreview, String> {
+    match preview {
+        FilePreview::Audio {
+            path,
+            file_name,
+            mime_type,
+            html,
+            last_modified,
+            ..
+        } => {
+            let stream_url = register_media_stream_url(&path, &mime_type, state)?;
+
+            Ok(FilePreview::Audio {
+                path,
+                file_name,
+                mime_type,
+                stream_url: Some(stream_url),
+                html,
+                last_modified,
+            })
+        }
+        FilePreview::Video {
+            path,
+            file_name,
+            mime_type,
+            html,
+            last_modified,
+            ..
+        } => {
+            let stream_url = register_media_stream_url(&path, &mime_type, state)?;
+
+            Ok(FilePreview::Video {
+                path,
+                file_name,
+                mime_type,
+                stream_url: Some(stream_url),
+                html,
+                last_modified,
+            })
+        }
+        _ => Ok(preview),
+    }
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MarkdownPreviewOutput {
@@ -103,12 +158,22 @@ pub fn list_directory(
 }
 
 #[tauri::command]
-pub fn open_file_preview(path: String, state: State<'_, AppState>) -> Result<FilePreview, String> {
+pub async fn open_file_preview(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<FilePreview, String> {
     let theme = state.syntax_ui_theme();
-    state
-        .viewer_service()
-        .open_file_preview(Path::new(&path), theme)
-        .map_err(format_command_error)
+    let viewer_service = state.viewer_service();
+    let task_path = path.clone();
+
+    let preview = tauri::async_runtime::spawn_blocking(move || {
+        viewer_service.open_file_preview(Path::new(&task_path), theme)
+    })
+    .await
+    .map_err(format_command_error)?
+    .map_err(format_command_error)?;
+
+    attach_media_stream_url(preview, &state)
 }
 
 #[tauri::command]

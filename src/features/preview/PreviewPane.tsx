@@ -18,6 +18,7 @@ interface PreviewPaneProps {
   readonly selectedAnchorId: string | null;
   readonly documentPath: string | null;
   readonly colorScheme: ColorScheme;
+  readonly subtitle?: string;
 }
 
 interface MarkdownThemePalette {
@@ -565,7 +566,7 @@ export function PreviewPane(props: PreviewPaneProps) {
     <section class={`pane${props.visible ? "" : " pane--hidden"}`}>
       <header class="pane__header">
         <span class="pane__title">Preview</span>
-        <span>Rendered HTML</span>
+        <span>{props.subtitle ?? "Rendered HTML"}</span>
       </header>
       <div
         class="pane__body preview"

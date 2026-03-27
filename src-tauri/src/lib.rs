@@ -5,6 +5,7 @@ pub mod document;
 pub mod error;
 pub mod events;
 pub mod markdown;
+pub mod media_stream;
 pub mod syntax_highlight;
 pub mod viewer;
 pub mod watcher;
@@ -14,6 +15,7 @@ use tauri::Manager;
 use app_state::AppState;
 use cli::StartupTarget;
 use document::service::DocumentService;
+use media_stream::MediaStreamService;
 use viewer::service::ViewerService;
 use watcher::service::WatcherService;
 
@@ -26,6 +28,7 @@ pub fn run(startup_target: StartupTarget) -> Result<(), String> {
             let document_service = DocumentService::new();
             let viewer_service = ViewerService::new();
             let watcher_service = WatcherService::new();
+            let media_stream_service = MediaStreamService::new()?;
             let startup_context = viewer_service.startup_context(&startup_target)?;
 
             app.manage(AppState::new(
@@ -34,6 +37,7 @@ pub fn run(startup_target: StartupTarget) -> Result<(), String> {
                 document_service,
                 viewer_service,
                 watcher_service,
+                media_stream_service,
             ));
 
             Ok(())

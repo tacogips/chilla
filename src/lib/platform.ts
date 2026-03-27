@@ -13,3 +13,19 @@ export function isLinuxWebKitDesktop(): boolean {
 
   return /\bLinux\b/i.test(navigator.userAgent);
 }
+
+/** True when the UI likely runs Tauri's WKWebView on macOS. */
+export function isMacDesktopWebView(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  if (
+    typeof navigator.platform === "string" &&
+    navigator.platform.startsWith("Mac")
+  ) {
+    return true;
+  }
+
+  return /\bMac OS X\b/i.test(navigator.userAgent);
+}

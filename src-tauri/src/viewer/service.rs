@@ -58,6 +58,16 @@ const VIDEO_EXTENSION_MIME_TYPES: [(&str, &str); 5] = [
     ("ogv", "video/ogg"),
     ("webm", "video/webm"),
 ];
+const AUDIO_EXTENSION_MIME_TYPES: [(&str, &str); 8] = [
+    ("aac", "audio/aac"),
+    ("flac", "audio/flac"),
+    ("m4a", "audio/mp4"),
+    ("mp3", "audio/mpeg"),
+    ("oga", "audio/ogg"),
+    ("ogg", "audio/ogg"),
+    ("opus", "audio/ogg"),
+    ("wav", "audio/wav"),
+];
 const PDF_EXTENSION_MIME_TYPES: [(&str, &str); 1] = [("pdf", "application/pdf")];
 const MAX_DIRECTORY_PAGE_SIZE: usize = 200;
 
@@ -196,6 +206,10 @@ impl ViewerService {
             return self.open_video_preview(&file_path, mime_type);
         }
 
+        if mime_type.starts_with("audio/") {
+            return self.open_audio_preview(&file_path, mime_type);
+        }
+
         if mime_type == "application/pdf" {
             return self.open_pdf_preview(&file_path, mime_type);
         }
@@ -247,7 +261,22 @@ impl ViewerService {
             path: display_path(path),
             file_name: file_name.clone(),
             mime_type,
+            stream_url: None,
             // Playback uses the frontend `<video src={convertFileSrc(path)}>`; HTML unused.
+            html: String::new(),
+            last_modified: last_modified_string(path)?,
+        })
+    }
+
+    fn open_audio_preview(&self, path: &Path, mime_type: String) -> AppResult<FilePreview> {
+        let file_name = file_name(path);
+
+        Ok(FilePreview::Audio {
+            path: display_path(path),
+            file_name: file_name.clone(),
+            mime_type,
+            stream_url: None,
+            // Playback uses the frontend `<audio src={convertFileSrc(path)}>`; HTML unused.
             html: String::new(),
             last_modified: last_modified_string(path)?,
         })
@@ -274,13 +303,13 @@ impl ViewerService {
     ) -> AppResult<FilePreview> {
         let file_bytes = fs::read(path).map_err(|source| AppError::io("read", path, source))?;
         let source_text = String::from_utf8_lossy(&file_bytes);
-        let syntax_name = syntax_highlight::describe_file_syntax(path);
+        let file_type = syntax_highlight::describe_file_syntax(path);
         let highlighted_html =
             syntax_highlight::highlight_file_source(&source_text, path, ui_theme);
         let html = format!(
-            "<section class=\"file-preview file-preview--text\"><p class=\"file-preview__meta\">Syntax: {} | Detected type: {}</p>{}</section>",
-            escape_html_text(&syntax_name),
-            escape_html_text(&mime_type),
+            "<section class=\"file-preview file-preview--text\"><p class=\"file-preview__meta\">File type: {} | File size: {}</p>{}</section>",
+            escape_html_text(&file_type),
+            escape_html_text(&format_file_size(file_bytes.len() as u64)),
             highlighted_html,
         );
 
@@ -288,7 +317,9 @@ impl ViewerService {
             path: display_path(path),
             file_name: file_name(path),
             mime_type,
+            file_type,
             html,
+            size_bytes: file_bytes.len() as u64,
             last_modified: last_modified_string(path)?,
         })
     }
@@ -306,6 +337,9 @@ impl ViewerService {
                 escape_html_text(&mime_type),
             ),
             last_modified: last_modified_string(path)?,
+            size_bytes: fs::metadata(path)
+                .map_err(|source| AppError::io("read metadata for", path, source))?
+                .len(),
             message,
         })
     }
@@ -357,6 +391,24 @@ fn parent_directory_path(path: &Path) -> AppResult<PathBuf> {
     path.parent()
         .map(Path::to_path_buf)
         .ok_or_else(|| AppError::NotADirectory(display_path(path)))
+}
+
+fn format_file_size(size_bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+
+    let mut size = size_bytes as f64;
+    let mut unit_index = 0;
+
+    while size >= 1024.0 && unit_index < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit_index += 1;
+    }
+
+    if unit_index == 0 {
+        format!("{size_bytes} {}", UNITS[unit_index])
+    } else {
+        format!("{size:.1} {}", UNITS[unit_index])
+    }
 }
 
 fn normalize_directory_page_limit(limit: usize) -> usize {
@@ -661,6 +713,7 @@ fn is_text_preview_extension(path: &Path) -> bool {
 fn fallback_media_mime_type<'a>(path: &Path, detected_mime_type: &'a str) -> Option<&'a str> {
     if detected_mime_type.starts_with("image/")
         || detected_mime_type.starts_with("video/")
+        || detected_mime_type.starts_with("audio/")
         || detected_mime_type == "application/pdf"
     {
         return None;
@@ -674,6 +727,7 @@ fn fallback_media_mime_type<'a>(path: &Path, detected_mime_type: &'a str) -> Opt
     IMAGE_EXTENSION_MIME_TYPES
         .iter()
         .chain(VIDEO_EXTENSION_MIME_TYPES.iter())
+        .chain(AUDIO_EXTENSION_MIME_TYPES.iter())
         .chain(PDF_EXTENSION_MIME_TYPES.iter())
         .find_map(|(candidate_extension, candidate_mime_type)| {
             (extension == *candidate_extension).then_some(*candidate_mime_type)
@@ -775,6 +829,10 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.path);
         }
+    }
+
+    fn repository_fixture_path(relative_path: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path)
     }
 
     #[test]
@@ -976,6 +1034,7 @@ mod tests {
         let text_path = test_dir.path().join("notes.txt");
         let image_path = test_dir.path().join("photo.png");
         let video_path = test_dir.path().join("clip.mp4");
+        let audio_path = test_dir.path().join("podcast.mp3");
         let pdf_path = test_dir.path().join("notes.pdf");
         let binary_path = test_dir.path().join("asset.bin");
 
@@ -991,6 +1050,7 @@ mod tests {
             [0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109],
         )
         .expect("write mp4 header");
+        fs::write(&audio_path, [73, 68, 51, 4, 0, 0, 0, 0, 0, 0]).expect("write mp3 header");
         fs::write(
             &pdf_path,
             b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
@@ -1021,10 +1081,13 @@ mod tests {
             .open_file_preview(&text_path, SyntaxUiTheme::Dark)
             .expect("text preview")
         {
-            FilePreview::Text { html, .. } => {
-                assert!(html.contains("Syntax: Plain Text | Detected type:"));
+            FilePreview::Text {
+                html, size_bytes, ..
+            } => {
+                assert!(html.contains("File type: Plain Text | File size: 10 B"));
                 assert!(html.contains("<pre"));
                 assert!(html.contains("plain text"));
+                assert_eq!(size_bytes, 10);
                 assert!(
                     html.contains("style=") && html.contains("<span"),
                     "expected syntect-highlighted HTML, got: {html}"
@@ -1048,11 +1111,34 @@ mod tests {
             .open_file_preview(&video_path, SyntaxUiTheme::Dark)
             .expect("video preview")
         {
-            FilePreview::Video { html, path, .. } => {
+            FilePreview::Video {
+                html,
+                path,
+                stream_url,
+                ..
+            } => {
                 assert!(html.is_empty());
                 assert!(path.ends_with("clip.mp4"));
+                assert!(stream_url.is_none());
             }
             _ => panic!("expected video preview"),
+        }
+
+        match viewer_service
+            .open_file_preview(&audio_path, SyntaxUiTheme::Dark)
+            .expect("audio preview")
+        {
+            FilePreview::Audio {
+                html,
+                path,
+                stream_url,
+                ..
+            } => {
+                assert!(html.is_empty());
+                assert!(path.ends_with("podcast.mp3"));
+                assert!(stream_url.is_none());
+            }
+            _ => panic!("expected audio preview"),
         }
 
         match viewer_service
@@ -1074,6 +1160,54 @@ mod tests {
                 assert_eq!(message, "Binary file preview is not available.");
             }
             _ => panic!("expected binary preview"),
+        }
+    }
+
+    #[test]
+    fn open_file_preview_opens_real_mp3_fixture_as_audio() {
+        let audio_path = repository_fixture_path("tests/fixtures/file_example_MP3_1MG.mp3");
+
+        match ViewerService::new()
+            .open_file_preview(&audio_path, SyntaxUiTheme::Dark)
+            .expect("audio preview")
+        {
+            FilePreview::Audio {
+                html,
+                path,
+                mime_type,
+                stream_url,
+                ..
+            } => {
+                assert!(html.is_empty());
+                assert!(path.ends_with("file_example_MP3_1MG.mp3"));
+                assert_eq!(mime_type, "audio/mpeg");
+                assert!(stream_url.is_none());
+            }
+            _ => panic!("expected audio preview"),
+        }
+    }
+
+    #[test]
+    fn open_file_preview_opens_real_mp4_fixture_as_video() {
+        let video_path = repository_fixture_path("tests/fixtures/file_example_MP4_480_1_5MG.mp4");
+
+        match ViewerService::new()
+            .open_file_preview(&video_path, SyntaxUiTheme::Dark)
+            .expect("video preview")
+        {
+            FilePreview::Video {
+                html,
+                path,
+                mime_type,
+                stream_url,
+                ..
+            } => {
+                assert!(html.is_empty());
+                assert!(path.ends_with("file_example_MP4_480_1_5MG.mp4"));
+                assert_eq!(mime_type, "video/mp4");
+                assert!(stream_url.is_none());
+            }
+            _ => panic!("expected video preview"),
         }
     }
 
@@ -1127,8 +1261,13 @@ mod tests {
             .open_file_preview(&shell_path, SyntaxUiTheme::Dark)
             .expect("shell preview")
         {
-            FilePreview::Text { html, .. } => {
-                assert!(html.contains("Syntax: Shell | Detected type:"));
+            FilePreview::Text {
+                html, size_bytes, ..
+            } => {
+                assert!(html.contains("File type: Shell | File size: "));
+                assert!(html.contains(" | File size: "));
+                assert!(!html.contains("Syntax:"));
+                assert_eq!(size_bytes, 31);
             }
             _ => panic!("expected text preview for shell"),
         }
@@ -1137,8 +1276,13 @@ mod tests {
             .open_file_preview(&zsh_path, SyntaxUiTheme::Dark)
             .expect("zsh preview")
         {
-            FilePreview::Text { html, .. } => {
-                assert!(html.contains("Syntax: Shell | Detected type:"));
+            FilePreview::Text {
+                html, size_bytes, ..
+            } => {
+                assert!(html.contains("File type: Shell | File size: "));
+                assert!(html.contains(" | File size: "));
+                assert!(!html.contains("Syntax:"));
+                assert_eq!(size_bytes, 9);
             }
             _ => panic!("expected text preview for zsh"),
         }
@@ -1147,8 +1291,13 @@ mod tests {
             .open_file_preview(&nix_path, SyntaxUiTheme::Dark)
             .expect("nix preview")
         {
-            FilePreview::Text { html, .. } => {
-                assert!(html.contains("Syntax: Nix | Detected type:"));
+            FilePreview::Text {
+                html, size_bytes, ..
+            } => {
+                assert!(html.contains("File type: Nix | File size: "));
+                assert!(html.contains(" | File size: "));
+                assert!(!html.contains("Syntax:"));
+                assert_eq!(size_bytes, 55);
             }
             _ => panic!("expected text preview for nix"),
         }

@@ -4,6 +4,7 @@ use tauri::AppHandle;
 
 use crate::{
     document::service::DocumentService,
+    media_stream::MediaStreamService,
     syntax_highlight::SyntaxUiTheme,
     viewer::{service::ViewerService, types::StartupContext},
     watcher::service::WatcherService,
@@ -15,6 +16,7 @@ pub struct AppState {
     document_service: DocumentService,
     viewer_service: ViewerService,
     watcher_service: WatcherService,
+    media_stream_service: MediaStreamService,
     syntax_ui_theme: Arc<RwLock<SyntaxUiTheme>>,
 }
 
@@ -25,6 +27,7 @@ impl AppState {
         document_service: DocumentService,
         viewer_service: ViewerService,
         watcher_service: WatcherService,
+        media_stream_service: MediaStreamService,
     ) -> Self {
         Self {
             startup_context,
@@ -32,6 +35,7 @@ impl AppState {
             document_service,
             viewer_service,
             watcher_service,
+            media_stream_service,
             syntax_ui_theme: Arc::new(RwLock::new(SyntaxUiTheme::Dark)),
         }
     }
@@ -71,5 +75,9 @@ impl AppState {
 
     pub fn watcher_service(&self) -> WatcherService {
         self.watcher_service.clone()
+    }
+
+    pub fn media_stream_service(&self) -> MediaStreamService {
+        self.media_stream_service.clone()
     }
 }

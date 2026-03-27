@@ -15,9 +15,8 @@ The following content types are strictly prohibited in any output files:
 - Never include absolute filesystem paths from the host machine
 - Use relative paths from project root instead
 - Examples of prohibited patterns:
-  - `/home/username/...`
-  - `/Users/username/...`
-  - `C:\Users\username\...`
+  - `/absolute/host/path/...`
+  - `C:\absolute\host\path\...`
 
 ### 2. Credential Information
 
@@ -43,7 +42,7 @@ Never include any of the following:
 
 ```typescript
 // BAD - Exposes host path
-const configPath = '/home/user/projects/myapp/config.json';
+const configPath = '/absolute/host/path/config.json';
 
 // GOOD - Uses relative path
 const configPath = './config.json';
@@ -55,7 +54,7 @@ const configPath = path.join(__dirname, 'config.json');
 
 ```markdown
 <!-- BAD -->
-Project located at: /home/developer/workspace/project
+Project located at: /absolute/host/path/project
 
 <!-- GOOD -->
 Project located at: ./project (relative to workspace root)
