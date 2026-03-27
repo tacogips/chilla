@@ -248,10 +248,8 @@ fn serve_file(
     }
 
     file.seek(SeekFrom::Start(start))?;
-    let mut limited = file.take(content_length);
-    let mut body = Vec::with_capacity(content_length.min(64 * 1024) as usize);
-    limited.read_to_end(&mut body)?;
-    write_response(stream, status, &header_refs, Some(&body))
+    write_response_head(stream, status, &header_refs)?;
+    copy_n_bytes(&mut file, stream, content_length)
 }
 
 fn parse_range(range_header: Option<&str>, file_len: u64) -> Result<Option<(u64, u64)>, ()> {
@@ -305,20 +303,54 @@ fn write_response(
     headers: &[(&str, &str)],
     body: Option<&[u8]>,
 ) -> io::Result<()> {
-    write!(stream, "HTTP/1.1 {status}\r\n")?;
-    for (name, value) in headers {
-        write!(stream, "{name}: {value}\r\n")?;
-    }
-    write!(stream, "Connection: close\r\n\r\n")?;
+    write_response_head(stream, status, headers)?;
     if let Some(body) = body {
         stream.write_all(body)?;
     }
     stream.flush()
 }
 
+fn write_response_head(
+    stream: &mut TcpStream,
+    status: &str,
+    headers: &[(&str, &str)],
+) -> io::Result<()> {
+    write!(stream, "HTTP/1.1 {status}\r\n")?;
+    for (name, value) in headers {
+        write!(stream, "{name}: {value}\r\n")?;
+    }
+    write!(stream, "Connection: close\r\n\r\n")
+}
+
+fn copy_n_bytes<R: Read, W: Write>(reader: &mut R, writer: &mut W, len: u64) -> io::Result<()> {
+    const COPY_BUFFER_LEN: usize = 64 * 1024;
+
+    let mut remaining = len;
+    let mut buffer = [0_u8; COPY_BUFFER_LEN];
+
+    while remaining > 0 {
+        let bytes_to_read = remaining.min(COPY_BUFFER_LEN as u64) as usize;
+        let read_len = reader.read(&mut buffer[..bytes_to_read])?;
+
+        if read_len == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "media stream source ended before the declared content length",
+            ));
+        }
+
+        writer.write_all(&buffer[..read_len])?;
+        remaining -= read_len as u64;
+    }
+
+    writer.flush()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse_range;
+    use std::io::Cursor;
+
+    use super::{copy_n_bytes, parse_range};
 
     #[test]
     fn parse_range_supports_open_and_suffix_ranges() {
@@ -332,5 +364,18 @@ mod tests {
         assert_eq!(parse_range(Some("bytes=200-300"), 200), Err(()));
         assert_eq!(parse_range(Some("items=0-10"), 200), Err(()));
         assert_eq!(parse_range(Some("bytes=99-10"), 200), Err(()));
+    }
+
+    #[test]
+    fn copy_n_bytes_streams_large_payloads_without_truncation() {
+        let source = (0..150_000)
+            .map(|value| (value % 251) as u8)
+            .collect::<Vec<_>>();
+        let mut reader = Cursor::new(source.clone());
+        let mut writer = Vec::new();
+
+        copy_n_bytes(&mut reader, &mut writer, source.len() as u64).unwrap();
+
+        assert_eq!(writer, source);
     }
 }
