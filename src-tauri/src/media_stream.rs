@@ -60,7 +60,7 @@ impl MediaStreamService {
         })
     }
 
-    pub fn register_audio_stream(&self, path: &Path, mime_type: &str) -> AppResult<String> {
+    pub fn register_media_stream(&self, path: &Path, mime_type: &str) -> AppResult<String> {
         let canonical_path = std::fs::canonicalize(path)
             .map_err(|source| AppError::io("canonicalize media stream path", path, source))?;
         let token = self.new_entry_token(&canonical_path);

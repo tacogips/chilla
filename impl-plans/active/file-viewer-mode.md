@@ -270,3 +270,9 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
 **Notes**: This avoids repeating the same inline audio failure mode across the two desktop WebView stacks used by Tauri in this repository while preserving embedded video where the current UX already depends on it.
+
+### Session: 2026-03-27 JST
+**Tasks Completed**: Replaced the eager MP3 decode path with a localhost media stream service for desktop audio playback, then extended the same stream-backed transport to MP4 previews so large media files use HTTP range requests for inline playback instead of direct `asset://` loading.
+**Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: The frontend preview contract now carries optional `stream_url` values for desktop audio and video previews, and Linux Tauri E2E covers both MP3 and MP4 through the localhost stream path.

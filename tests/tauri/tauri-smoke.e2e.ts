@@ -347,7 +347,7 @@ async function verifyVideoPreview(currentDriver: WebDriver): Promise<void> {
       "video",
     )) as MediaElementState;
     return (
-      (state.attributeSrc.includes(FIXTURE_MP4_NAME) ||
+      (state.attributeSrc.startsWith("http://127.0.0.1:") ||
         state.attributeSrc.startsWith("blob:tauri://localhost/")) &&
       state.errorCode === null
     );
@@ -363,11 +363,11 @@ async function verifyVideoPreview(currentDriver: WebDriver): Promise<void> {
   }
 
   if (
-    !state.attributeSrc.includes(FIXTURE_MP4_NAME) &&
+    !state.attributeSrc.startsWith("http://127.0.0.1:") &&
     !state.attributeSrc.startsWith("blob:tauri://localhost/")
   ) {
     throw new Error(
-      `Expected inline video src attribute to include ${FIXTURE_MP4_NAME} or a Linux blob fallback URL, got ${JSON.stringify(state.attributeSrc)}`,
+      `Expected inline video src attribute to use the localhost stream URL or a Linux blob fallback URL, got ${JSON.stringify(state.attributeSrc)}`,
     );
   }
 
