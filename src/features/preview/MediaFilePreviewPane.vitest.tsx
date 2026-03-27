@@ -27,7 +27,7 @@ describe("MediaFilePreviewPane", () => {
     document.body.innerHTML = "";
   });
 
-  it("seeks video playback with small and large shortcuts", () => {
+  it("seeks video playback with large shortcuts", () => {
     const root = document.getElementById("root");
 
     if (root === null) {
@@ -60,20 +60,12 @@ describe("MediaFilePreviewPane", () => {
 
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
-        key: "f",
-        bubbles: true,
-      }),
-    );
-    expect(media.currentTime).toBe(15);
-
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", {
         key: "d",
         ctrlKey: true,
         bubbles: true,
       }),
     );
-    expect(media.currentTime).toBe(30);
+    expect(media.currentTime).toBe(25);
 
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -82,18 +74,10 @@ describe("MediaFilePreviewPane", () => {
         bubbles: true,
       }),
     );
-    expect(media.currentTime).toBe(15);
-
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "b",
-        bubbles: true,
-      }),
-    );
     expect(media.currentTime).toBe(10);
   });
 
-  it("seeks audio playback with small and large shortcuts", () => {
+  it("seeks audio playback with large shortcuts", () => {
     const root = document.getElementById("root");
 
     if (root === null) {
@@ -126,11 +110,12 @@ describe("MediaFilePreviewPane", () => {
 
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
-        key: "b",
+        key: "d",
+        ctrlKey: true,
         bubbles: true,
       }),
     );
-    expect(media.currentTime).toBe(0);
+    expect(media.currentTime).toBe(18);
 
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -139,24 +124,7 @@ describe("MediaFilePreviewPane", () => {
         bubbles: true,
       }),
     );
-    expect(media.currentTime).toBe(0);
-
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "f",
-        bubbles: true,
-      }),
-    );
-    expect(media.currentTime).toBe(5);
-
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "d",
-        ctrlKey: true,
-        bubbles: true,
-      }),
-    );
-    expect(media.currentTime).toBe(20);
+    expect(media.currentTime).toBe(3);
   });
 
   it("accepts physical key codes for media seek shortcuts", () => {
@@ -193,11 +161,12 @@ describe("MediaFilePreviewPane", () => {
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "Process",
-        code: "KeyF",
+        code: "KeyD",
+        ctrlKey: true,
         bubbles: true,
       }),
     );
-    expect(media.currentTime).toBe(15);
+    expect(media.currentTime).toBe(25);
 
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -207,7 +176,7 @@ describe("MediaFilePreviewPane", () => {
         bubbles: true,
       }),
     );
-    expect(media.currentTime).toBe(0);
+    expect(media.currentTime).toBe(10);
   });
 
   it("does not hijack shortcuts when the native media element is the event target", () => {
@@ -240,14 +209,6 @@ describe("MediaFilePreviewPane", () => {
       value: 120,
     });
     media.currentTime = 30;
-
-    media.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "f",
-        bubbles: true,
-      }),
-    );
-    expect(media.currentTime).toBe(30);
 
     media.dispatchEvent(
       new KeyboardEvent("keydown", {

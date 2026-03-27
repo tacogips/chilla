@@ -10,7 +10,6 @@ interface MediaFilePreviewPaneProps {
   readonly autoplayRequestId: number;
 }
 
-const SMALL_MEDIA_SEEK_SECONDS = 5;
 const LARGE_MEDIA_SEEK_SECONDS = 15;
 
 function PlayGlyph() {
@@ -243,18 +242,6 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
         return;
       }
 
-      if (matchesShortcut(event, "f")) {
-        event.preventDefault();
-        seekBy(SMALL_MEDIA_SEEK_SECONDS);
-        return;
-      }
-
-      if (matchesShortcut(event, "b")) {
-        event.preventDefault();
-        seekBy(-SMALL_MEDIA_SEEK_SECONDS);
-        return;
-      }
-
       if (event.key !== " " && event.code !== "Space") {
         return;
       }
@@ -287,8 +274,8 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
       <header class="pane__header">
         <span class="pane__title">Preview</span>
         <span>
-          {isVideo() ? "Video" : "Audio"} (Space: play / pause, F/B: +/-5s,
-          Ctrl-D/Ctrl-U: +/-15s)
+          {isVideo() ? "Video" : "Audio"} (Space: play / pause, J/K: +/-5s when
+          the file tree is hidden, Ctrl-D/Ctrl-U: +/-15s)
         </span>
       </header>
       <div

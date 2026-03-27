@@ -58,6 +58,7 @@ function resolveCurrentWindow() {
 const SELECTION_PREVIEW_DEBOUNCE_MS = 500;
 /** Binary / media previews: shorter wait while keeping debounce for text and Markdown. */
 const SELECTION_PREVIEW_DEBOUNCE_FAST_MS = 120;
+const SMALL_MEDIA_SEEK_SECONDS = 5;
 
 function selectionPreviewDebounceMsForPath(filePath: string): number {
   if (/\.(pdf|png|apng|jpe?g|gif|webp)$/i.test(filePath)) {
@@ -113,24 +114,24 @@ const SHORTCUT_SECTIONS: readonly {
         description: "Scroll document up",
       },
       {
-        keys: ["F"],
+        keys: ["J"],
         description:
-          "Small forward step in the active document (one line for text/Markdown)",
+          "When the file tree is hidden, move forward in the active document; media seeks 5 seconds",
       },
       {
-        keys: ["B"],
+        keys: ["K"],
         description:
-          "Small backward step in the active document (one line for text/Markdown)",
+          "When the file tree is hidden, move backward in the active document; media seeks 5 seconds",
       },
       {
-        keys: ["J", "↓"],
+        keys: ["↓"],
         description:
-          "Scroll the active file view down one line when the file tree is hidden",
+          "Scroll the active text/Markdown document down one line when the file tree is hidden",
       },
       {
-        keys: ["K", "↑"],
+        keys: ["↑"],
         description:
-          "Scroll the active file view up one line when the file tree is hidden",
+          "Scroll the active text/Markdown document up one line when the file tree is hidden",
       },
       {
         keys: ["Shift", "L"],
@@ -219,8 +220,9 @@ const SHORTCUT_SECTIONS: readonly {
           "Play / pause (macOS/Windows when focus is outside the player), or open in default player (Linux)",
       },
       {
-        keys: ["F", "B"],
-        description: "Seek forward / back 5 seconds",
+        keys: ["J", "K"],
+        description:
+          "When the file tree is hidden, seek forward / back 5 seconds",
       },
       {
         keys: ["Ctrl", "D"],
@@ -413,14 +415,20 @@ function getActiveDocumentScrollBody(): HTMLElement | null {
   return pane.querySelector<HTMLElement>(".pane__body");
 }
 
-function hasActiveDocumentMediaElement(): boolean {
+function getActiveDocumentMediaElement(): HTMLMediaElement | null {
   const body = getActiveDocumentScrollBody();
 
   if (body === null) {
-    return false;
+    return null;
   }
 
-  return body.querySelector("video, audio") !== null;
+  const media = body.querySelector("video, audio");
+
+  return media instanceof HTMLMediaElement ? media : null;
+}
+
+function hasActiveDocumentMediaElement(): boolean {
+  return getActiveDocumentMediaElement() !== null;
 }
 
 function scrollActiveDocumentPane(direction: 1 | -1): void {
@@ -447,6 +455,23 @@ function nudgeActiveDocumentPane(direction: 1 | -1): void {
     (Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 24) *
     direction;
   body.scrollTop += delta;
+}
+
+function seekActiveDocumentMediaElement(direction: 1 | -1): void {
+  const media = getActiveDocumentMediaElement();
+
+  if (media === null) {
+    return;
+  }
+
+  const unclampedTime =
+    media.currentTime + direction * SMALL_MEDIA_SEEK_SECONDS;
+  const duration = media.duration;
+  const nextTime = Number.isFinite(duration)
+    ? Math.min(Math.max(unclampedTime, 0), duration)
+    : Math.max(unclampedTime, 0);
+
+  media.currentTime = nextTime;
 }
 
 function previewPath(preview: FilePreview | null): string | null {
@@ -1176,22 +1201,6 @@ export function WorkspaceShell() {
         return;
       }
 
-      if (matchesShortcut(event, "f")) {
-        event.preventDefault();
-        if (!hasActiveDocumentMediaElement()) {
-          nudgeActiveDocumentPane(1);
-        }
-        return;
-      }
-
-      if (matchesShortcut(event, "b")) {
-        event.preventDefault();
-        if (!hasActiveDocumentMediaElement()) {
-          nudgeActiveDocumentPane(-1);
-        }
-        return;
-      }
-
       if (matchesShortcut(event, "l", { shift: true })) {
         event.preventDefault();
         setFileTreeOpen((value) => !value);
@@ -1199,13 +1208,35 @@ export function WorkspaceShell() {
       }
 
       if (!isFileTreeOpen()) {
-        if (matchesShortcut(event, "j") || event.key === "ArrowDown") {
+        const hasActiveMedia = hasActiveDocumentMediaElement();
+
+        if (matchesShortcut(event, "j")) {
+          event.preventDefault();
+          if (hasActiveMedia) {
+            seekActiveDocumentMediaElement(1);
+          } else {
+            nudgeActiveDocumentPane(1);
+          }
+          return;
+        }
+
+        if (matchesShortcut(event, "k")) {
+          event.preventDefault();
+          if (hasActiveMedia) {
+            seekActiveDocumentMediaElement(-1);
+          } else {
+            nudgeActiveDocumentPane(-1);
+          }
+          return;
+        }
+
+        if (!hasActiveMedia && event.key === "ArrowDown") {
           event.preventDefault();
           nudgeActiveDocumentPane(1);
           return;
         }
 
-        if (matchesShortcut(event, "k") || event.key === "ArrowUp") {
+        if (!hasActiveMedia && event.key === "ArrowUp") {
           event.preventDefault();
           nudgeActiveDocumentPane(-1);
           return;
