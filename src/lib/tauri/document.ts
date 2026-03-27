@@ -100,7 +100,9 @@ export type FilePreview =
       readonly path: string;
       readonly file_name: string;
       readonly mime_type: string;
+      readonly file_type: string;
       readonly html: string;
+      readonly size_bytes: number;
       readonly last_modified: string;
     }
   | {
@@ -109,6 +111,7 @@ export type FilePreview =
       readonly file_name: string;
       readonly mime_type: string;
       readonly html: string;
+      readonly size_bytes: number;
       readonly last_modified: string;
       readonly message: string;
     };

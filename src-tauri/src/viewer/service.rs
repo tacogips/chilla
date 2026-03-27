@@ -303,13 +303,13 @@ impl ViewerService {
     ) -> AppResult<FilePreview> {
         let file_bytes = fs::read(path).map_err(|source| AppError::io("read", path, source))?;
         let source_text = String::from_utf8_lossy(&file_bytes);
-        let syntax_name = syntax_highlight::describe_file_syntax(path);
+        let file_type = syntax_highlight::describe_file_syntax(path);
         let highlighted_html =
             syntax_highlight::highlight_file_source(&source_text, path, ui_theme);
         let html = format!(
-            "<section class=\"file-preview file-preview--text\"><p class=\"file-preview__meta\">Syntax: {} | Detected type: {}</p>{}</section>",
-            escape_html_text(&syntax_name),
-            escape_html_text(&mime_type),
+            "<section class=\"file-preview file-preview--text\"><p class=\"file-preview__meta\">File type: {} | File size: {}</p>{}</section>",
+            escape_html_text(&file_type),
+            escape_html_text(&format_file_size(file_bytes.len() as u64)),
             highlighted_html,
         );
 
@@ -317,7 +317,9 @@ impl ViewerService {
             path: display_path(path),
             file_name: file_name(path),
             mime_type,
+            file_type,
             html,
+            size_bytes: file_bytes.len() as u64,
             last_modified: last_modified_string(path)?,
         })
     }
@@ -335,6 +337,9 @@ impl ViewerService {
                 escape_html_text(&mime_type),
             ),
             last_modified: last_modified_string(path)?,
+            size_bytes: fs::metadata(path)
+                .map_err(|source| AppError::io("read metadata for", path, source))?
+                .len(),
             message,
         })
     }
@@ -386,6 +391,24 @@ fn parent_directory_path(path: &Path) -> AppResult<PathBuf> {
     path.parent()
         .map(Path::to_path_buf)
         .ok_or_else(|| AppError::NotADirectory(display_path(path)))
+}
+
+fn format_file_size(size_bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+
+    let mut size = size_bytes as f64;
+    let mut unit_index = 0;
+
+    while size >= 1024.0 && unit_index < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit_index += 1;
+    }
+
+    if unit_index == 0 {
+        format!("{size_bytes} {}", UNITS[unit_index])
+    } else {
+        format!("{size:.1} {}", UNITS[unit_index])
+    }
 }
 
 fn normalize_directory_page_limit(limit: usize) -> usize {
@@ -1058,10 +1081,13 @@ mod tests {
             .open_file_preview(&text_path, SyntaxUiTheme::Dark)
             .expect("text preview")
         {
-            FilePreview::Text { html, .. } => {
-                assert!(html.contains("Syntax: Plain Text | Detected type:"));
+            FilePreview::Text {
+                html, size_bytes, ..
+            } => {
+                assert!(html.contains("File type: Plain Text | File size: 10 B"));
                 assert!(html.contains("<pre"));
                 assert!(html.contains("plain text"));
+                assert_eq!(size_bytes, 10);
                 assert!(
                     html.contains("style=") && html.contains("<span"),
                     "expected syntect-highlighted HTML, got: {html}"
@@ -1102,7 +1128,12 @@ mod tests {
             .open_file_preview(&audio_path, SyntaxUiTheme::Dark)
             .expect("audio preview")
         {
-            FilePreview::Audio { html, path, stream_url, .. } => {
+            FilePreview::Audio {
+                html,
+                path,
+                stream_url,
+                ..
+            } => {
                 assert!(html.is_empty());
                 assert!(path.ends_with("podcast.mp3"));
                 assert!(stream_url.is_none());
@@ -1230,8 +1261,13 @@ mod tests {
             .open_file_preview(&shell_path, SyntaxUiTheme::Dark)
             .expect("shell preview")
         {
-            FilePreview::Text { html, .. } => {
-                assert!(html.contains("Syntax: Shell | Detected type:"));
+            FilePreview::Text {
+                html, size_bytes, ..
+            } => {
+                assert!(html.contains("File type: Shell | File size: "));
+                assert!(html.contains(" | File size: "));
+                assert!(!html.contains("Syntax:"));
+                assert_eq!(size_bytes, 31);
             }
             _ => panic!("expected text preview for shell"),
         }
@@ -1240,8 +1276,13 @@ mod tests {
             .open_file_preview(&zsh_path, SyntaxUiTheme::Dark)
             .expect("zsh preview")
         {
-            FilePreview::Text { html, .. } => {
-                assert!(html.contains("Syntax: Shell | Detected type:"));
+            FilePreview::Text {
+                html, size_bytes, ..
+            } => {
+                assert!(html.contains("File type: Shell | File size: "));
+                assert!(html.contains(" | File size: "));
+                assert!(!html.contains("Syntax:"));
+                assert_eq!(size_bytes, 9);
             }
             _ => panic!("expected text preview for zsh"),
         }
@@ -1250,8 +1291,13 @@ mod tests {
             .open_file_preview(&nix_path, SyntaxUiTheme::Dark)
             .expect("nix preview")
         {
-            FilePreview::Text { html, .. } => {
-                assert!(html.contains("Syntax: Nix | Detected type:"));
+            FilePreview::Text {
+                html, size_bytes, ..
+            } => {
+                assert!(html.contains("File type: Nix | File size: "));
+                assert!(html.contains(" | File size: "));
+                assert!(!html.contains("Syntax:"));
+                assert_eq!(size_bytes, 55);
             }
             _ => panic!("expected text preview for nix"),
         }

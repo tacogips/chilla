@@ -110,7 +110,9 @@ pub enum FilePreview {
         path: String,
         file_name: String,
         mime_type: String,
+        file_type: String,
         html: String,
+        size_bytes: u64,
         last_modified: String,
     },
     Binary {
@@ -118,6 +120,7 @@ pub enum FilePreview {
         file_name: String,
         mime_type: String,
         html: String,
+        size_bytes: u64,
         last_modified: String,
         message: String,
     },

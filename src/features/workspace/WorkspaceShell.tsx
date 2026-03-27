@@ -84,19 +84,8 @@ function isAudioPath(filePath: string): boolean {
   return /\.(aac|flac|m4a|mp3|oga|ogg|opus|wav)$/i.test(filePath);
 }
 
-function mediaStreamUrl(preview: FilePreview | null): string | null {
-  if (
-    preview === null ||
-    !("stream_url" in preview) ||
-    (!isAudioPreview(preview) && !isVideoPreview(preview))
-  ) {
-    return null;
-  }
-
-  return preview.stream_url;
-}
-
 type MarkdownPane = "raw" | "preview";
+type InferredPreviewKind = "audio" | "video" | "pdf" | "default";
 type ShortcutDefinition = {
   readonly keys: readonly string[];
   readonly description: string;
@@ -505,34 +494,87 @@ function previewMimeType(preview: FilePreview | null): string {
   return preview?.mime_type ?? "";
 }
 
-function isAudioPreview(preview: FilePreview | null): boolean {
+function formatPreviewSize(sizeBytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = sizeBytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  if (unitIndex === 0) {
+    return `${sizeBytes} ${units[unitIndex]}`;
+  }
+
+  return `${size.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function previewSubtitle(preview: FilePreview | null): string {
+  if (preview?.kind === "text") {
+    return `File type: ${preview.file_type} | File size: ${formatPreviewSize(preview.size_bytes)}`;
+  }
+
+  if (preview?.kind === "binary") {
+    return `File type: Binary | File size: ${formatPreviewSize(preview.size_bytes)}`;
+  }
+
+  return "Rendered HTML";
+}
+
+function inferPreviewKind(preview: FilePreview | null): InferredPreviewKind {
+  if (preview === null) {
+    return "default";
+  }
+
   const mimeType = previewMimeType(preview);
   const path = preview?.path ?? "";
-  return (
-    preview?.kind === "audio" ||
+
+  if (
+    preview.kind === "audio" ||
     mimeType.startsWith("audio/") ||
     isAudioPath(path)
-  );
-}
+  ) {
+    return "audio";
+  }
 
-function isVideoPreview(preview: FilePreview | null): boolean {
-  const mimeType = previewMimeType(preview);
-  const path = preview?.path ?? "";
-  return (
-    preview?.kind === "video" ||
+  if (
+    preview.kind === "video" ||
     mimeType.startsWith("video/") ||
     isVideoPath(path)
-  );
+  ) {
+    return "video";
+  }
+
+  if (preview.kind === "pdf" || mimeType === "application/pdf") {
+    return "pdf";
+  }
+
+  return "default";
 }
 
-function isPdfPreview(preview: FilePreview | null): boolean {
-  return preview?.kind === "pdf" || previewMimeType(preview) === "application/pdf";
+function mediaPreviewKind(
+  preview: FilePreview | null,
+): "audio" | "video" | null {
+  const kind = inferPreviewKind(preview);
+  return kind === "audio" || kind === "video" ? kind : null;
+}
+
+function mediaStreamUrl(preview: FilePreview | null): string | null {
+  switch (preview?.kind) {
+    case "audio":
+    case "video":
+      return preview.stream_url;
+    default:
+      return null;
+  }
 }
 
 function isMediaFilePreview(
   preview: FilePreview | null,
 ): preview is Extract<FilePreview, { path: string; file_name: string }> {
-  return isAudioPreview(preview) || isVideoPreview(preview);
+  return mediaPreviewKind(preview) !== null;
 }
 
 interface LoadedDirectoryState {
@@ -1594,9 +1636,7 @@ export function WorkspaceShell() {
               when={
                 md() === null &&
                 fp() !== null &&
-                !isVideoPreview(fp()) &&
-                !isAudioPreview(fp()) &&
-                !isPdfPreview(fp())
+                inferPreviewKind(fp()) === "default"
               }
             >
               <PreviewPane
@@ -1604,30 +1644,28 @@ export function WorkspaceShell() {
                 documentPath={previewPath(fp())}
                 html={previewHtml(fp())}
                 selectedAnchorId={null}
+                subtitle={previewSubtitle(fp())}
                 visible={true}
               />
             </Show>
 
-            <Show when={md() === null && isPdfPreview(fp())}>
+            <Show when={md() === null && inferPreviewKind(fp()) === "pdf"}>
               <PdfFilePreviewPane
                 path={fp()!.path}
                 fileName={fp()!.file_name}
               />
             </Show>
 
-            <Show
-              when={
-                md() === null &&
-                isMediaFilePreview(fp())
-              }
-            >
+            <Show when={md() === null && isMediaFilePreview(fp())}>
               <MediaFilePreviewPane
-                kind={isAudioPreview(fp()) ? "audio" : "video"}
+                kind={mediaPreviewKind(fp())!}
                 path={fp()!.path}
                 streamUrl={mediaStreamUrl(fp())}
                 fileName={fp()!.file_name}
                 autoplayRequestId={
-                  isVideoPreview(fp()) ? videoAutoplayRequestId() : 0
+                  mediaPreviewKind(fp()) === "video"
+                    ? videoAutoplayRequestId()
+                    : 0
                 }
               />
             </Show>
