@@ -90,6 +90,13 @@ pub enum FilePreview {
         html: String,
         last_modified: String,
     },
+    Audio {
+        path: String,
+        file_name: String,
+        mime_type: String,
+        html: String,
+        last_modified: String,
+    },
     Pdf {
         path: String,
         file_name: String,

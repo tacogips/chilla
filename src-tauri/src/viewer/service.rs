@@ -58,6 +58,16 @@ const VIDEO_EXTENSION_MIME_TYPES: [(&str, &str); 5] = [
     ("ogv", "video/ogg"),
     ("webm", "video/webm"),
 ];
+const AUDIO_EXTENSION_MIME_TYPES: [(&str, &str); 8] = [
+    ("aac", "audio/aac"),
+    ("flac", "audio/flac"),
+    ("m4a", "audio/mp4"),
+    ("mp3", "audio/mpeg"),
+    ("oga", "audio/ogg"),
+    ("ogg", "audio/ogg"),
+    ("opus", "audio/ogg"),
+    ("wav", "audio/wav"),
+];
 const PDF_EXTENSION_MIME_TYPES: [(&str, &str); 1] = [("pdf", "application/pdf")];
 const MAX_DIRECTORY_PAGE_SIZE: usize = 200;
 
@@ -196,6 +206,10 @@ impl ViewerService {
             return self.open_video_preview(&file_path, mime_type);
         }
 
+        if mime_type.starts_with("audio/") {
+            return self.open_audio_preview(&file_path, mime_type);
+        }
+
         if mime_type == "application/pdf" {
             return self.open_pdf_preview(&file_path, mime_type);
         }
@@ -248,6 +262,19 @@ impl ViewerService {
             file_name: file_name.clone(),
             mime_type,
             // Playback uses the frontend `<video src={convertFileSrc(path)}>`; HTML unused.
+            html: String::new(),
+            last_modified: last_modified_string(path)?,
+        })
+    }
+
+    fn open_audio_preview(&self, path: &Path, mime_type: String) -> AppResult<FilePreview> {
+        let file_name = file_name(path);
+
+        Ok(FilePreview::Audio {
+            path: display_path(path),
+            file_name: file_name.clone(),
+            mime_type,
+            // Playback uses the frontend `<audio src={convertFileSrc(path)}>`; HTML unused.
             html: String::new(),
             last_modified: last_modified_string(path)?,
         })
@@ -661,6 +688,7 @@ fn is_text_preview_extension(path: &Path) -> bool {
 fn fallback_media_mime_type<'a>(path: &Path, detected_mime_type: &'a str) -> Option<&'a str> {
     if detected_mime_type.starts_with("image/")
         || detected_mime_type.starts_with("video/")
+        || detected_mime_type.starts_with("audio/")
         || detected_mime_type == "application/pdf"
     {
         return None;
@@ -674,6 +702,7 @@ fn fallback_media_mime_type<'a>(path: &Path, detected_mime_type: &'a str) -> Opt
     IMAGE_EXTENSION_MIME_TYPES
         .iter()
         .chain(VIDEO_EXTENSION_MIME_TYPES.iter())
+        .chain(AUDIO_EXTENSION_MIME_TYPES.iter())
         .chain(PDF_EXTENSION_MIME_TYPES.iter())
         .find_map(|(candidate_extension, candidate_mime_type)| {
             (extension == *candidate_extension).then_some(*candidate_mime_type)
@@ -976,6 +1005,7 @@ mod tests {
         let text_path = test_dir.path().join("notes.txt");
         let image_path = test_dir.path().join("photo.png");
         let video_path = test_dir.path().join("clip.mp4");
+        let audio_path = test_dir.path().join("podcast.mp3");
         let pdf_path = test_dir.path().join("notes.pdf");
         let binary_path = test_dir.path().join("asset.bin");
 
@@ -991,6 +1021,7 @@ mod tests {
             [0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109],
         )
         .expect("write mp4 header");
+        fs::write(&audio_path, [73, 68, 51, 4, 0, 0, 0, 0, 0, 0]).expect("write mp3 header");
         fs::write(
             &pdf_path,
             b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
@@ -1053,6 +1084,17 @@ mod tests {
                 assert!(path.ends_with("clip.mp4"));
             }
             _ => panic!("expected video preview"),
+        }
+
+        match viewer_service
+            .open_file_preview(&audio_path, SyntaxUiTheme::Dark)
+            .expect("audio preview")
+        {
+            FilePreview::Audio { html, path, .. } => {
+                assert!(html.is_empty());
+                assert!(path.ends_with("podcast.mp3"));
+            }
+            _ => panic!("expected audio preview"),
         }
 
         match viewer_service
