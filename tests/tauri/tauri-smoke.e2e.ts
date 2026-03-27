@@ -341,17 +341,19 @@ async function verifyVideoPreview(currentDriver: WebDriver): Promise<void> {
     STARTUP_TIMEOUT_MS,
   );
 
-  const videoReady = await currentDriver.wait(async () => {
-    const state = (await readMediaState(
-      currentDriver,
-      "video",
-    )) as MediaElementState;
-    return (
-      (state.attributeSrc.startsWith("http://127.0.0.1:") ||
-        state.attributeSrc.startsWith("blob:tauri://localhost/")) &&
-      state.errorCode === null
-    );
-  }, STARTUP_TIMEOUT_MS).catch(() => false);
+  const videoReady = await currentDriver
+    .wait(async () => {
+      const state = (await readMediaState(
+        currentDriver,
+        "video",
+      )) as MediaElementState;
+      return (
+        (state.attributeSrc.startsWith("http://127.0.0.1:") ||
+          state.attributeSrc.startsWith("blob:tauri://localhost/")) &&
+        state.errorCode === null
+      );
+    }, STARTUP_TIMEOUT_MS)
+    .catch(() => false);
 
   const state = await readMediaState(currentDriver, "video");
 
@@ -392,17 +394,19 @@ async function verifyAudioPreview(currentDriver: WebDriver): Promise<void> {
     STARTUP_TIMEOUT_MS,
   );
 
-  const audioReady = await currentDriver.wait(async () => {
-    const state = (await readMediaState(
-      currentDriver,
-      "audio",
-    )) as MediaElementState;
-    return (
-      (state.attributeSrc.startsWith("http://127.0.0.1:") ||
-        state.attributeSrc.startsWith("blob:tauri://localhost/")) &&
-      state.errorCode === null
-    );
-  }, STARTUP_TIMEOUT_MS).catch(() => false);
+  const audioReady = await currentDriver
+    .wait(async () => {
+      const state = (await readMediaState(
+        currentDriver,
+        "audio",
+      )) as MediaElementState;
+      return (
+        (state.attributeSrc.startsWith("http://127.0.0.1:") ||
+          state.attributeSrc.startsWith("blob:tauri://localhost/")) &&
+        state.errorCode === null
+      );
+    }, STARTUP_TIMEOUT_MS)
+    .catch(() => false);
 
   const state = await readMediaState(currentDriver, "audio");
 
@@ -572,8 +576,14 @@ async function createWorkspaceFixture(root: string): Promise<string> {
   const workspaceRoot = join(root, "workspace");
   const docsRoot = join(workspaceRoot, "docs");
   await mkdir(docsRoot, { recursive: true });
-  await copyFixtureMediaFile(FIXTURE_MP3_NAME, join(workspaceRoot, FIXTURE_MP3_NAME));
-  await copyFixtureMediaFile(FIXTURE_MP4_NAME, join(workspaceRoot, FIXTURE_MP4_NAME));
+  await copyFixtureMediaFile(
+    FIXTURE_MP3_NAME,
+    join(workspaceRoot, FIXTURE_MP3_NAME),
+  );
+  await copyFixtureMediaFile(
+    FIXTURE_MP4_NAME,
+    join(workspaceRoot, FIXTURE_MP4_NAME),
+  );
 
   await writeFile(
     join(workspaceRoot, "README.md"),

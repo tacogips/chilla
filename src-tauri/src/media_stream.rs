@@ -12,9 +12,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::{
-    error::{AppError, AppResult},
-};
+use crate::error::{AppError, AppResult};
 
 const STREAM_HOST: &str = "127.0.0.1";
 const CORS_ALLOW_ORIGIN: &str = "*";
@@ -35,11 +33,16 @@ struct MediaStreamEntry {
 
 impl MediaStreamService {
     pub fn new() -> AppResult<Self> {
-        let listener = TcpListener::bind((STREAM_HOST, 0))
-            .map_err(|source| AppError::State(format!("failed to bind media stream server: {source}")))?;
+        let listener = TcpListener::bind((STREAM_HOST, 0)).map_err(|source| {
+            AppError::State(format!("failed to bind media stream server: {source}"))
+        })?;
         let port = listener
             .local_addr()
-            .map_err(|source| AppError::State(format!("failed to inspect media stream server address: {source}")))?
+            .map_err(|source| {
+                AppError::State(format!(
+                    "failed to inspect media stream server address: {source}"
+                ))
+            })?
             .port();
         let entries = Arc::new(RwLock::new(HashMap::new()));
         let thread_entries = Arc::clone(&entries);
@@ -50,7 +53,11 @@ impl MediaStreamService {
             .spawn(move || {
                 run_media_stream_server(listener, thread_entries);
             })
-            .map_err(|source| AppError::State(format!("failed to start media stream server thread: {source}")))?;
+            .map_err(|source| {
+                AppError::State(format!(
+                    "failed to start media stream server thread: {source}"
+                ))
+            })?;
 
         Ok(Self {
             port,
@@ -72,7 +79,9 @@ impl MediaStreamService {
 
         self.entries
             .write()
-            .map_err(|_| AppError::State("failed to lock media stream registry for write".to_string()))?
+            .map_err(|_| {
+                AppError::State("failed to lock media stream registry for write".to_string())
+            })?
             .insert(token.clone(), entry);
 
         eprintln!(
@@ -88,12 +97,7 @@ impl MediaStreamService {
 
     fn new_entry_token(&self, path: &Path) -> String {
         let counter = self.token_counter.fetch_add(1, Ordering::Relaxed);
-        let input = format!(
-            "{}:{}:{}",
-            self.token_seed,
-            path.display(),
-            counter
-        );
+        let input = format!("{}:{}:{}", self.token_seed, path.display(), counter);
         blake3::hash(input.as_bytes()).to_hex().to_string()
     }
 }
@@ -163,33 +167,23 @@ fn handle_connection(
     );
 
     if method != "GET" && method != "HEAD" {
-        eprintln!(
-            "[media-stream] response status=405 path={} method={} target={}",
-            target,
-            method,
-            target
-        );
-        write_response(
+        write_logged_empty_response(
             &mut stream,
             "405 Method Not Allowed",
+            target,
+            &[("method", method), ("target", target)],
             &[("Allow", "GET, HEAD"), ("Content-Length", "0")],
-            None,
         )?;
         return Ok(());
     }
 
     let Some(token) = media_token_from_target(target) else {
-        eprintln!(
-            "[media-stream] response status=404 path={} method={} target={}",
-            target,
-            method,
-            target
-        );
-        write_response(
+        write_logged_empty_response(
             &mut stream,
             "404 Not Found",
+            target,
+            &[("method", method), ("target", target)],
             &[("Content-Length", "0")],
-            None,
         )?;
         return Ok(());
     };
@@ -199,22 +193,22 @@ fn handle_connection(
         .ok()
         .and_then(|registry| registry.get(token).cloned())
     else {
-        eprintln!(
-            "[media-stream] response status=404 path={} method={} token={}",
-            target,
-            method,
-            token
-        );
-        write_response(
+        write_logged_empty_response(
             &mut stream,
             "404 Not Found",
+            target,
+            &[("method", method), ("token", token)],
             &[("Content-Length", "0")],
-            None,
         )?;
         return Ok(());
     };
 
-    serve_file(&mut stream, method == "HEAD", &entry, range_header.as_deref())
+    serve_file(
+        &mut stream,
+        method == "HEAD",
+        &entry,
+        range_header.as_deref(),
+    )
 }
 
 fn media_token_from_target(target: &str) -> Option<&str> {
@@ -238,20 +232,16 @@ fn serve_file(
         Ok(None) => ("200 OK", 0, file_len.saturating_sub(1)),
         Err(()) => {
             let content_range = format!("bytes */{file_len}");
-            eprintln!(
-                "[media-stream] response status=416 path={} range={}",
-                entry.path.display(),
-                range_header.unwrap_or("-")
-            );
-            write_response(
+            write_logged_empty_response(
                 stream,
                 "416 Range Not Satisfiable",
+                &entry.path.display().to_string(),
+                &[("range", range_header.unwrap_or("-"))],
                 &[
                     ("Accept-Ranges", "bytes"),
                     ("Content-Range", &content_range),
                     ("Content-Length", "0"),
                 ],
-                None,
             )?;
             return Ok(());
         }
@@ -352,6 +342,32 @@ fn parse_range(range_header: Option<&str>, file_len: u64) -> Result<Option<(u64,
     Ok(Some((start, end)))
 }
 
+fn write_logged_empty_response(
+    stream: &mut TcpStream,
+    status: &str,
+    path: &str,
+    details: &[(&str, &str)],
+    headers: &[(&str, &str)],
+) -> io::Result<()> {
+    let mut detail_parts = String::new();
+
+    for (index, (name, value)) in details.iter().enumerate() {
+        if index > 0 {
+            detail_parts.push(' ');
+        }
+        detail_parts.push_str(name);
+        detail_parts.push('=');
+        detail_parts.push_str(value);
+    }
+
+    eprintln!(
+        "[media-stream] response status={} path={} {}",
+        status, path, detail_parts
+    );
+
+    write_response(stream, status, headers, None)
+}
+
 fn write_response(
     stream: &mut TcpStream,
     status: &str,
@@ -412,6 +428,7 @@ mod tests {
         assert_eq!(parse_range(Some("bytes=0-99"), 200), Ok(Some((0, 99))));
         assert_eq!(parse_range(Some("bytes=100-"), 200), Ok(Some((100, 199))));
         assert_eq!(parse_range(Some("bytes=-50"), 200), Ok(Some((150, 199))));
+        assert_eq!(parse_range(Some("bytes=-999"), 200), Ok(Some((0, 199))));
     }
 
     #[test]
@@ -419,6 +436,7 @@ mod tests {
         assert_eq!(parse_range(Some("bytes=200-300"), 200), Err(()));
         assert_eq!(parse_range(Some("items=0-10"), 200), Err(()));
         assert_eq!(parse_range(Some("bytes=99-10"), 200), Err(()));
+        assert_eq!(parse_range(Some("bytes=0-0"), 0), Err(()));
     }
 
     #[test]
