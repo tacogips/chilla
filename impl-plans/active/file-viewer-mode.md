@@ -252,3 +252,21 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-002 Rust viewer service, TASK-004 verification
 **Blockers**: None
 **Notes**: This fixes the case where launching `chilla` on `~/` failed to show any entries because a single broken symlink caused the backend directory page request to error out.
+
+### Session: 2026-03-27 JST
+**Tasks Completed**: Extended Linux WebKit media recovery so audio previews retry via a blob URL after direct `asset://` playback failures; added a regression covering an uppercase `.MP3` path with non-ASCII characters.
+**Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: The file-view media pane already retried failed Linux video playback through `fetch(...).blob()` + `URL.createObjectURL(...)`; this session applies the same recovery path to audio previews so standard MP3 files are not stranded on the direct custom-protocol source.
+
+### Session: 2026-03-27 JST
+**Tasks Completed**: Added an explicit media-failure fallback action that opens the current audio/video file in the system default application when inline playback still fails.
+**Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: Local reproduction showed the target MP3 decodes in `mpv`, so the remaining failure is consistent with Linux WebKit/GStreamer inline playback limitations rather than a bad file path or broken media asset.
+
+### Session: 2026-03-27 JST
+**Tasks Completed**: Switched audio preview behavior on Linux and macOS desktop WebViews to prefer external playback instead of unreliable inline playback; kept Linux-only inline recovery for video.
+**Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: This avoids repeating the same inline audio failure mode across the two desktop WebView stacks used by Tauri in this repository while preserving embedded video where the current UX already depends on it.

@@ -9,9 +9,9 @@ tasks:
   dev-stop:
     desc: Stop repo-local desktop dev processes
     cmds:
-      - pkill -f '/g/gits/tacogips/chilla/node_modules/.bin/tauri dev' || true
-      - pkill -f '/g/gits/tacogips/chilla/node_modules/.bin/vite' || true
-      - pkill -f '/g/gits/tacogips/chilla/target/debug/chilla' || true
+      - pkill -f "$PWD/node_modules/.bin/tauri dev" || true
+      - pkill -f "$PWD/node_modules/.bin/vite" || true
+      - pkill -f "$PWD/target/debug/chilla" || true
 
   dev:
     desc: Run the desktop app in development mode
