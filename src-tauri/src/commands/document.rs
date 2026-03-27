@@ -129,10 +129,31 @@ pub async fn open_file_preview(
             ..
         } => {
             let stream_url = media_stream_service
-                .register_audio_stream(Path::new(&path), &mime_type)
+                .register_media_stream(Path::new(&path), &mime_type)
                 .map_err(format_command_error)?;
 
             Ok(FilePreview::Audio {
+                path,
+                file_name,
+                mime_type,
+                stream_url: Some(stream_url),
+                html,
+                last_modified,
+            })
+        }
+        FilePreview::Video {
+            path,
+            file_name,
+            mime_type,
+            html,
+            last_modified,
+            ..
+        } => {
+            let stream_url = media_stream_service
+                .register_media_stream(Path::new(&path), &mime_type)
+                .map_err(format_command_error)?;
+
+            Ok(FilePreview::Video {
                 path,
                 file_name,
                 mime_type,

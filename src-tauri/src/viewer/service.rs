@@ -261,6 +261,7 @@ impl ViewerService {
             path: display_path(path),
             file_name: file_name.clone(),
             mime_type,
+            stream_url: None,
             // Playback uses the frontend `<video src={convertFileSrc(path)}>`; HTML unused.
             html: String::new(),
             last_modified: last_modified_string(path)?,
@@ -1084,9 +1085,15 @@ mod tests {
             .open_file_preview(&video_path, SyntaxUiTheme::Dark)
             .expect("video preview")
         {
-            FilePreview::Video { html, path, .. } => {
+            FilePreview::Video {
+                html,
+                path,
+                stream_url,
+                ..
+            } => {
                 assert!(html.is_empty());
                 assert!(path.ends_with("clip.mp4"));
+                assert!(stream_url.is_none());
             }
             _ => panic!("expected video preview"),
         }
@@ -1161,11 +1168,13 @@ mod tests {
                 html,
                 path,
                 mime_type,
+                stream_url,
                 ..
             } => {
                 assert!(html.is_empty());
                 assert!(path.ends_with("file_example_MP4_480_1_5MG.mp4"));
                 assert_eq!(mime_type, "video/mp4");
+                assert!(stream_url.is_none());
             }
             _ => panic!("expected video preview"),
         }
