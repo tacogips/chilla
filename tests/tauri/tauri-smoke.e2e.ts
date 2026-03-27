@@ -3,6 +3,7 @@ import {
   access,
   chmod,
   constants as fsConstants,
+  copyFile,
   mkdir,
   mkdtemp,
   rm,
@@ -29,6 +30,8 @@ const STARTUP_TIMEOUT_MS = 30_000;
 const FIXTURE_NOTE_COUNT = 220;
 const FIXTURE_README_TEXT =
   "This document comes from the real Tauri E2E fixture workspace.";
+const FIXTURE_MP3_NAME = "file_example_MP3_1MG.mp3";
+const FIXTURE_MP4_NAME = "file_example_MP4_480_1_5MG.mp4";
 
 const repoRoot = requireEnv("CHILLA_TAURI_E2E_REPO_ROOT");
 const appBinaryPath = requireEnv("CHILLA_TAURI_E2E_APP");
@@ -97,6 +100,16 @@ async function main(): Promise<void> {
 
     await runStep("verify README preview styling", async () => {
       await verifyReadmePreview(driver!);
+    });
+    ensureTauriDriverHealthy();
+
+    await runStep("verify MP4 inline playback preview", async () => {
+      await verifyVideoPreview(driver!);
+    });
+    ensureTauriDriverHealthy();
+
+    await runStep("verify MP3 inline playback preview", async () => {
+      await verifyAudioPreview(driver!);
     });
     ensureTauriDriverHealthy();
 
@@ -269,8 +282,7 @@ async function verifyReadmePreview(currentDriver: WebDriver): Promise<void> {
   const filterInput = await waitForFilterInput(currentDriver);
   await replaceInputValue(currentDriver, filterInput, "README");
 
-  const readmeButton = await waitForButton(currentDriver, "README.md");
-  await readmeButton.click();
+  await clickButtonByAriaLabel(currentDriver, "README.md");
 
   await currentDriver.wait(async () => {
     const preview = await currentDriver.findElement(
@@ -316,6 +328,114 @@ async function verifyReadmePreview(currentDriver: WebDriver): Promise<void> {
       `Expected dark color-scheme, got ${JSON.stringify(styles.colorScheme)}`,
     );
   }
+}
+
+async function verifyVideoPreview(currentDriver: WebDriver): Promise<void> {
+  const filterInput = await waitForFilterInput(currentDriver);
+  await replaceInputValue(currentDriver, filterInput, "MP4_480");
+
+  await clickButtonByAriaLabel(currentDriver, FIXTURE_MP4_NAME);
+
+  const video = await currentDriver.wait(
+    until.elementLocated(By.css("video")),
+    STARTUP_TIMEOUT_MS,
+  );
+
+  const videoReady = await currentDriver.wait(async () => {
+    const state = (await readMediaState(
+      currentDriver,
+      "video",
+    )) as MediaElementState;
+    return (
+      (state.attributeSrc.includes(FIXTURE_MP4_NAME) ||
+        state.attributeSrc.startsWith("blob:tauri://localhost/")) &&
+      state.errorCode === null
+    );
+  }, STARTUP_TIMEOUT_MS).catch(() => false);
+
+  const state = await readMediaState(currentDriver, "video");
+
+  if (!videoReady) {
+    const bodyText = await currentDriver.findElement(By.css("body")).getText();
+    throw new Error(
+      `Timed out waiting for inline MP4 preview state: ${JSON.stringify(state)}\n\nBody text:\n${bodyText}`,
+    );
+  }
+
+  if (
+    !state.attributeSrc.includes(FIXTURE_MP4_NAME) &&
+    !state.attributeSrc.startsWith("blob:tauri://localhost/")
+  ) {
+    throw new Error(
+      `Expected inline video src attribute to include ${FIXTURE_MP4_NAME} or a Linux blob fallback URL, got ${JSON.stringify(state.attributeSrc)}`,
+    );
+  }
+
+  if (state.errorCode !== null) {
+    throw new Error(
+      `Expected inline MP4 preview without media error, got code ${state.errorCode}`,
+    );
+  }
+
+  await resetFilter(currentDriver, filterInput);
+  void video;
+}
+
+async function verifyAudioPreview(currentDriver: WebDriver): Promise<void> {
+  const filterInput = await waitForFilterInput(currentDriver);
+  await replaceInputValue(currentDriver, filterInput, "MP3_1MG");
+
+  await clickButtonByAriaLabel(currentDriver, FIXTURE_MP3_NAME);
+
+  await currentDriver.wait(
+    until.elementLocated(By.css("audio")),
+    STARTUP_TIMEOUT_MS,
+  );
+
+  const audioReady = await currentDriver.wait(async () => {
+    const state = (await readMediaState(
+      currentDriver,
+      "audio",
+    )) as MediaElementState;
+    return (
+      (state.attributeSrc.startsWith("http://127.0.0.1:") ||
+        state.attributeSrc.startsWith("blob:tauri://localhost/")) &&
+      state.errorCode === null
+    );
+  }, STARTUP_TIMEOUT_MS).catch(() => false);
+
+  const state = await readMediaState(currentDriver, "audio");
+
+  if (!audioReady) {
+    const bodyText = await currentDriver.findElement(By.css("body")).getText();
+    throw new Error(
+      `Timed out waiting for inline MP3 preview state: ${JSON.stringify(state)}\n\nBody text:\n${bodyText}`,
+    );
+  }
+
+  if (
+    !state.attributeSrc.startsWith("http://127.0.0.1:") &&
+    !state.attributeSrc.startsWith("blob:tauri://localhost/")
+  ) {
+    throw new Error(
+      `Expected inline MP3 preview to use the localhost stream URL or a blob fallback URL, got ${JSON.stringify(state.attributeSrc)}`,
+    );
+  }
+
+  if (state.errorCode !== null) {
+    throw new Error(
+      `Expected inline MP3 preview without media error, got code ${state.errorCode}`,
+    );
+  }
+
+  const bodyText = await currentDriver.findElement(By.css("body")).getText();
+  if (bodyText.includes("Inline playback failed")) {
+    throw new Error(
+      `Expected MP3 preview to avoid inline playback failure UI, got body text ${JSON.stringify(bodyText)}`,
+    );
+  }
+
+  await resetFilter(currentDriver, filterInput);
 }
 
 async function shutdown(
@@ -452,6 +572,8 @@ async function createWorkspaceFixture(root: string): Promise<string> {
   const workspaceRoot = join(root, "workspace");
   const docsRoot = join(workspaceRoot, "docs");
   await mkdir(docsRoot, { recursive: true });
+  await copyFixtureMediaFile(FIXTURE_MP3_NAME, join(workspaceRoot, FIXTURE_MP3_NAME));
+  await copyFixtureMediaFile(FIXTURE_MP4_NAME, join(workspaceRoot, FIXTURE_MP4_NAME));
 
   await writeFile(
     join(workspaceRoot, "README.md"),
@@ -477,6 +599,16 @@ async function createWorkspaceFixture(root: string): Promise<string> {
   }
 
   return workspaceRoot;
+}
+
+async function copyFixtureMediaFile(
+  fixtureFileName: string,
+  destinationPath: string,
+): Promise<void> {
+  await copyFile(
+    join(repoRoot, "src-tauri", "tests", "fixtures", fixtureFileName),
+    destinationPath,
+  );
 }
 
 async function createAppLauncher(root: string): Promise<string> {
@@ -513,6 +645,28 @@ async function waitForButton(
     until.elementLocated(By.css(`button[aria-label="${ariaLabel}"]`)),
     STARTUP_TIMEOUT_MS,
   );
+}
+
+async function clickButtonByAriaLabel(
+  currentDriver: WebDriver,
+  ariaLabel: string,
+): Promise<void> {
+  await currentDriver.wait(async () => {
+    try {
+      const button = await waitForButton(currentDriver, ariaLabel);
+      await button.click();
+      return true;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        error.name !== "StaleElementReferenceError"
+      ) {
+        throw error;
+      }
+
+      return false;
+    }
+  }, STARTUP_TIMEOUT_MS);
 }
 
 async function buttonExists(
@@ -587,4 +741,35 @@ async function expectFilterState(
 
     return currentValue === value && isFocused;
   }, STARTUP_TIMEOUT_MS);
+}
+
+interface MediaElementState {
+  readonly attributeSrc: string;
+  readonly currentSrc: string;
+  readonly readyState: number;
+  readonly networkState: number;
+  readonly errorCode: number | null;
+}
+
+async function readMediaState(
+  currentDriver: WebDriver,
+  selector: "audio" | "video",
+): Promise<MediaElementState> {
+  return (await currentDriver.executeScript(
+    `
+      const media = document.querySelector(arguments[0]);
+      if (!(media instanceof HTMLMediaElement)) {
+        throw new Error(\`missing media element for selector \${arguments[0]}\`);
+      }
+
+      return {
+        attributeSrc: media.getAttribute("src") ?? "",
+        currentSrc: media.currentSrc,
+        readyState: media.readyState,
+        networkState: media.networkState,
+        errorCode: media.error ? media.error.code : null,
+      };
+    `,
+    selector,
+  )) as MediaElementState;
 }

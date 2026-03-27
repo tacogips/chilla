@@ -103,12 +103,46 @@ pub fn list_directory(
 }
 
 #[tauri::command]
-pub fn open_file_preview(path: String, state: State<'_, AppState>) -> Result<FilePreview, String> {
+pub async fn open_file_preview(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<FilePreview, String> {
     let theme = state.syntax_ui_theme();
-    state
-        .viewer_service()
-        .open_file_preview(Path::new(&path), theme)
-        .map_err(format_command_error)
+    let viewer_service = state.viewer_service();
+    let media_stream_service = state.media_stream_service();
+    let task_path = path.clone();
+
+    let preview = tauri::async_runtime::spawn_blocking(move || {
+        viewer_service.open_file_preview(Path::new(&task_path), theme)
+    })
+    .await
+    .map_err(format_command_error)?
+    .map_err(format_command_error)?;
+
+    match preview {
+        FilePreview::Audio {
+            path,
+            file_name,
+            mime_type,
+            html,
+            last_modified,
+            ..
+        } => {
+            let stream_url = media_stream_service
+                .register_audio_stream(Path::new(&path), &mime_type)
+                .map_err(format_command_error)?;
+
+            Ok(FilePreview::Audio {
+                path,
+                file_name,
+                mime_type,
+                stream_url: Some(stream_url),
+                html,
+                last_modified,
+            })
+        }
+        _ => Ok(preview),
+    }
 }
 
 #[tauri::command]

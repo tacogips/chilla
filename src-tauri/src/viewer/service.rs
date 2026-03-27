@@ -274,6 +274,7 @@ impl ViewerService {
             path: display_path(path),
             file_name: file_name.clone(),
             mime_type,
+            stream_url: None,
             // Playback uses the frontend `<audio src={convertFileSrc(path)}>`; HTML unused.
             html: String::new(),
             last_modified: last_modified_string(path)?,
@@ -806,6 +807,10 @@ mod tests {
         }
     }
 
+    fn repository_fixture_path(relative_path: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path)
+    }
+
     #[test]
     fn startup_context_is_file_view_for_opening_markdown_file() {
         let test_dir = TestDir::new();
@@ -1090,9 +1095,10 @@ mod tests {
             .open_file_preview(&audio_path, SyntaxUiTheme::Dark)
             .expect("audio preview")
         {
-            FilePreview::Audio { html, path, .. } => {
+            FilePreview::Audio { html, path, stream_url, .. } => {
                 assert!(html.is_empty());
                 assert!(path.ends_with("podcast.mp3"));
+                assert!(stream_url.is_none());
             }
             _ => panic!("expected audio preview"),
         }
@@ -1116,6 +1122,52 @@ mod tests {
                 assert_eq!(message, "Binary file preview is not available.");
             }
             _ => panic!("expected binary preview"),
+        }
+    }
+
+    #[test]
+    fn open_file_preview_opens_real_mp3_fixture_as_audio() {
+        let audio_path = repository_fixture_path("tests/fixtures/file_example_MP3_1MG.mp3");
+
+        match ViewerService::new()
+            .open_file_preview(&audio_path, SyntaxUiTheme::Dark)
+            .expect("audio preview")
+        {
+            FilePreview::Audio {
+                html,
+                path,
+                mime_type,
+                stream_url,
+                ..
+            } => {
+                assert!(html.is_empty());
+                assert!(path.ends_with("file_example_MP3_1MG.mp3"));
+                assert_eq!(mime_type, "audio/mpeg");
+                assert!(stream_url.is_none());
+            }
+            _ => panic!("expected audio preview"),
+        }
+    }
+
+    #[test]
+    fn open_file_preview_opens_real_mp4_fixture_as_video() {
+        let video_path = repository_fixture_path("tests/fixtures/file_example_MP4_480_1_5MG.mp4");
+
+        match ViewerService::new()
+            .open_file_preview(&video_path, SyntaxUiTheme::Dark)
+            .expect("video preview")
+        {
+            FilePreview::Video {
+                html,
+                path,
+                mime_type,
+                ..
+            } => {
+                assert!(html.is_empty());
+                assert!(path.ends_with("file_example_MP4_480_1_5MG.mp4"));
+                assert_eq!(mime_type, "video/mp4");
+            }
+            _ => panic!("expected video preview"),
         }
     }
 

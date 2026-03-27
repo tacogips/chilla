@@ -80,6 +80,14 @@ function isVideoPath(filePath: string): boolean {
   return /\.(mp4|m4v|mov|webm|ogv)$/i.test(filePath);
 }
 
+function audioStreamUrl(preview: FilePreview | null): string | null {
+  if (preview?.kind !== "audio") {
+    return null;
+  }
+
+  return preview.stream_url;
+}
+
 type MarkdownPane = "raw" | "preview";
 type ShortcutDefinition = {
   readonly keys: readonly string[];
@@ -1575,6 +1583,7 @@ export function WorkspaceShell() {
               <MediaFilePreviewPane
                 kind={fp()!.kind === "audio" ? "audio" : "video"}
                 path={fp()!.path}
+                streamUrl={audioStreamUrl(fp())}
                 fileName={fp()!.file_name}
                 autoplayRequestId={
                   fp()!.kind === "video" ? videoAutoplayRequestId() : 0

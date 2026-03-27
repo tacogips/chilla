@@ -94,6 +94,7 @@ pub enum FilePreview {
         path: String,
         file_name: String,
         mime_type: String,
+        stream_url: Option<String>,
         html: String,
         last_modified: String,
     },

@@ -1,11 +1,13 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
-import { isLinuxWebKitDesktop } from "../../lib/platform";
+import { isLinuxWebKitDesktop, isMacDesktopWebView } from "../../lib/platform";
 
 interface MediaFilePreviewPaneProps {
   readonly kind: "video" | "audio";
   readonly path: string;
+  readonly streamUrl?: string | null;
   readonly fileName: string;
   readonly autoplayRequestId: number;
 }
@@ -71,10 +73,14 @@ function eventTargetsMediaElement(
 
 export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
   const isVideo = () => props.kind === "video";
-  const isLinuxDesktop = isLinuxWebKitDesktop() && isVideo();
+  const usesLinuxVideoBlobFallback = isLinuxWebKitDesktop() && isVideo();
+  const usesDesktopAudioBlobFallback =
+    !isVideo() && (isLinuxWebKitDesktop() || isMacDesktopWebView());
+  const isLinuxVideoLayout = usesLinuxVideoBlobFallback && isVideo();
+  const resolvedMediaSrc = () => props.streamUrl ?? convertFileSrc(props.path);
   const [playbackFailed, setPlaybackFailed] = createSignal(false);
   const [showPlayOverlay, setShowPlayOverlay] = createSignal(true);
-  const [mediaSrc, setMediaSrc] = createSignal(convertFileSrc(props.path));
+  const [mediaSrc, setMediaSrc] = createSignal(resolvedMediaSrc());
   let playButtonElement: HTMLButtonElement | undefined;
   let mediaElement: HTMLMediaElement | undefined;
   let activeBlobUrl: string | null = null;
@@ -122,6 +128,7 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
 
   createEffect(() => {
     void props.path;
+    void props.streamUrl;
     void props.kind;
     loadGeneration += 1;
     blobFallbackRequestedForPath = null;
@@ -129,7 +136,7 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
     clearBlobUrl();
     setPlaybackFailed(false);
     setShowPlayOverlay(true);
-    setMediaSrc(convertFileSrc(props.path));
+    setMediaSrc(resolvedMediaSrc());
 
     onCleanup(() => {
       loadGeneration += 1;
@@ -164,11 +171,14 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
   });
 
   const switchToBlobFallback = async () => {
-    if (!isLinuxDesktop || activeBlobUrl !== null) {
+    if (
+      (!usesLinuxVideoBlobFallback && !usesDesktopAudioBlobFallback) ||
+      activeBlobUrl !== null
+    ) {
       return;
     }
 
-    const assetSrc = convertFileSrc(props.path);
+    const assetSrc = resolvedMediaSrc();
     const generation = loadGeneration;
 
     try {
@@ -205,6 +215,34 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
       console.error("Failed to create blob URL for media playback.", error);
       setPlaybackFailed(true);
     }
+  };
+
+  const handleMediaError = () => {
+    if (
+      (usesLinuxVideoBlobFallback || usesDesktopAudioBlobFallback) &&
+      activeBlobUrl === null &&
+      blobFallbackRequestedForPath !== props.path
+    ) {
+      blobFallbackRequestedForPath = props.path;
+      void switchToBlobFallback();
+      return;
+    }
+
+    if (mediaElement !== undefined) {
+      mediaElement.pause();
+      mediaElement.removeAttribute("src");
+      mediaElement.load();
+    }
+
+    playRequested = false;
+    setShowPlayOverlay(true);
+    setPlaybackFailed(true);
+  };
+
+  const openInDefaultApp = () => {
+    void openPath(props.path).catch((error: unknown) => {
+      console.error("Failed to open media in the default application.", error);
+    });
   };
 
   onMount(() => {
@@ -279,7 +317,7 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
         </span>
       </header>
       <div
-        class={`pane__body preview ${isVideo() ? "preview--embedded-video" : "preview--embedded-audio"}${isLinuxDesktop ? " preview--video-external-linux" : ""}`}
+        class={`pane__body preview ${isVideo() ? "preview--embedded-video" : "preview--embedded-audio"}${isLinuxVideoLayout ? " preview--video-external-linux" : ""}`}
       >
         <figure
           class={`preview-media ${isVideo() ? "preview-media--video" : "preview-media--audio"}`}
@@ -316,7 +354,11 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
                 onCanPlay={() => {
                   const media = mediaElement;
 
-                  if (!playRequested || media === undefined || !media.paused) {
+                  if (
+                    !playRequested ||
+                    media === undefined ||
+                    !media.paused
+                  ) {
                     return;
                   }
 
@@ -335,6 +377,7 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
                 onEnded={() => {
                   playRequested = false;
                 }}
+                onError={handleMediaError}
               >
                 {props.fileName}
               </audio>
@@ -379,39 +422,26 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
                 playRequested = false;
                 setShowPlayOverlay(true);
               }}
-              onError={() => {
-                if (
-                  isLinuxDesktop &&
-                  activeBlobUrl === null &&
-                  blobFallbackRequestedForPath !== props.path
-                ) {
-                  blobFallbackRequestedForPath = props.path;
-                  void switchToBlobFallback();
-                  return;
-                }
-
-                if (mediaElement !== undefined) {
-                  mediaElement.pause();
-                  mediaElement.removeAttribute("src");
-                  mediaElement.load();
-                }
-
-                playRequested = false;
-                setShowPlayOverlay(true);
-                setPlaybackFailed(true);
-              }}
+              onError={handleMediaError}
             >
               {props.fileName}
             </video>
           </Show>
         </figure>
-        <Show when={isVideo()}>
+        <Show when={playbackFailed()}>
           <div class="preview-video__actions">
-            <Show when={playbackFailed()}>
-              <p class="preview-video__error">
-                Inline playback failed in the Linux WebView.
-              </p>
-            </Show>
+            <p class="preview-video__error">
+              {usesLinuxVideoBlobFallback
+                ? "Inline playback failed in the Linux WebView."
+                : "Inline playback failed."}
+            </p>
+            <button
+              type="button"
+              class="button preview-video__open-default"
+              onClick={openInDefaultApp}
+            >
+              Open in default app
+            </button>
           </div>
         </Show>
       </div>
