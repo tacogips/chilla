@@ -3,7 +3,7 @@
 **Status**: In Progress
 **Design Reference**: `design-docs/specs/design-file-viewer-mode.md`
 **Created**: 2026-03-19
-**Last Updated**: 2026-03-21
+**Last Updated**: 2026-04-05
 
 ## Design Document Reference
 
@@ -276,3 +276,9 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
 **Notes**: The frontend preview contract now carries optional `stream_url` values for desktop audio and video previews, and Linux Tauri E2E covers both MP3 and MP4 through the localhost stream path.
+
+### Session: 2026-04-05 20:14 JST
+**Tasks Completed**: Added EPUB file preview support to the Rust viewer service and frontend file-preview union; EPUB previews now parse the archive spine, inline linked CSS and image assets as data URLs, and render through the existing HTML preview pane with a paper-style layout.
+**Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: Verification will cover repository checks plus a real Linux Tauri runtime check against an EPUB file under `~/Downloads`.

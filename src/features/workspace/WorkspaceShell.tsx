@@ -512,6 +512,10 @@ function formatPreviewSize(sizeBytes: number): string {
 }
 
 function previewSubtitle(preview: FilePreview | null): string {
+  if (preview?.kind === "epub") {
+    return "File type: EPUB";
+  }
+
   if (preview?.kind === "text") {
     return `File type: ${preview.file_type} | File size: ${formatPreviewSize(preview.size_bytes)}`;
   }

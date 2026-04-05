@@ -1230,6 +1230,57 @@ button {
   color: var(--text-muted);
 }
 
+.file-preview--epub {
+  padding: 1.5rem;
+}
+
+.epub-preview {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 1.5rem clamp(1rem, 2vw, 2rem) 3rem;
+  background: #fffdf7;
+  color: #1c1917;
+  border: 1px solid #e7dcc7;
+  border-radius: 1rem;
+  box-shadow: 0 1.5rem 3rem rgb(15 23 42 / 0.08);
+}
+
+.epub-preview__styles {
+  display: none;
+}
+
+.epub-preview__meta {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e7dcc7;
+}
+
+.epub-preview__title {
+  margin: 0;
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  line-height: 1.15;
+  color: #111827;
+}
+
+.epub-preview__author {
+  margin: 0.6rem 0 0;
+  font-size: 1rem;
+  color: #57534e;
+}
+
+.epub-preview__chapter + .epub-preview__chapter {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid #efe6d2;
+}
+
+.epub-preview img,
+.epub-preview svg,
+.epub-preview video,
+.epub-preview audio {
+  max-width: 100%;
+}
+
 .file-preview__meta {
   color: var(--text-subtle);
   font-size: 0.78rem;

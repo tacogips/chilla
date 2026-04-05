@@ -96,6 +96,14 @@ export type FilePreview =
       readonly last_modified: string;
     }
   | {
+      readonly kind: "epub";
+      readonly path: string;
+      readonly file_name: string;
+      readonly mime_type: string;
+      readonly html: string;
+      readonly last_modified: string;
+    }
+  | {
       readonly kind: "text";
       readonly path: string;
       readonly file_name: string;
