@@ -61,7 +61,7 @@ function markdownThemePalette(colorScheme: ColorScheme): MarkdownThemePalette {
   };
 }
 
-function previewThemeStyle(colorScheme: ColorScheme): JSX.CSSProperties {
+export function previewThemeStyle(colorScheme: ColorScheme): JSX.CSSProperties {
   const palette = markdownThemePalette(colorScheme);
 
   return {
@@ -442,7 +442,7 @@ function enhanceAsciinemaEmbeds(container: HTMLElement): void {
   }
 }
 
-async function enhancePreviewContent(
+export async function enhancePreviewContent(
   container: HTMLElement,
   documentPath: string | null,
   colorScheme: ColorScheme,

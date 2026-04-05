@@ -740,7 +740,8 @@ button {
 /* File-view PDF / media: fill the document pane below the header. */
 .pane__body.preview.preview--embedded-pdf,
 .pane__body.preview.preview--embedded-video,
-.pane__body.preview.preview--embedded-audio {
+.pane__body.preview.preview--embedded-audio,
+.pane__body.preview.preview--embedded-epub {
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -1232,6 +1233,7 @@ button {
 
 .file-preview--epub {
   padding: 1.5rem;
+  --epub-page-width: 720px;
 }
 
 .epub-preview {
@@ -1279,6 +1281,100 @@ button {
 .epub-preview video,
 .epub-preview audio {
   max-width: 100%;
+}
+
+.epub-reader {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  background:
+    radial-gradient(circle at top, rgb(255 253 247 / 0.96), rgb(245 239 226))
+      no-repeat;
+}
+
+.epub-reader__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid rgb(231 220 199 / 0.95);
+  background: rgb(255 252 245 / 0.92);
+  color: #44403c;
+}
+
+.epub-reader__pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.epub-reader__button {
+  min-width: 6.25rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid rgb(214 211 209);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.88);
+  color: #292524;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.epub-reader__button:hover:not(:disabled) {
+  border-color: #d97706;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.epub-reader__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.epub-reader__page-label,
+.epub-reader__hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #57534e;
+}
+
+.epub-reader__viewport {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+.epub-reader__viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.epub-reader__content {
+  height: 100%;
+  padding: 1.25rem;
+}
+
+.epub-reader__content .file-preview--epub {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  column-fill: auto;
+  column-gap: 2.5rem;
+  column-width: calc(var(--epub-page-width) - 2.5rem);
+}
+
+.epub-reader__content .epub-preview {
+  max-width: none;
+  min-height: calc(100% - 0.125rem);
+  margin: 0;
 }
 
 .file-preview__meta {

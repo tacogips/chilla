@@ -3,7 +3,7 @@
 **Status**: In Progress
 **Design Reference**: `design-docs/specs/design-file-viewer-mode.md`
 **Created**: 2026-03-19
-**Last Updated**: 2026-04-05
+**Last Updated**: 2026-04-06
 
 ## Design Document Reference
 
@@ -258,6 +258,12 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
 **Notes**: The file-view media pane already retried failed Linux video playback through `fetch(...).blob()` + `URL.createObjectURL(...)`; this session applies the same recovery path to audio previews so standard MP3 files are not stranded on the direct custom-protocol source.
+
+### Session: 2026-04-06 JST
+**Tasks Completed**: Added paginated EPUB reading in the frontend preview layer using CSS multi-column layout, explicit next/previous controls, and workspace keyboard routing for `J/K`, arrow keys, and `Ctrl+U`/`Ctrl+D`; added frontend and desktop runtime regressions for EPUB pagination.
+**Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: None
+**Notes**: Verification passed with `bun run typecheck`, `bun run test`, `bun run test:dom`, `CARGO_TERM_QUIET=true bun run tauri build --debug --no-bundle`, and a real Linux Tauri runtime check against `/home/taco/Downloads/40_Algorithms_Every_Programmer_Should_Know.epub`, which advanced from `Page 1 of 784` to `Page 2 of 784`.
 
 ### Session: 2026-03-27 JST
 **Tasks Completed**: Added an explicit media-failure fallback action that opens the current audio/video file in the system default application when inline playback still fails.

@@ -41,6 +41,10 @@ import { DEFAULT_FILE_TREE_SORT, DIRECTORY_PAGE_SIZE } from "../file-view/sort";
 import { PreviewPane } from "../preview/PreviewPane";
 import { PdfFilePreviewPane } from "../preview/PdfFilePreviewPane";
 import { MediaFilePreviewPane } from "../preview/MediaFilePreviewPane";
+import {
+  EpubPreviewPane,
+  EPUB_PAGINATION_STEP_EVENT,
+} from "../preview/EpubPreviewPane";
 import { TocPane } from "../toc/TocPane";
 import type { WorkspaceSelection } from "./state";
 
@@ -112,31 +116,31 @@ const SHORTCUT_SECTIONS: readonly {
       { keys: ["Q"], description: "Quit application" },
       {
         keys: ["Ctrl", "D"],
-        description: "Scroll document down",
+        description: "Scroll the active document down, or advance one EPUB page",
       },
       {
         keys: ["Ctrl", "U"],
-        description: "Scroll document up",
+        description: "Scroll the active document up, or go back one EPUB page",
       },
       {
         keys: ["J"],
         description:
-          "When the file tree is hidden, move forward in the active document; media seeks 5 seconds",
+          "When the file tree is hidden, move forward in the active document; paginated EPUB moves one page and media seeks 5 seconds",
       },
       {
         keys: ["K"],
         description:
-          "When the file tree is hidden, move backward in the active document; media seeks 5 seconds",
+          "When the file tree is hidden, move backward in the active document; paginated EPUB moves one page and media seeks 5 seconds",
       },
       {
         keys: ["↓"],
         description:
-          "Scroll the active text/Markdown document down one line when the file tree is hidden",
+          "Move forward in the active document when the file tree is hidden; paginated EPUB advances one page",
       },
       {
         keys: ["↑"],
         description:
-          "Scroll the active text/Markdown document up one line when the file tree is hidden",
+          "Move backward in the active document when the file tree is hidden; paginated EPUB goes back one page",
       },
       {
         keys: ["Shift", "L"],
@@ -525,6 +529,26 @@ function previewSubtitle(preview: FilePreview | null): string {
   }
 
   return "Rendered HTML";
+}
+
+function hasActiveEpubPreview(preview: FilePreview | null): boolean {
+  return preview?.kind === "epub";
+}
+
+function stepActiveEpubPage(step: number): boolean {
+  const reader = document.querySelector<HTMLElement>(".epub-reader");
+
+  if (!(reader instanceof HTMLElement)) {
+    return false;
+  }
+
+  reader.dispatchEvent(
+    new CustomEvent(EPUB_PAGINATION_STEP_EVENT, {
+      detail: { step },
+    }),
+  );
+
+  return true;
 }
 
 function inferPreviewKind(preview: FilePreview | null): InferredPreviewKind {
@@ -1283,7 +1307,9 @@ export function WorkspaceShell() {
 
       if (matchesShortcut(event, "d", { ctrl: true })) {
         event.preventDefault();
-        if (!hasActiveDocumentMediaElement()) {
+        if (hasActiveEpubPreview(fp())) {
+          stepActiveEpubPage(1);
+        } else if (!hasActiveDocumentMediaElement()) {
           scrollActiveDocumentPane(1);
         }
         return;
@@ -1291,7 +1317,9 @@ export function WorkspaceShell() {
 
       if (matchesShortcut(event, "u", { ctrl: true })) {
         event.preventDefault();
-        if (!hasActiveDocumentMediaElement()) {
+        if (hasActiveEpubPreview(fp())) {
+          stepActiveEpubPage(-1);
+        } else if (!hasActiveDocumentMediaElement()) {
           scrollActiveDocumentPane(-1);
         }
         return;
@@ -1310,6 +1338,8 @@ export function WorkspaceShell() {
           event.preventDefault();
           if (hasActiveMedia) {
             seekActiveDocumentMediaElement(1);
+          } else if (hasActiveEpubPreview(fp())) {
+            stepActiveEpubPage(1);
           } else {
             nudgeActiveDocumentPane(1);
           }
@@ -1320,6 +1350,8 @@ export function WorkspaceShell() {
           event.preventDefault();
           if (hasActiveMedia) {
             seekActiveDocumentMediaElement(-1);
+          } else if (hasActiveEpubPreview(fp())) {
+            stepActiveEpubPage(-1);
           } else {
             nudgeActiveDocumentPane(-1);
           }
@@ -1328,13 +1360,21 @@ export function WorkspaceShell() {
 
         if (!hasActiveMedia && event.key === "ArrowDown") {
           event.preventDefault();
-          nudgeActiveDocumentPane(1);
+          if (hasActiveEpubPreview(fp())) {
+            stepActiveEpubPage(1);
+          } else {
+            nudgeActiveDocumentPane(1);
+          }
           return;
         }
 
         if (!hasActiveMedia && event.key === "ArrowUp") {
           event.preventDefault();
-          nudgeActiveDocumentPane(-1);
+          if (hasActiveEpubPreview(fp())) {
+            stepActiveEpubPage(-1);
+          } else {
+            nudgeActiveDocumentPane(-1);
+          }
           return;
         }
       }
@@ -1640,7 +1680,24 @@ export function WorkspaceShell() {
               when={
                 md() === null &&
                 fp() !== null &&
-                inferPreviewKind(fp()) === "default"
+                fp()?.kind === "epub"
+              }
+            >
+              <EpubPreviewPane
+                colorScheme={colorScheme()}
+                documentPath={previewPath(fp())}
+                html={previewHtml(fp())}
+                subtitle={previewSubtitle(fp())}
+                visible={true}
+              />
+            </Show>
+
+            <Show
+              when={
+                md() === null &&
+                fp() !== null &&
+                inferPreviewKind(fp()) === "default" &&
+                fp()?.kind !== "epub"
               }
             >
               <PreviewPane
