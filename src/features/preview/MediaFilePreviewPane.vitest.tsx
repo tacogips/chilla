@@ -191,6 +191,35 @@ describe("MediaFilePreviewPane", () => {
     expect(media.currentTime).toBe(10);
   });
 
+  it("preloads metadata and attaches the video source eagerly", () => {
+    const root = document.getElementById("root");
+
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+
+    dispose = render(
+      () => (
+        <MediaFilePreviewPane
+          kind="video"
+          path="/tmp/demo.mp4"
+          fileName="demo.mp4"
+          autoplayRequestId={0}
+        />
+      ),
+      root,
+    );
+
+    const media = document.querySelector("video");
+
+    if (!(media instanceof HTMLVideoElement)) {
+      throw new Error("missing video element");
+    }
+
+    expect(media.getAttribute("preload")).toBe("metadata");
+    expect(media.getAttribute("src")).toBe("asset:///tmp/demo.mp4");
+  });
+
   it("does not hijack shortcuts when the native media element is the event target", () => {
     const root = document.getElementById("root");
 
@@ -233,7 +262,7 @@ describe("MediaFilePreviewPane", () => {
     expect(media.currentTime).toBe(30);
   });
 
-  it("falls back to a blob URL for Linux video playback failures", async () => {
+  it("shows the fallback UI instead of fetching the full file for Linux video playback failures", () => {
     linuxWebKitDesktop = true;
 
     const root = document.getElementById("root");
@@ -242,17 +271,7 @@ describe("MediaFilePreviewPane", () => {
       throw new Error("missing test root");
     }
 
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      blob: async () => new Blob(["audio"], { type: "audio/mpeg" }),
-    }));
-    const createObjectUrlMock = vi
-      .spyOn(URL, "createObjectURL")
-      .mockReturnValue("blob:linux-audio");
-    const revokeObjectUrlMock = vi
-      .spyOn(URL, "revokeObjectURL")
-      .mockImplementation(() => {});
-
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
     dispose = render(
@@ -274,18 +293,15 @@ describe("MediaFilePreviewPane", () => {
     }
 
     media.dispatchEvent(new Event("error"));
-    await Promise.resolve();
-    await Promise.resolve();
 
-    expect(fetchMock).toHaveBeenCalledWith("asset:///tmp/demo.mp4");
-    expect(createObjectUrlMock).toHaveBeenCalledOnce();
-    expect(media.getAttribute("src")).toBe("blob:linux-audio");
-    expect(document.querySelector(".preview-video__error")).toBeNull();
-
-    dispose?.();
-    dispose = undefined;
-
-    expect(revokeObjectUrlMock).toHaveBeenCalledWith("blob:linux-audio");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(media.getAttribute("src")).toBeNull();
+    expect(document.querySelector(".preview-video__error")?.textContent).toBe(
+      "Inline playback failed in the Linux WebView.",
+    );
+    expect(
+      document.querySelector(".preview-video__open-default")?.textContent,
+    ).toBe("Open in default app");
   });
 
   it("renders inline Linux audio from the local stream URL", () => {
@@ -354,7 +370,7 @@ describe("MediaFilePreviewPane", () => {
     );
   });
 
-  it("falls back to a blob URL for macOS audio stream failures", async () => {
+  it("shows the fallback UI instead of fetching the full file for macOS audio stream failures", () => {
     macDesktopWebView = true;
 
     const root = document.getElementById("root");
@@ -363,13 +379,7 @@ describe("MediaFilePreviewPane", () => {
       throw new Error("missing test root");
     }
 
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      blob: async () => new Blob(["wav"], { type: "audio/wav" }),
-    }));
-    const createObjectUrlMock = vi
-      .spyOn(URL, "createObjectURL")
-      .mockReturnValue("blob:mac-inline-audio");
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
     dispose = render(
@@ -392,14 +402,14 @@ describe("MediaFilePreviewPane", () => {
     }
 
     media.dispatchEvent(new Event("error"));
-    await Promise.resolve();
-    await Promise.resolve();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:41234/media/demo-token",
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(media.getAttribute("src")).toBeNull();
+    expect(document.querySelector(".preview-video__error")?.textContent).toBe(
+      "Inline playback failed.",
     );
-    expect(createObjectUrlMock).toHaveBeenCalledOnce();
-    expect(media.getAttribute("src")).toBe("blob:mac-inline-audio");
-    expect(document.querySelector(".preview-video__error")).toBeNull();
+    expect(
+      document.querySelector(".preview-video__open-default")?.textContent,
+    ).toBe("Open in default app");
   });
 });

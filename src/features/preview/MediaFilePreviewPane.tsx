@@ -2,7 +2,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
-import { isLinuxWebKitDesktop, isMacDesktopWebView } from "../../lib/platform";
+import { isLinuxWebKitDesktop } from "../../lib/platform";
 
 interface MediaFilePreviewPaneProps {
   readonly kind: "video" | "audio";
@@ -74,8 +74,6 @@ function eventTargetsMediaElement(
 export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
   const isVideo = () => props.kind === "video";
   const usesLinuxVideoBlobFallback = isLinuxWebKitDesktop() && isVideo();
-  const usesDesktopAudioBlobFallback =
-    !isVideo() && (isLinuxWebKitDesktop() || isMacDesktopWebView());
   const isLinuxVideoLayout = usesLinuxVideoBlobFallback && isVideo();
   const resolvedMediaSrc = () => props.streamUrl ?? convertFileSrc(props.path);
   const [playbackFailed, setPlaybackFailed] = createSignal(false);
@@ -83,18 +81,9 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
   const [mediaSrc, setMediaSrc] = createSignal(resolvedMediaSrc());
   let playButtonElement: HTMLButtonElement | undefined;
   let mediaElement: HTMLMediaElement | undefined;
-  let activeBlobUrl: string | null = null;
   let loadGeneration = 0;
-  let blobFallbackRequestedForPath: string | null = null;
   let playRequested = false;
   let handledAutoplayRequestId = 0;
-
-  const clearBlobUrl = () => {
-    if (activeBlobUrl !== null) {
-      URL.revokeObjectURL(activeBlobUrl);
-      activeBlobUrl = null;
-    }
-  };
 
   const requestPlayback = () => {
     const media = mediaElement;
@@ -131,16 +120,13 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
     void props.streamUrl;
     void props.kind;
     loadGeneration += 1;
-    blobFallbackRequestedForPath = null;
     handledAutoplayRequestId = 0;
-    clearBlobUrl();
     setPlaybackFailed(false);
     setShowPlayOverlay(true);
     setMediaSrc(resolvedMediaSrc());
 
     onCleanup(() => {
       loadGeneration += 1;
-      clearBlobUrl();
     });
   });
 
@@ -170,64 +156,7 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
     });
   });
 
-  const switchToBlobFallback = async () => {
-    if (
-      (!usesLinuxVideoBlobFallback && !usesDesktopAudioBlobFallback) ||
-      activeBlobUrl !== null
-    ) {
-      return;
-    }
-
-    const generation = loadGeneration;
-
-    try {
-      const source = resolvedMediaSrc();
-      const response = await fetch(source);
-
-      if (!response.ok) {
-        throw new Error(`Failed to load media: HTTP ${response.status}`);
-      }
-
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-
-      if (generation !== loadGeneration) {
-        URL.revokeObjectURL(objectUrl);
-        return;
-      }
-
-      clearBlobUrl();
-      activeBlobUrl = objectUrl;
-      setPlaybackFailed(false);
-      setMediaSrc(objectUrl);
-
-      const media = mediaElement;
-      if (playRequested && media !== undefined) {
-        void media.play().catch(() => {
-          // Wait for canplay if the element is still not ready.
-        });
-      }
-    } catch (error: unknown) {
-      if (generation !== loadGeneration) {
-        return;
-      }
-
-      console.error("Failed to create blob URL for media playback.", error);
-      setPlaybackFailed(true);
-    }
-  };
-
   const handleMediaError = () => {
-    if (
-      (usesLinuxVideoBlobFallback || usesDesktopAudioBlobFallback) &&
-      activeBlobUrl === null &&
-      blobFallbackRequestedForPath !== props.path
-    ) {
-      blobFallbackRequestedForPath = props.path;
-      void switchToBlobFallback();
-      return;
-    }
-
     if (mediaElement !== undefined) {
       mediaElement.pause();
       mediaElement.removeAttribute("src");
@@ -384,7 +313,7 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
                 mediaElement = element ?? undefined;
               }}
               controls
-              preload="auto"
+              preload="metadata"
               playsinline
               src={mediaSrc()}
               aria-label={props.fileName}
