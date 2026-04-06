@@ -309,6 +309,7 @@ impl ViewerService {
             file_name: file_name(path),
             mime_type,
             html: rendered.html,
+            toc: rendered.toc,
             last_modified: last_modified_string(path)?,
         })
     }
@@ -1182,7 +1183,9 @@ mod tests {
             .open_file_preview(&epub_path, SyntaxUiTheme::Dark)
             .expect("epub preview")
         {
-            FilePreview::Epub { html, path, .. } => {
+            FilePreview::Epub {
+                html, path, toc, ..
+            } => {
                 assert!(path.ends_with("book.epub"));
                 assert!(html.contains("Algorithms Notes"));
                 assert!(html.contains("Ada Lovelace"));
@@ -1190,6 +1193,18 @@ mod tests {
                 assert!(html.contains("<style class=\"epub-preview__styles\">"));
                 assert!(html.contains(".chapter{color:#202020}"));
                 assert!(html.contains("data:image/png;base64,"));
+                assert!(html.contains("id=\"epub-chapter-oebps-chapter-xhtml-frag-intro\""));
+                assert!(html.contains("data-epub-href=\"OEBPS/chapter.xhtml#intro\""));
+                assert!(html.contains("href=\"#epub-chapter-oebps-chapter-xhtml-frag-details\""));
+                assert_eq!(toc.len(), 1);
+                assert_eq!(toc[0].label, "Algorithms Notes");
+                assert_eq!(toc[0].href.as_deref(), Some("OEBPS/chapter.xhtml#intro"));
+                assert_eq!(
+                    toc[0].anchor_id.as_deref(),
+                    Some("epub-chapter-oebps-chapter-xhtml-frag-intro")
+                );
+                assert_eq!(toc[0].children.len(), 1);
+                assert_eq!(toc[0].children[0].label, "Details");
             }
             _ => panic!("expected epub preview"),
         }
@@ -1250,6 +1265,71 @@ mod tests {
                 assert!(stream_url.is_none());
             }
             _ => panic!("expected video preview"),
+        }
+    }
+
+    #[test]
+    fn open_file_preview_reads_epub_ncx_navigation_when_nav_document_is_missing() {
+        let test_dir = TestDir::new();
+        let epub_path = test_dir.path().join("ncx-book.epub");
+        write_test_epub_with_toc_mode(
+            &epub_path,
+            "NCX Notes",
+            "Grace Hopper",
+            "Fallback navigation should still work.",
+            EpubFixtureTocMode::Ncx,
+        );
+
+        match ViewerService::new()
+            .open_file_preview(&epub_path, SyntaxUiTheme::Dark)
+            .expect("epub preview")
+        {
+            FilePreview::Epub { toc, .. } => {
+                assert_eq!(toc.len(), 1);
+                assert_eq!(toc[0].label, "NCX Notes");
+                assert_eq!(toc[0].href.as_deref(), Some("OEBPS/chapter.xhtml#intro"));
+                assert_eq!(
+                    toc[0].anchor_id.as_deref(),
+                    Some("epub-chapter-oebps-chapter-xhtml-frag-intro")
+                );
+                assert_eq!(toc[0].children.len(), 1);
+                assert_eq!(toc[0].children[0].label, "Details");
+                assert_eq!(
+                    toc[0].children[0].href.as_deref(),
+                    Some("OEBPS/chapter.xhtml#details")
+                );
+            }
+            _ => panic!("expected epub preview"),
+        }
+    }
+
+    #[test]
+    fn open_file_preview_synthesizes_epub_navigation_when_toc_metadata_is_missing() {
+        let test_dir = TestDir::new();
+        let epub_path = test_dir.path().join("spine-book.epub");
+        write_test_epub_with_toc_mode(
+            &epub_path,
+            "Spine Notes",
+            "Katherine Johnson",
+            "Synthetic navigation should use the spine order.",
+            EpubFixtureTocMode::SpineFallback,
+        );
+
+        match ViewerService::new()
+            .open_file_preview(&epub_path, SyntaxUiTheme::Dark)
+            .expect("epub preview")
+        {
+            FilePreview::Epub { toc, .. } => {
+                assert_eq!(toc.len(), 1);
+                assert_eq!(toc[0].label, "Spine Notes");
+                assert_eq!(toc[0].href.as_deref(), Some("OEBPS/chapter.xhtml"));
+                assert_eq!(
+                    toc[0].anchor_id.as_deref(),
+                    Some("epub-chapter-oebps-chapter-xhtml")
+                );
+                assert!(toc[0].children.is_empty());
+            }
+            _ => panic!("expected epub preview"),
         }
     }
 
@@ -1345,7 +1425,24 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Copy)]
+    enum EpubFixtureTocMode {
+        Nav,
+        Ncx,
+        SpineFallback,
+    }
+
     fn write_test_epub(path: &Path, title: &str, author: &str, body_text: &str) {
+        write_test_epub_with_toc_mode(path, title, author, body_text, EpubFixtureTocMode::Nav);
+    }
+
+    fn write_test_epub_with_toc_mode(
+        path: &Path,
+        title: &str,
+        author: &str,
+        body_text: &str,
+        toc_mode: EpubFixtureTocMode,
+    ) {
         use std::io::Write;
         use zip::{write::FileOptions, CompressionMethod, ZipWriter};
 
@@ -1353,6 +1450,17 @@ mod tests {
         let mut zip = ZipWriter::new(file);
         let stored = FileOptions::default().compression_method(CompressionMethod::Stored);
         let deflated = FileOptions::default().compression_method(CompressionMethod::Deflated);
+        let (toc_manifest, spine_attributes) = match toc_mode {
+            EpubFixtureTocMode::Nav => (
+                r#"    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>"#,
+                "",
+            ),
+            EpubFixtureTocMode::Ncx => (
+                r#"    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>"#,
+                r#" toc="ncx""#,
+            ),
+            EpubFixtureTocMode::SpineFallback => ("", ""),
+        };
 
         zip.start_file("mimetype", stored)
             .expect("start mimetype file");
@@ -1384,10 +1492,11 @@ mod tests {
   </metadata>
   <manifest>
     <item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+{toc_manifest}
     <item id="style" href="styles/book.css" media-type="text/css"/>
     <item id="cover" href="images/cover.png" media-type="image/png"/>
   </manifest>
-  <spine>
+  <spine{spine_attributes}>
     <itemref idref="chapter"/>
   </spine>
 </package>"#
@@ -1403,11 +1512,62 @@ mod tests {
         )
         .expect("write css");
 
+        if matches!(toc_mode, EpubFixtureTocMode::Nav) {
+            zip.start_file("OEBPS/nav.xhtml", deflated)
+                .expect("start nav.xhtml");
+            zip.write_all(
+                format!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+  <head><title>Contents</title></head>
+  <body>
+    <nav epub:type="toc">
+      <ol>
+        <li>
+          <a href="chapter.xhtml#intro">{title}</a>
+          <ol>
+            <li><a href="chapter.xhtml#details">Details</a></li>
+          </ol>
+        </li>
+      </ol>
+    </nav>
+  </body>
+</html>"#
+                )
+                .as_bytes(),
+            )
+            .expect("write nav.xhtml");
+        }
+
+        if matches!(toc_mode, EpubFixtureTocMode::Ncx) {
+            zip.start_file("OEBPS/toc.ncx", deflated)
+                .expect("start toc.ncx");
+            zip.write_all(
+                format!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <navMap>
+    <navPoint id="intro" playOrder="1">
+      <navLabel><text>{title}</text></navLabel>
+      <content src="chapter.xhtml#intro"/>
+      <navPoint id="details" playOrder="2">
+        <navLabel><text>Details</text></navLabel>
+        <content src="chapter.xhtml#details"/>
+      </navPoint>
+    </navPoint>
+  </navMap>
+</ncx>"#
+                )
+                .as_bytes(),
+            )
+            .expect("write toc.ncx");
+        }
+
         zip.start_file("OEBPS/chapter.xhtml", deflated)
             .expect("start chapter.xhtml");
         zip.write_all(
             format!(
-                r#"<?xml version="1.0" encoding="UTF-8"?>
+                r##"<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <title>{title}</title>
@@ -1415,12 +1575,14 @@ mod tests {
   </head>
   <body>
     <section class="chapter">
-      <h1>{title}</h1>
+      <h1 id="intro">{title}</h1>
       <p>{body_text}</p>
+      <h2 id="details">Details</h2>
+      <p><a href="#details">Jump</a></p>
       <img class="cover" src="images/cover.png" alt="cover"/>
     </section>
   </body>
-</html>"#
+</html>"##
             )
             .as_bytes(),
         )

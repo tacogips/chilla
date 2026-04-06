@@ -53,6 +53,19 @@ Notable items that do not fit into architecture or client categories.
 - Mixed-stack changes should be implemented as a Tauri feature rather than isolated frontend or Rust-only work.
 - The implementation plan should include when `src/` is repurposed for frontend code and where the current Rust crate is relocated.
 
+## EPUB Navigation Notes
+
+### Reference Alignment
+
+- Foliate / Foliate JS is the UX and architecture reference for this slice, specifically its TOC tree model, href-based navigation, and anchor-based relocation across repagination.
+- Persisting raw page numbers would be incorrect because the current EPUB reader uses CSS multi-column pagination, so page counts change with viewport and layout.
+
+### Design Direction
+
+- Rust should own EPUB TOC extraction and href normalization.
+- The frontend should own the last-reading-location store because it is lightweight view state and the repo already persists small UI settings in `localStorage`.
+- TOC interaction for EPUB should reuse the same workspace slot and toggle behavior as Markdown instead of adding a second navigation paradigm.
+
 ## Linux Tauri WebDriver E2E Notes
 
 ### Goal

@@ -20,7 +20,9 @@ let tauriDriver: ChildProcess | undefined;
 let driver: WebDriver | undefined;
 
 void main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+  console.error(
+    error instanceof Error ? (error.stack ?? error.message) : String(error),
+  );
   process.exitCode = 1;
 });
 
@@ -35,7 +37,9 @@ async function main(): Promise<void> {
 
     try {
       await driver.wait(async () => {
-        const errorBanners = await driver!.findElements(By.css(".banner--error"));
+        const errorBanners = await driver!.findElements(
+          By.css(".banner--error"),
+        );
         if (errorBanners.length > 0) {
           const errorText = await errorBanners[0]!.getText();
           throw new Error(`Desktop app showed an error banner: ${errorText}`);
@@ -46,7 +50,7 @@ async function main(): Promise<void> {
         );
         return (
           bodyText.includes("40 Algorithms Every Programmer Should Know") &&
-          bodyText.includes("Page 1 of")
+          bodyText.includes("Book Page 1 of")
         );
       }, STARTUP_TIMEOUT_MS);
     } catch (error: unknown) {
@@ -57,7 +61,9 @@ async function main(): Promise<void> {
         "return document.body ? document.body.innerHTML : '';",
       );
       console.error(`Timeout body excerpt:\n${bodyText.slice(0, 1200)}`);
-      console.error(`DOM contains EPUB reader: ${bodyHtml.includes("epub-reader")}`);
+      console.error(
+        `DOM contains EPUB reader: ${bodyHtml.includes("epub-reader")}`,
+      );
       console.error(
         `DOM contains page label: ${bodyHtml.includes("epub-reader__page-label")}`,
       );
@@ -65,10 +71,24 @@ async function main(): Promise<void> {
     }
 
     const pageLabelBefore = await readPageLabel();
-    await driver.findElement(By.xpath("//button[normalize-space()='Next']")).click();
+    const viewport = await driver.findElement(By.css(".epub-reader__viewport"));
+    await driver.executeScript(
+      `
+        const viewport = arguments[0];
+        const rect = viewport.getBoundingClientRect();
+        viewport.dispatchEvent(
+          new MouseEvent("click", {
+            bubbles: true,
+            clientX: rect.right - 8,
+            clientY: rect.top + rect.height / 2,
+          }),
+        );
+      `,
+      viewport,
+    );
     await driver.wait(async () => {
       const pageLabel = await readPageLabel();
-      return pageLabel.startsWith("Page 2 of");
+      return pageLabel.startsWith("Book Page 2 of");
     }, STARTUP_TIMEOUT_MS);
     const pageLabelAfter = await readPageLabel();
 
@@ -93,7 +113,9 @@ async function main(): Promise<void> {
 }
 
 async function readPageLabel(): Promise<string> {
-  return await driver!.findElement(By.css(".epub-reader__page-label")).getText();
+  return await driver!
+    .findElement(By.css(".epub-reader__page-label"))
+    .getText();
 }
 
 function requireEnv(name: string): string {
@@ -104,7 +126,11 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function waitForPort(host: string, port: number, timeoutMs: number): Promise<void> {
+function waitForPort(
+  host: string,
+  port: number,
+  timeoutMs: number,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const startedAt = Date.now();
 

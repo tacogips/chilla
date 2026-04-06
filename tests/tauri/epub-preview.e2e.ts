@@ -21,7 +21,9 @@ let tauriDriver: ChildProcess | undefined;
 let driver: WebDriver | undefined;
 
 void main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+  console.error(
+    error instanceof Error ? (error.stack ?? error.message) : String(error),
+  );
   process.exitCode = 1;
 });
 
@@ -36,7 +38,9 @@ async function main(): Promise<void> {
 
     try {
       await driver.wait(async () => {
-        const errorBanners = await driver!.findElements(By.css(".banner--error"));
+        const errorBanners = await driver!.findElements(
+          By.css(".banner--error"),
+        );
         if (errorBanners.length > 0) {
           const errorText = await errorBanners[0]!.getText();
           throw new Error(`Desktop app showed an error banner: ${errorText}`);
@@ -55,7 +59,9 @@ async function main(): Promise<void> {
         "return document.body ? document.body.innerHTML : '';",
       );
       console.error(`Timeout body excerpt:\n${bodyText.slice(0, 1200)}`);
-      console.error(`DOM contains EPUB wrapper: ${bodyHtml.includes("file-preview--epub")}`);
+      console.error(
+        `DOM contains EPUB wrapper: ${bodyHtml.includes("file-preview--epub")}`,
+      );
       throw error;
     }
 
@@ -67,7 +73,9 @@ async function main(): Promise<void> {
     );
 
     console.log(`Verified preview text: ${expectedText}`);
-    console.log(`EPUB HTML present: ${bodyHtml.includes("file-preview--epub")}`);
+    console.log(
+      `EPUB HTML present: ${bodyHtml.includes("file-preview--epub")}`,
+    );
     console.log(bodyText.slice(0, 400));
   } finally {
     if (driver !== undefined) {
@@ -90,7 +98,11 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function waitForPort(host: string, port: number, timeoutMs: number): Promise<void> {
+function waitForPort(
+  host: string,
+  port: number,
+  timeoutMs: number,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const startedAt = Date.now();
 

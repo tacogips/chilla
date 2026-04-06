@@ -11,10 +11,12 @@ use roxmltree::{Document, Node, NodeType};
 use zip::{result::ZipError, ZipArchive};
 
 use crate::error::{AppError, AppResult};
+use crate::viewer::types::EpubNavigationItem;
 
 #[derive(Debug)]
 pub struct RenderedEpub {
     pub html: String,
+    pub toc: Vec<EpubNavigationItem>,
 }
 
 #[derive(Debug, Clone)]
@@ -28,6 +30,15 @@ struct EpubPackage {
     author: Option<String>,
     manifest_by_path: HashMap<String, ManifestItem>,
     spine_paths: Vec<String>,
+    navigation_document_path: Option<String>,
+    toc_ncx_path: Option<String>,
+}
+
+#[derive(Debug)]
+struct RenderedChapter {
+    path: String,
+    title: Option<String>,
+    body_html: String,
 }
 
 struct RenderContext<'a> {
@@ -47,7 +58,7 @@ pub fn render_epub(path: &Path) -> AppResult<RenderedEpub> {
     let package = parse_package_document(&package_xml, &package_path, path)?;
 
     let mut stylesheet_paths = BTreeSet::new();
-    let mut chapter_html = Vec::new();
+    let mut chapters = Vec::new();
 
     for spine_path in &package.spine_paths {
         let chapter_xml = read_zip_string(&mut archive, spine_path, path)?;
@@ -60,19 +71,22 @@ pub fn render_epub(path: &Path) -> AppResult<RenderedEpub> {
                 )
             })?;
         collect_head_stylesheet_paths(&chapter_document, spine_path, &mut stylesheet_paths);
-        chapter_html.push((
-            spine_path.clone(),
-            render_chapter_body(
-                &chapter_document,
-                &mut archive,
-                path,
-                &RenderContext {
-                    chapter_path: spine_path,
-                    package: &package,
-                },
-            )?,
-        ));
+        let rendered_body = render_chapter_body(
+            &chapter_document,
+            &mut archive,
+            path,
+            &RenderContext {
+                chapter_path: spine_path,
+                package: &package,
+            },
+        )?;
+        chapters.push(RenderedChapter {
+            path: spine_path.clone(),
+            title: chapter_title(&chapter_document, spine_path),
+            body_html: rendered_body,
+        });
     }
+    let toc = parse_navigation_items(&mut archive, path, &package, &chapters)?;
 
     let mut html = String::new();
     html.push_str("<section class=\"file-preview file-preview--epub\">");
@@ -95,19 +109,21 @@ pub fn render_epub(path: &Path) -> AppResult<RenderedEpub> {
     }
     html.push_str("</header>");
 
-    for (chapter_path, chapter_body_html) in chapter_html {
+    for chapter in &chapters {
         html.push_str("<section class=\"epub-preview__chapter\" id=\"");
-        html.push_str(&chapter_section_id(&chapter_path));
+        html.push_str(&chapter_section_id(&chapter.path));
         html.push_str("\" data-epub-path=\"");
-        html.push_str(&escape_html_attribute(&chapter_path));
+        html.push_str(&escape_html_attribute(&chapter.path));
+        html.push_str("\" data-epub-href=\"");
+        html.push_str(&escape_html_attribute(&chapter.path));
         html.push_str("\">");
-        html.push_str(&chapter_body_html);
+        html.push_str(&chapter.body_html);
         html.push_str("</section>");
     }
 
     html.push_str("</article></section>");
 
-    Ok(RenderedEpub { html })
+    Ok(RenderedEpub { html, toc })
 }
 
 fn read_zip_string(
@@ -214,6 +230,8 @@ fn parse_package_document(
 
     let mut manifest_href_by_id = HashMap::new();
     let mut manifest_by_path = HashMap::new();
+    let mut navigation_document_path = None;
+    let mut toc_ncx_path = None;
     for item in document
         .descendants()
         .filter(|node| node.is_element() && node.tag_name().name() == "item")
@@ -227,8 +245,20 @@ fn parse_package_document(
         let Some(media_type) = item.attribute("media-type") else {
             continue;
         };
+        let properties = item
+            .attribute("properties")
+            .unwrap_or_default()
+            .split_ascii_whitespace()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
 
         let full_path = resolve_archive_path_from_directory(package_directory, href);
+        if properties.iter().any(|property| property == "nav") {
+            navigation_document_path = Some(full_path.clone());
+        }
+        if media_type == "application/x-dtbncx+xml" {
+            toc_ncx_path = Some(full_path.clone());
+        }
         manifest_href_by_id.insert(id.to_string(), full_path.clone());
         manifest_by_path.insert(
             full_path,
@@ -236,6 +266,14 @@ fn parse_package_document(
                 media_type: media_type.to_string(),
             },
         );
+    }
+
+    let spine_toc_id = document
+        .descendants()
+        .find(|node| node.is_element() && node.tag_name().name() == "spine")
+        .and_then(|node| node.attribute("toc"));
+    if toc_ncx_path.is_none() {
+        toc_ncx_path = spine_toc_id.and_then(|id| manifest_href_by_id.get(id).cloned());
     }
 
     let spine_paths = document
@@ -257,6 +295,8 @@ fn parse_package_document(
         author,
         manifest_by_path,
         spine_paths,
+        navigation_document_path,
+        toc_ncx_path,
     })
 }
 
@@ -268,6 +308,285 @@ fn first_descendant_text(document: &Document<'_>, tag_name: &str) -> Option<Stri
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
+}
+
+fn chapter_title(document: &Document<'_>, chapter_path: &str) -> Option<String> {
+    first_descendant_matching_text(document, |node| {
+        node.is_element() && matches!(node.tag_name().name(), "h1" | "h2" | "h3")
+    })
+    .or_else(|| first_descendant_text(document, "title"))
+    .or_else(|| {
+        Path::new(chapter_path)
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
+}
+
+fn first_descendant_matching_text(
+    document: &Document<'_>,
+    predicate: impl Fn(Node<'_, '_>) -> bool,
+) -> Option<String> {
+    document
+        .descendants()
+        .find(|node| predicate(*node))
+        .and_then(node_text_content)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn node_text_content(node: Node<'_, '_>) -> Option<String> {
+    let text = node
+        .descendants()
+        .filter(|child| child.node_type() == NodeType::Text)
+        .filter_map(|child| child.text())
+        .collect::<String>();
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn parse_navigation_items(
+    archive: &mut ZipArchive<File>,
+    epub_path: &Path,
+    package: &EpubPackage,
+    chapters: &[RenderedChapter],
+) -> AppResult<Vec<EpubNavigationItem>> {
+    if let Some(navigation_document_path) = package.navigation_document_path.as_deref() {
+        let Some(nav_xml) = try_read_zip_string(archive, navigation_document_path, epub_path)?
+        else {
+            return Ok(synthesize_spine_navigation(chapters));
+        };
+        if let Some(toc) =
+            parse_navigation_document(&nav_xml, navigation_document_path, package, epub_path)?
+        {
+            if !toc.is_empty() {
+                return Ok(toc);
+            }
+        }
+    }
+
+    if let Some(ncx_path) = package.toc_ncx_path.as_deref() {
+        let Some(ncx_xml) = try_read_zip_string(archive, ncx_path, epub_path)? else {
+            return Ok(synthesize_spine_navigation(chapters));
+        };
+        let toc = parse_ncx_document(&ncx_xml, ncx_path, package, epub_path)?;
+        if !toc.is_empty() {
+            return Ok(toc);
+        }
+    }
+
+    Ok(synthesize_spine_navigation(chapters))
+}
+
+fn parse_navigation_document(
+    navigation_xml: &str,
+    navigation_path: &str,
+    package: &EpubPackage,
+    epub_path: &Path,
+) -> AppResult<Option<Vec<EpubNavigationItem>>> {
+    let sanitized_navigation_xml = strip_xml_doctype(navigation_xml);
+    let document = Document::parse(sanitized_navigation_xml.as_ref()).map_err(|source| {
+        AppError::epub_parse(
+            epub_path,
+            format!("failed to parse navigation document `{navigation_path}`: {source}"),
+        )
+    })?;
+
+    let toc_list = document
+        .descendants()
+        .find(|node| is_navigation_toc_node(*node))
+        .and_then(|node| {
+            node.children()
+                .find(|child| child.is_element() && matches!(child.tag_name().name(), "ol" | "ul"))
+        });
+
+    let Some(toc_list) = toc_list else {
+        return Ok(None);
+    };
+
+    Ok(Some(parse_navigation_list(
+        toc_list,
+        navigation_path,
+        package,
+    )))
+}
+
+fn is_navigation_toc_node(node: Node<'_, '_>) -> bool {
+    if !(node.is_element() && node.tag_name().name() == "nav") {
+        return false;
+    }
+
+    node.attributes().any(|attribute| {
+        let value = attribute.value().to_ascii_lowercase();
+        (attribute.name() == "type" && value.contains("toc"))
+            || (attribute.name() == "role" && value.contains("doc-toc"))
+    })
+}
+
+fn parse_navigation_list(
+    list_node: Node<'_, '_>,
+    base_path: &str,
+    package: &EpubPackage,
+) -> Vec<EpubNavigationItem> {
+    list_node
+        .children()
+        .filter(|node| node.is_element() && node.tag_name().name() == "li")
+        .map(|node| parse_navigation_list_item(node, base_path, package))
+        .collect()
+}
+
+fn parse_navigation_list_item(
+    list_item: Node<'_, '_>,
+    base_path: &str,
+    package: &EpubPackage,
+) -> EpubNavigationItem {
+    let label_node = list_item
+        .children()
+        .find(|node| node.is_element() && matches!(node.tag_name().name(), "a" | "span"));
+
+    let (href, anchor_id, label) = if let Some(label_node) = label_node {
+        let href = label_node
+            .attribute("href")
+            .and_then(|href| normalized_navigation_target(href, base_path, package))
+            .map(|(href, _)| href);
+        let anchor_id = label_node
+            .attribute("href")
+            .and_then(|href| normalized_navigation_target(href, base_path, package))
+            .and_then(|(_, anchor_id)| anchor_id);
+        let label = node_text_content(label_node).unwrap_or_else(|| "Untitled".to_string());
+        (href, anchor_id, label)
+    } else {
+        (
+            None,
+            None,
+            node_text_content(list_item).unwrap_or_else(|| "Untitled".to_string()),
+        )
+    };
+
+    let children = list_item
+        .children()
+        .find(|node| node.is_element() && matches!(node.tag_name().name(), "ol" | "ul"))
+        .map(|node| parse_navigation_list(node, base_path, package))
+        .unwrap_or_default();
+
+    EpubNavigationItem {
+        label,
+        href,
+        anchor_id,
+        children,
+    }
+}
+
+fn parse_ncx_document(
+    ncx_xml: &str,
+    ncx_path: &str,
+    package: &EpubPackage,
+    epub_path: &Path,
+) -> AppResult<Vec<EpubNavigationItem>> {
+    let sanitized_ncx_xml = strip_xml_doctype(ncx_xml);
+    let document = Document::parse(sanitized_ncx_xml.as_ref()).map_err(|source| {
+        AppError::epub_parse(
+            epub_path,
+            format!("failed to parse NCX document `{ncx_path}`: {source}"),
+        )
+    })?;
+
+    Ok(document
+        .descendants()
+        .find(|node| node.is_element() && node.tag_name().name() == "navMap")
+        .map(|nav_map| {
+            nav_map
+                .children()
+                .filter(|node| node.is_element() && node.tag_name().name() == "navPoint")
+                .map(|node| parse_ncx_nav_point(node, ncx_path, package))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default())
+}
+
+fn parse_ncx_nav_point(
+    nav_point: Node<'_, '_>,
+    base_path: &str,
+    package: &EpubPackage,
+) -> EpubNavigationItem {
+    let href = nav_point
+        .children()
+        .find(|node| node.is_element() && node.tag_name().name() == "content")
+        .and_then(|node| node.attribute("src"))
+        .and_then(|src| normalized_navigation_target(src, base_path, package));
+    let label = nav_point
+        .descendants()
+        .find(|node| node.is_element() && node.tag_name().name() == "text")
+        .and_then(node_text_content)
+        .unwrap_or_else(|| "Untitled".to_string());
+    let children = nav_point
+        .children()
+        .filter(|node| node.is_element() && node.tag_name().name() == "navPoint")
+        .map(|node| parse_ncx_nav_point(node, base_path, package))
+        .collect::<Vec<_>>();
+
+    EpubNavigationItem {
+        label,
+        href: href.as_ref().map(|(href, _)| href.clone()),
+        anchor_id: href.and_then(|(_, anchor_id)| anchor_id),
+        children,
+    }
+}
+
+fn synthesize_spine_navigation(chapters: &[RenderedChapter]) -> Vec<EpubNavigationItem> {
+    chapters
+        .iter()
+        .map(|chapter| EpubNavigationItem {
+            label: chapter
+                .title
+                .clone()
+                .unwrap_or_else(|| chapter.path.clone()),
+            href: Some(chapter.path.clone()),
+            anchor_id: Some(chapter_section_id(&chapter.path)),
+            children: Vec::new(),
+        })
+        .collect()
+}
+
+fn normalized_navigation_target(
+    href: &str,
+    base_path: &str,
+    package: &EpubPackage,
+) -> Option<(String, Option<String>)> {
+    let trimmed = href.trim();
+    if trimmed.is_empty() || is_external_url(trimmed) {
+        return None;
+    }
+
+    let (path_part, suffix) = split_resource_suffix(trimmed);
+    let resolved_path = if path_part.is_empty() {
+        base_path.to_string()
+    } else {
+        resolve_archive_path(base_path, path_part)
+    };
+    let item = package.manifest_by_path.get(&resolved_path)?;
+    if item.media_type != "application/xhtml+xml" && item.media_type != "text/html" {
+        return None;
+    }
+
+    let fragment = suffix.strip_prefix('#').unwrap_or_default();
+    if fragment.is_empty() {
+        return Some((
+            resolved_path.clone(),
+            Some(chapter_section_id(&resolved_path)),
+        ));
+    }
+
+    Some((
+        format!("{resolved_path}#{fragment}"),
+        Some(fragment_anchor_id(&resolved_path, fragment)),
+    ))
 }
 
 fn collect_head_stylesheet_paths(
@@ -290,6 +609,316 @@ fn collect_head_stylesheet_paths(
     }
 }
 
+/// Scope all CSS selectors in an EPUB stylesheet to `.epub-preview` so that
+/// epub-internal styles do not leak out to the host page.
+///
+/// Transformations applied:
+/// - `@charset`, `@namespace`, and `@import` directives are stripped.
+/// - `body` and `html` selectors are replaced with `.epub-preview`.
+/// - All other selectors are prefixed with `.epub-preview `.
+/// - Comma-separated selector lists are handled per-item.
+/// - `@media` blocks are preserved; their inner rules are scoped.
+/// - `@keyframes`, `@font-face`, and other at-rules are passed through unchanged.
+/// - `/* ... */` comments and quoted strings are skipped without modification.
+fn scope_epub_css(css: &str) -> String {
+    let mut out = String::with_capacity(css.len());
+    let bytes = css.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    // brace_depth tracks nesting: 0 = top-level, 1 = inside a rule block, etc.
+    let mut brace_depth: usize = 0;
+
+    while i < len {
+        // Skip block comments.
+        if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            out.push_str("/*");
+            i += 2;
+            while i + 1 < len {
+                if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                    out.push_str("*/");
+                    i += 2;
+                    break;
+                }
+                out.push(bytes[i] as char);
+                i += 1;
+            }
+            continue;
+        }
+
+        // Inside a rule block: copy verbatim (track nested braces).
+        if brace_depth > 0 {
+            match bytes[i] {
+                b'{' => {
+                    brace_depth += 1;
+                    out.push('{');
+                    i += 1;
+                }
+                b'}' => {
+                    brace_depth -= 1;
+                    out.push('}');
+                    i += 1;
+                }
+                b'\'' | b'"' => {
+                    let quote = bytes[i];
+                    out.push(quote as char);
+                    i += 1;
+                    while i < len {
+                        let ch = bytes[i];
+                        out.push(ch as char);
+                        i += 1;
+                        if ch == quote {
+                            break;
+                        }
+                        if ch == b'\\' && i < len {
+                            out.push(bytes[i] as char);
+                            i += 1;
+                        }
+                    }
+                }
+                ch => {
+                    out.push(ch as char);
+                    i += 1;
+                }
+            }
+            continue;
+        }
+
+        // --- Top-level (brace_depth == 0) ---
+
+        // Skip whitespace, collecting it so we can emit it later.
+        if bytes[i].is_ascii_whitespace() {
+            let start = i;
+            while i < len && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            // Only emit the whitespace if we are not at a directive/selector boundary
+            // that we may discard; simpler to just always emit whitespace here.
+            out.push_str(&css[start..i]);
+            continue;
+        }
+
+        // At-rules at the top level.
+        if bytes[i] == b'@' {
+            // Collect the at-keyword.
+            let at_start = i;
+            i += 1; // skip '@'
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-') {
+                i += 1;
+            }
+            let keyword = &css[at_start + 1..i];
+
+            match keyword {
+                "charset" | "namespace" | "import" => {
+                    // Strip: advance to end of statement (';') or block ('{...}').
+                    while i < len {
+                        match bytes[i] {
+                            b';' => {
+                                i += 1;
+                                break;
+                            }
+                            b'{' => {
+                                // Consume the entire block.
+                                i += 1;
+                                let mut depth = 1usize;
+                                while i < len && depth > 0 {
+                                    match bytes[i] {
+                                        b'{' => depth += 1,
+                                        b'}' => depth -= 1,
+                                        _ => {}
+                                    }
+                                    i += 1;
+                                }
+                                break;
+                            }
+                            _ => {
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+                "media" => {
+                    // Emit `@media ...` header verbatim up to and including the opening `{`,
+                    // then scope each rule inside by recursing into the inner CSS text.
+                    // Collect everything from the '@' up to (and including) the opening '{'.
+                    let header_start = at_start;
+                    while i < len && bytes[i] != b'{' {
+                        i += 1;
+                    }
+                    if i < len {
+                        i += 1; // consume '{'
+                    }
+                    // Emit the @media header.
+                    out.push_str(&css[header_start..i]);
+
+                    // Find the matching closing '}'.
+                    let inner_start = i;
+                    let mut depth = 1usize;
+                    while i < len && depth > 0 {
+                        match bytes[i] {
+                            b'/' if i + 1 < len && bytes[i + 1] == b'*' => {
+                                // Skip comment inside @media search.
+                                i += 2;
+                                while i + 1 < len {
+                                    if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                                        i += 2;
+                                        break;
+                                    }
+                                    i += 1;
+                                }
+                            }
+                            b'{' => {
+                                depth += 1;
+                                i += 1;
+                            }
+                            b'}' => {
+                                depth -= 1;
+                                if depth > 0 {
+                                    i += 1;
+                                }
+                                // do not advance past the final '}' yet
+                                if depth == 0 {
+                                    break;
+                                }
+                            }
+                            _ => {
+                                i += 1;
+                            }
+                        }
+                    }
+                    let inner_css = &css[inner_start..i];
+                    out.push_str(&scope_epub_css(inner_css));
+                    if i < len && bytes[i] == b'}' {
+                        out.push('}');
+                        i += 1;
+                    }
+                }
+                _ => {
+                    // Other at-rules (@keyframes, @font-face, etc.): pass through verbatim.
+                    out.push_str(&css[at_start..i]);
+                    // Emit the rest up to end of block or ';'.
+                    while i < len {
+                        match bytes[i] {
+                            b';' => {
+                                out.push(';');
+                                i += 1;
+                                break;
+                            }
+                            b'{' => {
+                                out.push('{');
+                                i += 1;
+                                brace_depth += 1;
+                                break;
+                            }
+                            ch => {
+                                out.push(ch as char);
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+
+        // Regular selector rule: collect selector text up to '{'.
+        if bytes[i] == b'}' {
+            // Stray closing brace (e.g. end of @media inner); just emit and continue.
+            out.push('}');
+            i += 1;
+            continue;
+        }
+
+        // Collect selector up to '{', respecting strings and comments.
+        let selector_start = i;
+        while i < len && bytes[i] != b'{' {
+            match bytes[i] {
+                b'/' if i + 1 < len && bytes[i + 1] == b'*' => {
+                    // skip comment inside selector
+                    i += 2;
+                    while i + 1 < len {
+                        if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                            i += 2;
+                            break;
+                        }
+                        i += 1;
+                    }
+                }
+                b'\'' | b'"' => {
+                    let q = bytes[i];
+                    i += 1;
+                    while i < len {
+                        if bytes[i] == q {
+                            i += 1;
+                            break;
+                        }
+                        if bytes[i] == b'\\' {
+                            i += 1;
+                        }
+                        i += 1;
+                    }
+                }
+                _ => {
+                    i += 1;
+                }
+            }
+        }
+        let raw_selector = css[selector_start..i].trim();
+
+        if raw_selector.is_empty() {
+            // No selector before '{', just emit brace if present.
+            if i < len && bytes[i] == b'{' {
+                out.push('{');
+                i += 1;
+                brace_depth += 1;
+            }
+            continue;
+        }
+
+        // Scope each comma-separated part.
+        let scoped = scope_selector_list(raw_selector);
+        out.push_str(&scoped);
+
+        if i < len && bytes[i] == b'{' {
+            out.push('{');
+            i += 1;
+            brace_depth += 1;
+        }
+    }
+
+    out
+}
+
+/// Scope a (possibly comma-separated) selector list.
+fn scope_selector_list(selector_list: &str) -> String {
+    let parts: Vec<&str> = selector_list.split(',').collect();
+    let scoped_parts: Vec<String> = parts
+        .iter()
+        .map(|part| scope_single_selector(part.trim()))
+        .collect();
+    scoped_parts.join(", ")
+}
+
+/// Scope a single selector to `.epub-preview`.
+fn scope_single_selector(selector: &str) -> String {
+    // Normalise whitespace for comparison only.
+    let lower = selector.to_ascii_lowercase();
+    let trimmed = lower.trim();
+    if trimmed == "body" || trimmed == "html" || trimmed == "html body" {
+        ".epub-preview".to_string()
+    } else if trimmed.starts_with("body ")
+        || trimmed.starts_with("body>")
+        || trimmed.starts_with("body+")
+        || trimmed.starts_with("body~")
+    {
+        // body .foo -> .epub-preview .foo
+        format!(".epub-preview {}", &selector[4..].trim_start())
+    } else if trimmed.starts_with("html ") {
+        format!(".epub-preview {}", &selector[4..].trim_start())
+    } else {
+        format!(".epub-preview {selector}")
+    }
+}
+
 fn render_stylesheet_block(
     archive: &mut ZipArchive<File>,
     epub_path: &Path,
@@ -301,13 +930,9 @@ fn render_stylesheet_block(
         let Some(css) = try_read_zip_string(archive, stylesheet_path, epub_path)? else {
             continue;
         };
-        styles.push_str(&rewrite_css_urls(
-            &css,
-            stylesheet_path,
-            archive,
-            epub_path,
-            package,
-        )?);
+        let rewritten_css = rewrite_css_urls(&css, stylesheet_path, archive, epub_path, package)?;
+        let scoped_css = scope_epub_css(&rewritten_css);
+        styles.push_str(&scoped_css);
         styles.push('\n');
     }
 
@@ -366,6 +991,7 @@ fn render_node(
 
             output.push('<');
             output.push_str(tag_name);
+            let mut data_epub_href = None;
 
             for attribute in node.attributes() {
                 let attribute_name = attribute.name();
@@ -389,11 +1015,23 @@ fn render_node(
                     epub_path,
                     context,
                 )?;
+                if attribute_name == "id" {
+                    data_epub_href = Some(format!(
+                        "{}#{}",
+                        context.chapter_path,
+                        attribute.value().trim()
+                    ));
+                }
 
                 output.push(' ');
                 output.push_str(serialized_name);
                 output.push_str("=\"");
                 output.push_str(&escape_html_attribute(&rewritten_value));
+                output.push('"');
+            }
+            if let Some(data_epub_href) = data_epub_href {
+                output.push_str(" data-epub-href=\"");
+                output.push_str(&escape_html_attribute(&data_epub_href));
                 output.push('"');
             }
 
@@ -424,6 +1062,7 @@ fn rewrite_attribute_value(
     context: &RenderContext<'_>,
 ) -> AppResult<String> {
     match attribute_name {
+        "id" => Ok(fragment_anchor_id(context.chapter_path, value)),
         "src" | "poster" => rewrite_archive_resource_reference(
             value,
             context.chapter_path,
@@ -457,16 +1096,33 @@ fn rewrite_attribute_value(
 
 fn rewrite_anchor_href(value: &str, context: &RenderContext<'_>) -> AppResult<String> {
     let trimmed = value.trim();
-    if trimmed.is_empty()
-        || trimmed.starts_with('#')
-        || trimmed.starts_with("data:")
-        || is_external_url(trimmed)
-    {
+    if trimmed.is_empty() || trimmed.starts_with("data:") || is_external_url(trimmed) {
         return Ok(trimmed.to_string());
     }
 
+    if trimmed.starts_with('#') {
+        let fragment = trimmed.trim_start_matches('#');
+        if fragment.is_empty() {
+            return Ok(format!("#{}", chapter_section_id(context.chapter_path)));
+        }
+        return Ok(format!(
+            "#{}",
+            fragment_anchor_id(context.chapter_path, fragment)
+        ));
+    }
+
+    if let Some((_, Some(anchor_id))) =
+        normalized_navigation_target(trimmed, context.chapter_path, context.package)
+    {
+        return Ok(format!("#{anchor_id}"));
+    }
+
     let (path_part, _) = split_resource_suffix(trimmed);
-    let resolved_path = resolve_archive_path(context.chapter_path, path_part);
+    let resolved_path = if path_part.is_empty() {
+        context.chapter_path.to_string()
+    } else {
+        resolve_archive_path(context.chapter_path, path_part)
+    };
     if let Some(item) = context.package.manifest_by_path.get(&resolved_path) {
         if item.media_type == "application/xhtml+xml" || item.media_type == "text/html" {
             return Ok(format!("#{}", chapter_section_id(&resolved_path)));
@@ -622,8 +1278,21 @@ fn normalize_archive_path(path: &str) -> String {
 }
 
 fn chapter_section_id(chapter_path: &str) -> String {
-    let mut id = String::from("epub-");
+    let mut id = String::from("epub-chapter-");
     for character in chapter_path.chars() {
+        if character.is_ascii_alphanumeric() {
+            id.push(character.to_ascii_lowercase());
+        } else {
+            id.push('-');
+        }
+    }
+    id
+}
+
+fn fragment_anchor_id(chapter_path: &str, fragment_id: &str) -> String {
+    let mut id = chapter_section_id(chapter_path);
+    id.push_str("-frag-");
+    for character in fragment_id.chars() {
         if character.is_ascii_alphanumeric() {
             id.push(character.to_ascii_lowercase());
         } else {

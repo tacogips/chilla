@@ -56,6 +56,13 @@ export interface DirectoryPage {
   readonly has_more: boolean;
 }
 
+export interface EpubNavigationItem {
+  readonly label: string;
+  readonly href: string | null;
+  readonly anchor_id: string | null;
+  readonly children: readonly EpubNavigationItem[];
+}
+
 export type FilePreview =
   | ({
       readonly kind: "markdown";
@@ -101,6 +108,7 @@ export type FilePreview =
       readonly file_name: string;
       readonly mime_type: string;
       readonly html: string;
+      readonly toc: readonly EpubNavigationItem[];
       readonly last_modified: string;
     }
   | {

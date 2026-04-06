@@ -13,6 +13,8 @@ This directory contains reference materials for system design and implementation
 | Tauri WebDriver Tests | https://v2.tauri.app/develop/tests/webdriver/ | Official Tauri WebDriver and `tauri-driver` guide |
 | Tauri WebDriver CI | https://v2.tauri.app/develop/tests/webdriver/ci/ | Official CI guidance for WebDriver-based Tauri tests |
 | Tauri Discussion 3768 | https://github.com/orgs/tauri-apps/discussions/3768 | Community discussion about integrating `tauri-driver` |
+| Foliate | https://github.com/johnfactotum/foliate | Desktop EPUB reader used as the UX reference for reader navigation behavior |
+| Foliate JS | https://github.com/johnfactotum/foliate-js | EPUB renderer reference for TOC trees, href resolution, and anchor-based pagination state |
 | SolidJS Documentation | https://docs.solidjs.com/ | Official Solid.js framework documentation |
 | Mermaid Documentation | https://mermaid.js.org/ | Official Mermaid syntax and rendering documentation |
 | Bun Documentation | https://bun.sh/docs | Official Bun runtime and package manager documentation |
