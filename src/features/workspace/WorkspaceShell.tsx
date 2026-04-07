@@ -14,6 +14,7 @@ import type {
   DirectoryEntry,
   DirectoryListSort,
   DocumentSnapshot,
+  EpubNavigationItem,
   FilePreview,
   HeadingNode,
   StartupContext,
@@ -41,7 +42,11 @@ import { DEFAULT_FILE_TREE_SORT, DIRECTORY_PAGE_SIZE } from "../file-view/sort";
 import { PreviewPane } from "../preview/PreviewPane";
 import { PdfFilePreviewPane } from "../preview/PdfFilePreviewPane";
 import { MediaFilePreviewPane } from "../preview/MediaFilePreviewPane";
-import { TocPane } from "../toc/TocPane";
+import {
+  EpubPreviewPane,
+  EPUB_PAGINATION_STEP_EVENT,
+} from "../preview/EpubPreviewPane";
+import { TocPane, type TocItem } from "../toc/TocPane";
 import type { WorkspaceSelection } from "./state";
 
 const EMPTY_STATE_IMAGE_PATH = "/empty-state-cat.png";
@@ -112,31 +117,32 @@ const SHORTCUT_SECTIONS: readonly {
       { keys: ["Q"], description: "Quit application" },
       {
         keys: ["Ctrl", "D"],
-        description: "Scroll document down",
+        description:
+          "Scroll the active document down, or advance one EPUB page",
       },
       {
         keys: ["Ctrl", "U"],
-        description: "Scroll document up",
+        description: "Scroll the active document up, or go back one EPUB page",
       },
       {
         keys: ["J"],
         description:
-          "When the file tree is hidden, move forward in the active document; media seeks 5 seconds",
+          "When the file tree is hidden, move forward in the active document; paginated EPUB moves one page and media seeks 5 seconds",
       },
       {
         keys: ["K"],
         description:
-          "When the file tree is hidden, move backward in the active document; media seeks 5 seconds",
+          "When the file tree is hidden, move backward in the active document; paginated EPUB moves one page and media seeks 5 seconds",
       },
       {
         keys: ["↓"],
         description:
-          "Scroll the active text/Markdown document down one line when the file tree is hidden",
+          "Move forward in the active document when the file tree is hidden; paginated EPUB advances one page",
       },
       {
         keys: ["↑"],
         description:
-          "Scroll the active text/Markdown document up one line when the file tree is hidden",
+          "Move backward in the active document when the file tree is hidden; paginated EPUB goes back one page",
       },
       {
         keys: ["Shift", "L"],
@@ -149,7 +155,7 @@ const SHORTCUT_SECTIONS: readonly {
       { keys: ["R"], description: "Reload current file" },
       {
         keys: ["Shift", "T"],
-        description: "Toggle table of contents (Markdown)",
+        description: "Toggle table of contents (Markdown / EPUB)",
       },
       {
         keys: ["Shift", "P"],
@@ -512,6 +518,10 @@ function formatPreviewSize(sizeBytes: number): string {
 }
 
 function previewSubtitle(preview: FilePreview | null): string {
+  if (preview?.kind === "epub") {
+    return "File type: EPUB";
+  }
+
   if (preview?.kind === "text") {
     return `File type: ${preview.file_type} | File size: ${formatPreviewSize(preview.size_bytes)}`;
   }
@@ -521,6 +531,26 @@ function previewSubtitle(preview: FilePreview | null): string {
   }
 
   return "Rendered HTML";
+}
+
+function hasActiveEpubPreview(preview: FilePreview | null): boolean {
+  return preview?.kind === "epub";
+}
+
+function stepActiveEpubPage(step: number): boolean {
+  const reader = document.querySelector<HTMLElement>(".epub-reader");
+
+  if (!(reader instanceof HTMLElement)) {
+    return false;
+  }
+
+  reader.dispatchEvent(
+    new CustomEvent(EPUB_PAGINATION_STEP_EVENT, {
+      detail: { step },
+    }),
+  );
+
+  return true;
 }
 
 function inferPreviewKind(preview: FilePreview | null): InferredPreviewKind {
@@ -630,6 +660,27 @@ function renderShortcutKeys(keys: readonly string[]) {
   );
 }
 
+function markdownHeadingsToTocItems(
+  headings: readonly HeadingNode[],
+): readonly TocItem[] {
+  return headings.map((heading) => ({
+    title: heading.title,
+    anchorId: heading.anchor_id,
+    metaLabel: `L${heading.line_start}`,
+    children: markdownHeadingsToTocItems(heading.children),
+  }));
+}
+
+function epubNavigationToTocItems(
+  items: readonly EpubNavigationItem[],
+): readonly TocItem[] {
+  return items.map((item) => ({
+    title: item.label,
+    anchorId: item.anchor_id,
+    children: epubNavigationToTocItems(item.children),
+  }));
+}
+
 function hasExactModifiers(
   event: KeyboardEvent,
   modifiers: {
@@ -725,6 +776,10 @@ export function WorkspaceShell() {
     previewRequestId += 1;
     setFilePreview(null);
     setMarkdownDoc(null);
+    setSelection({
+      anchorId: null,
+      lineStart: null,
+    });
   };
 
   const clearSelectionPreviewDebounce = () => {
@@ -887,6 +942,10 @@ export function WorkspaceShell() {
           setMarkdownDoc(doc);
           setFilePreview(null);
           setMarkdownPane("preview");
+          setSelection({
+            anchorId: null,
+            lineStart: null,
+          });
           setErrorMessage(null);
         });
       } else {
@@ -905,6 +964,10 @@ export function WorkspaceShell() {
         startTransition(() => {
           setMarkdownDoc(null);
           setFilePreview(nextPreview);
+          setSelection({
+            anchorId: null,
+            lineStart: null,
+          });
           setErrorMessage(null);
         });
       }
@@ -1156,18 +1219,61 @@ export function WorkspaceShell() {
     }
   };
 
-  const handleHeadingSelect = (heading: HeadingNode) => {
-    setMarkdownPane("preview");
+  const handleTocItemSelect = (item: TocItem) => {
+    if (item.anchorId === null) {
+      return;
+    }
+
+    if (markdownDoc() !== null) {
+      setMarkdownPane("preview");
+    }
+
     setSelection({
-      anchorId: heading.anchor_id,
-      lineStart: heading.line_start,
+      anchorId: item.anchorId,
+      lineStart: null,
     });
   };
 
   const md = () => markdownDoc();
   const fp = () => filePreview();
+  const epubPreview = () => {
+    const preview = fp();
+    return preview?.kind === "epub" ? preview : null;
+  };
   const currentOpenPath = () => md()?.path ?? previewPath(fp());
   const hasOpenDocument = () => md() !== null || fp() !== null;
+  const hasTocDocument = createMemo(
+    () => md() !== null || fp()?.kind === "epub",
+  );
+  const tocItems = createMemo<readonly TocItem[]>(() => {
+    const markdown = md();
+    if (markdown !== null) {
+      return markdownHeadingsToTocItems(markdown.headings);
+    }
+
+    const preview = fp();
+    if (preview?.kind === "epub") {
+      return epubNavigationToTocItems(preview.toc);
+    }
+
+    return [];
+  });
+  const tocSummaryLabel = createMemo(() => {
+    const markdown = md();
+    if (markdown !== null) {
+      return `${markdown.headings.length} headings`;
+    }
+
+    const preview = fp();
+    if (preview?.kind === "epub") {
+      return `${preview.toc.length} sections`;
+    }
+
+    return "0 items";
+  });
+  const tocEmptyLabel = createMemo(() =>
+    md() !== null ? "No headings found." : "No contents found.",
+  );
   const canLoadMoreDirectoryEntries = createMemo(() => {
     const currentDirectory = directoryState();
 
@@ -1202,7 +1308,7 @@ export function WorkspaceShell() {
   };
 
   const viewerGridClassName = createMemo(() => {
-    const toc = isTocOpen() && md() !== null;
+    const toc = isTocOpen() && hasTocDocument();
     const tree = isFileTreeOpen();
     let className = "workspace__body workspace__body--viewer";
 
@@ -1279,7 +1385,9 @@ export function WorkspaceShell() {
 
       if (matchesShortcut(event, "d", { ctrl: true })) {
         event.preventDefault();
-        if (!hasActiveDocumentMediaElement()) {
+        if (hasActiveEpubPreview(fp())) {
+          stepActiveEpubPage(1);
+        } else if (!hasActiveDocumentMediaElement()) {
           scrollActiveDocumentPane(1);
         }
         return;
@@ -1287,7 +1395,9 @@ export function WorkspaceShell() {
 
       if (matchesShortcut(event, "u", { ctrl: true })) {
         event.preventDefault();
-        if (!hasActiveDocumentMediaElement()) {
+        if (hasActiveEpubPreview(fp())) {
+          stepActiveEpubPage(-1);
+        } else if (!hasActiveDocumentMediaElement()) {
           scrollActiveDocumentPane(-1);
         }
         return;
@@ -1306,6 +1416,8 @@ export function WorkspaceShell() {
           event.preventDefault();
           if (hasActiveMedia) {
             seekActiveDocumentMediaElement(1);
+          } else if (hasActiveEpubPreview(fp())) {
+            stepActiveEpubPage(1);
           } else {
             nudgeActiveDocumentPane(1);
           }
@@ -1316,6 +1428,8 @@ export function WorkspaceShell() {
           event.preventDefault();
           if (hasActiveMedia) {
             seekActiveDocumentMediaElement(-1);
+          } else if (hasActiveEpubPreview(fp())) {
+            stepActiveEpubPage(-1);
           } else {
             nudgeActiveDocumentPane(-1);
           }
@@ -1324,13 +1438,21 @@ export function WorkspaceShell() {
 
         if (!hasActiveMedia && event.key === "ArrowDown") {
           event.preventDefault();
-          nudgeActiveDocumentPane(1);
+          if (hasActiveEpubPreview(fp())) {
+            stepActiveEpubPage(1);
+          } else {
+            nudgeActiveDocumentPane(1);
+          }
           return;
         }
 
         if (!hasActiveMedia && event.key === "ArrowUp") {
           event.preventDefault();
-          nudgeActiveDocumentPane(-1);
+          if (hasActiveEpubPreview(fp())) {
+            stepActiveEpubPage(-1);
+          } else {
+            nudgeActiveDocumentPane(-1);
+          }
           return;
         }
       }
@@ -1353,10 +1475,7 @@ export function WorkspaceShell() {
         return;
       }
 
-      if (
-        matchesShortcut(event, "t", { shift: true }) &&
-        markdownDoc() !== null
-      ) {
+      if (matchesShortcut(event, "t", { shift: true }) && hasTocDocument()) {
         event.preventDefault();
         setTocOpen((value) => !value);
         return;
@@ -1477,6 +1596,9 @@ export function WorkspaceShell() {
                   <PreviewGlyph />
                 </button>
               </div>
+            </Show>
+
+            <Show when={hasTocDocument()}>
               <button
                 class={`button button--ghost workspace__icon-button${
                   isTocOpen() ? " button--active" : ""
@@ -1595,12 +1717,14 @@ export function WorkspaceShell() {
             />
           </Show>
 
-          <Show when={isTocOpen() && md() !== null}>
+          <Show when={isTocOpen() && hasTocDocument()}>
             <TocPane
               activeAnchorId={selection().anchorId}
-              headings={md()?.headings ?? []}
+              emptyLabel={tocEmptyLabel()}
+              items={tocItems()}
+              summaryLabel={tocSummaryLabel()}
               visible={true}
-              onSelectHeading={handleHeadingSelect}
+              onSelectItem={handleTocItemSelect}
             />
           </Show>
 
@@ -1633,10 +1757,31 @@ export function WorkspaceShell() {
             </Show>
 
             <Show
+              when={md() === null && fp() !== null && fp()?.kind === "epub"}
+            >
+              <EpubPreviewPane
+                colorScheme={colorScheme()}
+                documentPath={previewPath(fp())}
+                html={previewHtml(fp())}
+                onRelocate={(anchorId) => {
+                  setSelection({
+                    anchorId,
+                    lineStart: null,
+                  });
+                }}
+                selectedAnchorId={selection().anchorId}
+                subtitle={previewSubtitle(fp())}
+                toc={epubPreview()?.toc ?? []}
+                visible={true}
+              />
+            </Show>
+
+            <Show
               when={
                 md() === null &&
                 fp() !== null &&
-                inferPreviewKind(fp()) === "default"
+                inferPreviewKind(fp()) === "default" &&
+                fp()?.kind !== "epub"
               }
             >
               <PreviewPane

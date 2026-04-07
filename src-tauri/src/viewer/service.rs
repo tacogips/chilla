@@ -9,6 +9,7 @@ use crate::{
     document::service::DocumentService,
     error::{AppError, AppResult},
     syntax_highlight::{self, SyntaxUiTheme},
+    viewer::epub::render_epub,
     viewer::types::{
         DirectoryEntry, DirectoryListSort, DirectoryPage, DirectorySortDirection,
         DirectorySortField, FilePreview, StartupContext, WorkspaceMode,
@@ -69,6 +70,7 @@ const AUDIO_EXTENSION_MIME_TYPES: [(&str, &str); 8] = [
     ("wav", "audio/wav"),
 ];
 const PDF_EXTENSION_MIME_TYPES: [(&str, &str); 1] = [("pdf", "application/pdf")];
+const EPUB_EXTENSION_MIME_TYPES: [(&str, &str); 1] = [("epub", "application/epub+zip")];
 const MAX_DIRECTORY_PAGE_SIZE: usize = 200;
 
 #[derive(Debug)]
@@ -214,6 +216,10 @@ impl ViewerService {
             return self.open_pdf_preview(&file_path, mime_type);
         }
 
+        if mime_type == "application/epub+zip" {
+            return self.open_epub_preview(&file_path, mime_type);
+        }
+
         if is_textual_mime(&mime_type) {
             return self.open_text_preview(&file_path, mime_type, ui_theme);
         }
@@ -291,6 +297,19 @@ impl ViewerService {
             mime_type,
             // Inline viewer uses the frontend iframe + convertFileSrc(path); HTML unused.
             html: String::new(),
+            last_modified: last_modified_string(path)?,
+        })
+    }
+
+    fn open_epub_preview(&self, path: &Path, mime_type: String) -> AppResult<FilePreview> {
+        let rendered = render_epub(path)?;
+
+        Ok(FilePreview::Epub {
+            path: display_path(path),
+            file_name: file_name(path),
+            mime_type,
+            html: rendered.html,
+            toc: rendered.toc,
             last_modified: last_modified_string(path)?,
         })
     }
@@ -729,6 +748,7 @@ fn fallback_media_mime_type<'a>(path: &Path, detected_mime_type: &'a str) -> Opt
         .chain(VIDEO_EXTENSION_MIME_TYPES.iter())
         .chain(AUDIO_EXTENSION_MIME_TYPES.iter())
         .chain(PDF_EXTENSION_MIME_TYPES.iter())
+        .chain(EPUB_EXTENSION_MIME_TYPES.iter())
         .find_map(|(candidate_extension, candidate_mime_type)| {
             (extension == *candidate_extension).then_some(*candidate_mime_type)
         })
@@ -1036,6 +1056,7 @@ mod tests {
         let video_path = test_dir.path().join("clip.mp4");
         let audio_path = test_dir.path().join("podcast.mp3");
         let pdf_path = test_dir.path().join("notes.pdf");
+        let epub_path = test_dir.path().join("book.epub");
         let binary_path = test_dir.path().join("asset.bin");
 
         fs::write(&markdown_path, "# Heading").expect("write markdown");
@@ -1056,6 +1077,12 @@ mod tests {
             b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
         )
         .expect("write minimal pdf");
+        write_test_epub(
+            &epub_path,
+            "Algorithms Notes",
+            "Ada Lovelace",
+            "A compact EPUB fixture.",
+        );
         fs::write(&binary_path, [0_u8, 159, 146, 150]).expect("write binary");
 
         let viewer_service = ViewerService::new();
@@ -1153,6 +1180,36 @@ mod tests {
         }
 
         match viewer_service
+            .open_file_preview(&epub_path, SyntaxUiTheme::Dark)
+            .expect("epub preview")
+        {
+            FilePreview::Epub {
+                html, path, toc, ..
+            } => {
+                assert!(path.ends_with("book.epub"));
+                assert!(html.contains("Algorithms Notes"));
+                assert!(html.contains("Ada Lovelace"));
+                assert!(html.contains("A compact EPUB fixture."));
+                assert!(html.contains("<style class=\"epub-preview__styles\">"));
+                assert!(html.contains(".chapter{color:#202020}"));
+                assert!(html.contains("data:image/png;base64,"));
+                assert!(html.contains("id=\"epub-chapter-oebps-chapter-xhtml-frag-intro\""));
+                assert!(html.contains("data-epub-href=\"OEBPS/chapter.xhtml#intro\""));
+                assert!(html.contains("href=\"#epub-chapter-oebps-chapter-xhtml-frag-details\""));
+                assert_eq!(toc.len(), 1);
+                assert_eq!(toc[0].label, "Algorithms Notes");
+                assert_eq!(toc[0].href.as_deref(), Some("OEBPS/chapter.xhtml#intro"));
+                assert_eq!(
+                    toc[0].anchor_id.as_deref(),
+                    Some("epub-chapter-oebps-chapter-xhtml-frag-intro")
+                );
+                assert_eq!(toc[0].children.len(), 1);
+                assert_eq!(toc[0].children[0].label, "Details");
+            }
+            _ => panic!("expected epub preview"),
+        }
+
+        match viewer_service
             .open_file_preview(&binary_path, SyntaxUiTheme::Dark)
             .expect("binary preview")
         {
@@ -1208,6 +1265,71 @@ mod tests {
                 assert!(stream_url.is_none());
             }
             _ => panic!("expected video preview"),
+        }
+    }
+
+    #[test]
+    fn open_file_preview_reads_epub_ncx_navigation_when_nav_document_is_missing() {
+        let test_dir = TestDir::new();
+        let epub_path = test_dir.path().join("ncx-book.epub");
+        write_test_epub_with_toc_mode(
+            &epub_path,
+            "NCX Notes",
+            "Grace Hopper",
+            "Fallback navigation should still work.",
+            EpubFixtureTocMode::Ncx,
+        );
+
+        match ViewerService::new()
+            .open_file_preview(&epub_path, SyntaxUiTheme::Dark)
+            .expect("epub preview")
+        {
+            FilePreview::Epub { toc, .. } => {
+                assert_eq!(toc.len(), 1);
+                assert_eq!(toc[0].label, "NCX Notes");
+                assert_eq!(toc[0].href.as_deref(), Some("OEBPS/chapter.xhtml#intro"));
+                assert_eq!(
+                    toc[0].anchor_id.as_deref(),
+                    Some("epub-chapter-oebps-chapter-xhtml-frag-intro")
+                );
+                assert_eq!(toc[0].children.len(), 1);
+                assert_eq!(toc[0].children[0].label, "Details");
+                assert_eq!(
+                    toc[0].children[0].href.as_deref(),
+                    Some("OEBPS/chapter.xhtml#details")
+                );
+            }
+            _ => panic!("expected epub preview"),
+        }
+    }
+
+    #[test]
+    fn open_file_preview_synthesizes_epub_navigation_when_toc_metadata_is_missing() {
+        let test_dir = TestDir::new();
+        let epub_path = test_dir.path().join("spine-book.epub");
+        write_test_epub_with_toc_mode(
+            &epub_path,
+            "Spine Notes",
+            "Katherine Johnson",
+            "Synthetic navigation should use the spine order.",
+            EpubFixtureTocMode::SpineFallback,
+        );
+
+        match ViewerService::new()
+            .open_file_preview(&epub_path, SyntaxUiTheme::Dark)
+            .expect("epub preview")
+        {
+            FilePreview::Epub { toc, .. } => {
+                assert_eq!(toc.len(), 1);
+                assert_eq!(toc[0].label, "Spine Notes");
+                assert_eq!(toc[0].href.as_deref(), Some("OEBPS/chapter.xhtml"));
+                assert_eq!(
+                    toc[0].anchor_id.as_deref(),
+                    Some("epub-chapter-oebps-chapter-xhtml")
+                );
+                assert!(toc[0].children.is_empty());
+            }
+            _ => panic!("expected epub preview"),
         }
     }
 
@@ -1301,5 +1423,181 @@ mod tests {
             }
             _ => panic!("expected text preview for nix"),
         }
+    }
+
+    #[derive(Clone, Copy)]
+    enum EpubFixtureTocMode {
+        Nav,
+        Ncx,
+        SpineFallback,
+    }
+
+    fn write_test_epub(path: &Path, title: &str, author: &str, body_text: &str) {
+        write_test_epub_with_toc_mode(path, title, author, body_text, EpubFixtureTocMode::Nav);
+    }
+
+    fn write_test_epub_with_toc_mode(
+        path: &Path,
+        title: &str,
+        author: &str,
+        body_text: &str,
+        toc_mode: EpubFixtureTocMode,
+    ) {
+        use std::io::Write;
+        use zip::{write::FileOptions, CompressionMethod, ZipWriter};
+
+        let file = fs::File::create(path).expect("create epub fixture");
+        let mut zip = ZipWriter::new(file);
+        let stored = FileOptions::default().compression_method(CompressionMethod::Stored);
+        let deflated = FileOptions::default().compression_method(CompressionMethod::Deflated);
+        let (toc_manifest, spine_attributes) = match toc_mode {
+            EpubFixtureTocMode::Nav => (
+                r#"    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>"#,
+                "",
+            ),
+            EpubFixtureTocMode::Ncx => (
+                r#"    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>"#,
+                r#" toc="ncx""#,
+            ),
+            EpubFixtureTocMode::SpineFallback => ("", ""),
+        };
+
+        zip.start_file("mimetype", stored)
+            .expect("start mimetype file");
+        zip.write_all(b"application/epub+zip")
+            .expect("write mimetype");
+
+        zip.start_file("META-INF/container.xml", deflated)
+            .expect("start container.xml");
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>"#,
+        )
+        .expect("write container.xml");
+
+        zip.start_file("OEBPS/content.opf", deflated)
+            .expect("start content.opf");
+        zip.write_all(
+            format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="BookId">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="BookId">urn:test:book</dc:identifier>
+    <dc:title>{title}</dc:title>
+    <dc:creator>{author}</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+{toc_manifest}
+    <item id="style" href="styles/book.css" media-type="text/css"/>
+    <item id="cover" href="images/cover.png" media-type="image/png"/>
+  </manifest>
+  <spine{spine_attributes}>
+    <itemref idref="chapter"/>
+  </spine>
+</package>"#
+            )
+            .as_bytes(),
+        )
+        .expect("write content.opf");
+
+        zip.start_file("OEBPS/styles/book.css", deflated)
+            .expect("start css");
+        zip.write_all(
+            b".chapter{color:#202020}.cover{background-image:url('../images/cover.png')}",
+        )
+        .expect("write css");
+
+        if matches!(toc_mode, EpubFixtureTocMode::Nav) {
+            zip.start_file("OEBPS/nav.xhtml", deflated)
+                .expect("start nav.xhtml");
+            zip.write_all(
+                format!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+  <head><title>Contents</title></head>
+  <body>
+    <nav epub:type="toc">
+      <ol>
+        <li>
+          <a href="chapter.xhtml#intro">{title}</a>
+          <ol>
+            <li><a href="chapter.xhtml#details">Details</a></li>
+          </ol>
+        </li>
+      </ol>
+    </nav>
+  </body>
+</html>"#
+                )
+                .as_bytes(),
+            )
+            .expect("write nav.xhtml");
+        }
+
+        if matches!(toc_mode, EpubFixtureTocMode::Ncx) {
+            zip.start_file("OEBPS/toc.ncx", deflated)
+                .expect("start toc.ncx");
+            zip.write_all(
+                format!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <navMap>
+    <navPoint id="intro" playOrder="1">
+      <navLabel><text>{title}</text></navLabel>
+      <content src="chapter.xhtml#intro"/>
+      <navPoint id="details" playOrder="2">
+        <navLabel><text>Details</text></navLabel>
+        <content src="chapter.xhtml#details"/>
+      </navPoint>
+    </navPoint>
+  </navMap>
+</ncx>"#
+                )
+                .as_bytes(),
+            )
+            .expect("write toc.ncx");
+        }
+
+        zip.start_file("OEBPS/chapter.xhtml", deflated)
+            .expect("start chapter.xhtml");
+        zip.write_all(
+            format!(
+                r##"<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>{title}</title>
+    <link rel="stylesheet" href="styles/book.css" type="text/css"/>
+  </head>
+  <body>
+    <section class="chapter">
+      <h1 id="intro">{title}</h1>
+      <p>{body_text}</p>
+      <h2 id="details">Details</h2>
+      <p><a href="#details">Jump</a></p>
+      <img class="cover" src="images/cover.png" alt="cover"/>
+    </section>
+  </body>
+</html>"##
+            )
+            .as_bytes(),
+        )
+        .expect("write chapter.xhtml");
+
+        zip.start_file("OEBPS/images/cover.png", deflated)
+            .expect("start cover image");
+        zip.write_all(&[
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,
+            8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 248, 255,
+            255, 63, 0, 5, 254, 2, 254, 167, 53, 129, 132, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96,
+            130,
+        ])
+        .expect("write cover image");
+
+        zip.finish().expect("finish epub fixture");
     }
 }

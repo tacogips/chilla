@@ -59,3 +59,5 @@ result
 *.profraw
 *.profdata
 tarpaulin-report.html
+
+**/private**

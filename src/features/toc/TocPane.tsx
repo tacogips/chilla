@@ -1,43 +1,54 @@
 import { For, Show } from "solid-js";
-import type { HeadingNode } from "../../lib/tauri/document";
 
 interface TocPaneProps {
-  readonly headings: readonly HeadingNode[];
+  readonly items: readonly TocItem[];
   readonly visible: boolean;
   readonly activeAnchorId: string | null;
-  readonly onSelectHeading: (heading: HeadingNode) => void;
+  readonly emptyLabel?: string;
+  readonly summaryLabel?: string;
+  readonly onSelectItem: (item: TocItem) => void;
 }
 
-interface HeadingBranchProps {
-  readonly headings: readonly HeadingNode[];
+export interface TocItem {
+  readonly title: string;
+  readonly anchorId: string | null;
+  readonly children: readonly TocItem[];
+  readonly metaLabel?: string;
+}
+
+interface TocBranchProps {
+  readonly items: readonly TocItem[];
   readonly activeAnchorId: string | null;
-  readonly onSelectHeading: (heading: HeadingNode) => void;
+  readonly onSelectItem: (item: TocItem) => void;
 }
 
-function HeadingBranch(props: HeadingBranchProps) {
+function TocBranch(props: TocBranchProps) {
   return (
     <ul class="toc__list">
-      <For each={props.headings}>
-        {(heading) => (
+      <For each={props.items}>
+        {(item) => (
           <li>
             <button
               class={`toc__button${
-                props.activeAnchorId === heading.anchor_id
+                props.activeAnchorId === item.anchorId && item.anchorId !== null
                   ? " toc__button--active"
                   : ""
               }`}
               type="button"
-              onClick={() => props.onSelectHeading(heading)}
+              disabled={item.anchorId === null}
+              onClick={() => props.onSelectItem(item)}
             >
-              {heading.title}
-              <span class="toc__meta">L{heading.line_start}</span>
+              {item.title}
+              <Show when={item.metaLabel !== undefined}>
+                <span class="toc__meta">{item.metaLabel}</span>
+              </Show>
             </button>
-            <Show when={heading.children.length > 0}>
+            <Show when={item.children.length > 0}>
               <div class="toc__children">
-                <HeadingBranch
+                <TocBranch
                   activeAnchorId={props.activeAnchorId}
-                  headings={heading.children}
-                  onSelectHeading={props.onSelectHeading}
+                  items={item.children}
+                  onSelectItem={props.onSelectItem}
                 />
               </div>
             </Show>
@@ -53,17 +64,19 @@ export function TocPane(props: TocPaneProps) {
     <section class={`pane${props.visible ? "" : " pane--hidden"}`}>
       <header class="pane__header">
         <span class="pane__title">Table of Contents</span>
-        <span>{props.headings.length} headings</span>
+        <span>{props.summaryLabel ?? `${props.items.length} items`}</span>
       </header>
       <div class="pane__body toc">
         <Show
-          when={props.headings.length > 0}
-          fallback={<div class="empty">No headings found.</div>}
+          when={props.items.length > 0}
+          fallback={
+            <div class="empty">{props.emptyLabel ?? "No items found."}</div>
+          }
         >
-          <HeadingBranch
+          <TocBranch
             activeAnchorId={props.activeAnchorId}
-            headings={props.headings}
-            onSelectHeading={props.onSelectHeading}
+            items={props.items}
+            onSelectItem={props.onSelectItem}
           />
         </Show>
       </div>

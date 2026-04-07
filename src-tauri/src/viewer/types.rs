@@ -68,6 +68,14 @@ pub struct DirectoryEntry {
     pub modified_at_unix_ms: u64,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct EpubNavigationItem {
+    pub label: String,
+    pub href: Option<String>,
+    pub anchor_id: Option<String>,
+    pub children: Vec<EpubNavigationItem>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FilePreview {
@@ -104,6 +112,14 @@ pub enum FilePreview {
         file_name: String,
         mime_type: String,
         html: String,
+        last_modified: String,
+    },
+    Epub {
+        path: String,
+        file_name: String,
+        mime_type: String,
+        html: String,
+        toc: Vec<EpubNavigationItem>,
         last_modified: String,
     },
     Text {

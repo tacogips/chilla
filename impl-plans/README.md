@@ -47,6 +47,7 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `epub-navigation-and-location.md` | 2026-04-06 | `design-docs/specs/design-epub-navigation.md` |
 | `linux-tauri-e2e-webdriver.md` | 2026-03-24 | `design-docs/specs/notes.md#linux-tauri-webdriver-e2e-notes` |
 | `browser-tests-to-tauri-e2e.md` | 2026-03-24 | `design-docs/specs/notes.md#browser-test-migration-to-tauri-e2e-notes` |
 | `real-runtime-only-verification.md` | 2026-03-24 | `design-docs/specs/notes.md#real-runtime-only-verification-notes` |

@@ -12,6 +12,8 @@ pub enum AppError {
     NotADirectory(String),
     #[error("path is not a supported file or directory target: {0}")]
     UnsupportedPathKind(String),
+    #[error("failed to parse EPUB `{path}`: {message}")]
+    EpubParse { path: String, message: String },
     #[error("failed to {action} `{path}`: {source}")]
     Io {
         action: &'static str,
@@ -42,6 +44,7 @@ impl AppError {
             | Self::NotAFile(_)
             | Self::NotADirectory(_)
             | Self::UnsupportedPathKind(_)
+            | Self::EpubParse { .. }
             | Self::Io { .. } => 3,
             Self::Watcher(_) | Self::State(_) => 1,
         }
@@ -52,6 +55,13 @@ impl AppError {
             action,
             path: path.display().to_string(),
             source,
+        }
+    }
+
+    pub fn epub_parse(path: &Path, message: impl Into<String>) -> Self {
+        Self::EpubParse {
+            path: path.display().to_string(),
+            message: message.into(),
         }
     }
 }
