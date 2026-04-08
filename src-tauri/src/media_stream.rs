@@ -13,6 +13,7 @@ use std::{
 };
 
 use crate::error::{AppError, AppResult};
+use crate::mp4_faststart::{FaststartLayout, VirtualSegment};
 
 const STREAM_HOST: &str = "127.0.0.1";
 const CORS_ALLOW_ORIGIN: &str = "*";
@@ -29,6 +30,15 @@ pub struct MediaStreamService {
 struct MediaStreamEntry {
     path: PathBuf,
     mime_type: String,
+    faststart: Arc<RwLock<FaststartStatus>>,
+}
+
+#[derive(Clone)]
+enum FaststartStatus {
+    Unsupported,
+    Pending,
+    Ready(Arc<FaststartLayout>),
+    Unavailable,
 }
 
 impl MediaStreamService {
@@ -72,9 +82,12 @@ impl MediaStreamService {
             .map_err(|source| AppError::io("canonicalize media stream path", path, source))?;
         let token = self.new_entry_token(&canonical_path);
         let canonical_path_display = canonical_path.display().to_string();
+        let faststart = prepare_faststart_state(canonical_path.clone(), mime_type);
+
         let entry = MediaStreamEntry {
             path: canonical_path,
             mime_type: mime_type.to_string(),
+            faststart,
         };
 
         self.entries
@@ -110,6 +123,78 @@ fn new_token_seed() -> String {
     format!("{}:{now}", std::process::id())
 }
 
+fn prepare_faststart_state(path: PathBuf, mime_type: &str) -> Arc<RwLock<FaststartStatus>> {
+    let should_analyze = should_prepare_faststart(&path, mime_type);
+    let initial_status = if should_analyze {
+        FaststartStatus::Pending
+    } else {
+        FaststartStatus::Unsupported
+    };
+    let status = Arc::new(RwLock::new(initial_status));
+
+    if !should_analyze {
+        return status;
+    }
+
+    let analysis_status = Arc::clone(&status);
+    let path_for_thread = path.clone();
+    if thread::Builder::new()
+        .name("chilla-media-faststart".to_string())
+        .spawn(move || {
+            let next_status = match crate::mp4_faststart::analyze_mp4(&path_for_thread) {
+                Some(layout) => {
+                    eprintln!(
+                        "[media-stream] faststart layout ready for path={}",
+                        path_for_thread.display()
+                    );
+                    FaststartStatus::Ready(Arc::new(layout))
+                }
+                None => FaststartStatus::Unavailable,
+            };
+
+            if let Ok(mut guard) = analysis_status.write() {
+                *guard = next_status;
+            }
+        })
+        .is_err()
+    {
+        if let Ok(mut guard) = status.write() {
+            *guard = FaststartStatus::Unavailable;
+        }
+    }
+
+    status
+}
+
+fn should_prepare_faststart(path: &Path, mime_type: &str) -> bool {
+    if !mime_type.starts_with("video/") {
+        return false;
+    }
+
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "mp4" | "m4v" | "mov"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn ready_faststart_layout(entry: &MediaStreamEntry) -> Option<Arc<FaststartLayout>> {
+    entry
+        .faststart
+        .read()
+        .ok()
+        .and_then(|status| match &*status {
+            FaststartStatus::Ready(layout) => Some(Arc::clone(layout)),
+            FaststartStatus::Unsupported
+            | FaststartStatus::Pending
+            | FaststartStatus::Unavailable => None,
+        })
+}
+
 fn run_media_stream_server(
     listener: TcpListener,
     entries: Arc<RwLock<HashMap<String, MediaStreamEntry>>>,
@@ -128,87 +213,115 @@ fn run_media_stream_server(
 }
 
 fn handle_connection(
-    mut stream: TcpStream,
+    stream: TcpStream,
     entries: Arc<RwLock<HashMap<String, MediaStreamEntry>>>,
 ) -> io::Result<()> {
-    let mut reader = BufReader::new(stream.try_clone()?);
-    let mut request_line = String::new();
-    if reader.read_line(&mut request_line)? == 0 {
-        return Ok(());
-    }
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(30)))?;
+    let mut writer = stream.try_clone()?;
+    let mut reader = BufReader::new(stream);
 
-    let request_line = request_line.trim_end();
-    let mut request_parts = request_line.split_whitespace();
-    let method = request_parts.next().unwrap_or_default();
-    let target = request_parts.next().unwrap_or_default();
-
-    let mut range_header: Option<String> = None;
     loop {
-        let mut line = String::new();
-        if reader.read_line(&mut line)? == 0 {
-            break;
+        let mut request_line = String::new();
+        match reader.read_line(&mut request_line) {
+            Ok(0) => return Ok(()), // EOF: client closed connection
+            Err(e)
+                if e.kind() == io::ErrorKind::TimedOut || e.kind() == io::ErrorKind::WouldBlock =>
+            {
+                return Ok(()); // idle timeout
+            }
+            Err(e) => return Err(e),
+            Ok(_) => {}
         }
-        let trimmed = line.trim_end();
-        if trimmed.is_empty() {
-            break;
-        }
-        if let Some((name, value)) = trimmed.split_once(':') {
-            if name.eq_ignore_ascii_case("range") {
-                range_header = Some(value.trim().to_string());
+
+        let request_line_trimmed = request_line.trim_end().to_string();
+        let mut request_parts = request_line_trimmed.split_whitespace();
+        let method = request_parts.next().unwrap_or_default().to_string();
+        let target = request_parts.next().unwrap_or_default().to_string();
+
+        let mut range_header: Option<String> = None;
+        let mut connection_close = false;
+        loop {
+            let mut line = String::new();
+            if reader.read_line(&mut line)? == 0 {
+                break;
+            }
+            let trimmed = line.trim_end();
+            if trimmed.is_empty() {
+                break;
+            }
+            if let Some((name, value)) = trimmed.split_once(':') {
+                if name.eq_ignore_ascii_case("range") {
+                    range_header = Some(value.trim().to_string());
+                } else if name.eq_ignore_ascii_case("connection")
+                    && value.trim().eq_ignore_ascii_case("close")
+                {
+                    connection_close = true;
+                }
             }
         }
+
+        let keep_alive = !connection_close;
+
+        eprintln!(
+            "[media-stream] request method={} target={} range={} keep_alive={}",
+            method,
+            target,
+            range_header.as_deref().unwrap_or("-"),
+            keep_alive
+        );
+
+        if method != "GET" && method != "HEAD" {
+            write_logged_empty_response(
+                &mut writer,
+                "405 Method Not Allowed",
+                &target,
+                &[("method", &method), ("target", &target)],
+                &[("Allow", "GET, HEAD"), ("Content-Length", "0")],
+                false,
+            )?;
+            return Ok(());
+        }
+
+        let Some(token) = media_token_from_target(&target) else {
+            write_logged_empty_response(
+                &mut writer,
+                "404 Not Found",
+                &target,
+                &[("method", &method), ("target", &target)],
+                &[("Content-Length", "0")],
+                false,
+            )?;
+            return Ok(());
+        };
+
+        let Some(entry) = entries
+            .read()
+            .ok()
+            .and_then(|registry| registry.get(token).cloned())
+        else {
+            write_logged_empty_response(
+                &mut writer,
+                "404 Not Found",
+                &target,
+                &[("method", &method), ("token", token)],
+                &[("Content-Length", "0")],
+                false,
+            )?;
+            return Ok(());
+        };
+
+        serve_file(
+            &mut writer,
+            method == "HEAD",
+            &entry,
+            range_header.as_deref(),
+            keep_alive,
+        )?;
+
+        if !keep_alive {
+            return Ok(());
+        }
     }
-
-    eprintln!(
-        "[media-stream] request method={} target={} range={}",
-        method,
-        target,
-        range_header.as_deref().unwrap_or("-")
-    );
-
-    if method != "GET" && method != "HEAD" {
-        write_logged_empty_response(
-            &mut stream,
-            "405 Method Not Allowed",
-            target,
-            &[("method", method), ("target", target)],
-            &[("Allow", "GET, HEAD"), ("Content-Length", "0")],
-        )?;
-        return Ok(());
-    }
-
-    let Some(token) = media_token_from_target(target) else {
-        write_logged_empty_response(
-            &mut stream,
-            "404 Not Found",
-            target,
-            &[("method", method), ("target", target)],
-            &[("Content-Length", "0")],
-        )?;
-        return Ok(());
-    };
-
-    let Some(entry) = entries
-        .read()
-        .ok()
-        .and_then(|registry| registry.get(token).cloned())
-    else {
-        write_logged_empty_response(
-            &mut stream,
-            "404 Not Found",
-            target,
-            &[("method", method), ("token", token)],
-            &[("Content-Length", "0")],
-        )?;
-        return Ok(());
-    };
-
-    serve_file(
-        &mut stream,
-        method == "HEAD",
-        &entry,
-        range_header.as_deref(),
-    )
 }
 
 fn media_token_from_target(target: &str) -> Option<&str> {
@@ -222,7 +335,12 @@ fn serve_file(
     is_head: bool,
     entry: &MediaStreamEntry,
     range_header: Option<&str>,
+    keep_alive: bool,
 ) -> io::Result<()> {
+    if let Some(layout) = ready_faststart_layout(entry) {
+        return serve_virtual_file(stream, is_head, entry, &layout, range_header, keep_alive);
+    }
+
     let mut file = File::open(&entry.path)?;
     let metadata = file.metadata()?;
     let file_len = metadata.len();
@@ -242,6 +360,7 @@ fn serve_file(
                     ("Content-Range", &content_range),
                     ("Content-Length", "0"),
                 ],
+                false,
             )?;
             return Ok(());
         }
@@ -279,7 +398,7 @@ fn serve_file(
             range_header.unwrap_or("-"),
             is_head
         );
-        write_response(stream, status, &header_refs, None)?;
+        write_response(stream, status, &header_refs, None, keep_alive)?;
         return Ok(());
     }
 
@@ -293,8 +412,132 @@ fn serve_file(
         start,
         end
     );
-    write_response_head(stream, status, &header_refs)?;
+    write_response_head(stream, status, &header_refs, keep_alive)?;
     copy_n_bytes(&mut file, stream, content_length)
+}
+
+/// Serve an MP4 file using a virtual faststart layout.
+///
+/// This function handles range requests over the virtual byte stream described by
+/// `layout`, composing responses from a mix of in-memory moov data and on-disk
+/// file regions without ever loading the full file into memory.
+fn serve_virtual_file(
+    stream: &mut TcpStream,
+    is_head: bool,
+    entry: &MediaStreamEntry,
+    layout: &FaststartLayout,
+    range_header: Option<&str>,
+    keep_alive: bool,
+) -> io::Result<()> {
+    let file_len = layout.total_size;
+
+    let (status, start, end) = match parse_range(range_header, file_len) {
+        Ok(Some((s, e))) => ("206 Partial Content", s, e),
+        Ok(None) => ("200 OK", 0, file_len.saturating_sub(1)),
+        Err(()) => {
+            let content_range = format!("bytes */{file_len}");
+            write_logged_empty_response(
+                stream,
+                "416 Range Not Satisfiable",
+                &entry.path.display().to_string(),
+                &[("range", range_header.unwrap_or("-"))],
+                &[
+                    ("Accept-Ranges", "bytes"),
+                    ("Content-Range", &content_range),
+                    ("Content-Length", "0"),
+                ],
+                false,
+            )?;
+            return Ok(());
+        }
+    };
+
+    let content_length = if file_len == 0 { 0 } else { end - start + 1 };
+    let content_length_header = content_length.to_string();
+    let content_range_header = if status == "206 Partial Content" {
+        Some(format!("bytes {start}-{end}/{file_len}"))
+    } else {
+        None
+    };
+
+    let mut headers = vec![
+        ("Accept-Ranges", "bytes".to_string()),
+        ("Access-Control-Allow-Origin", CORS_ALLOW_ORIGIN.to_string()),
+        ("Content-Type", entry.mime_type.clone()),
+        ("Content-Length", content_length_header),
+    ];
+
+    if let Some(cr) = content_range_header {
+        headers.push(("Content-Range", cr));
+    }
+
+    let header_refs = headers
+        .iter()
+        .map(|(name, value)| (*name, value.as_str()))
+        .collect::<Vec<_>>();
+
+    if is_head || content_length == 0 {
+        eprintln!(
+            "[media-stream] response status={} path={} range={} head={} (virtual faststart)",
+            status,
+            entry.path.display(),
+            range_header.unwrap_or("-"),
+            is_head
+        );
+        write_response(stream, status, &header_refs, None, keep_alive)?;
+        return Ok(());
+    }
+
+    eprintln!(
+        "[media-stream] response status={} path={} range={} head={} bytes={}-{} (virtual faststart)",
+        status,
+        entry.path.display(),
+        range_header.unwrap_or("-"),
+        is_head,
+        start,
+        end
+    );
+
+    write_response_head(stream, status, &header_refs, keep_alive)?;
+
+    // Walk segments and write the bytes that overlap [start, end].
+    let mut seg_start: u64 = 0; // virtual offset of the first byte in this segment
+    for segment in &layout.segments {
+        let seg_len = match segment {
+            VirtualSegment::File { length, .. } => *length,
+            VirtualSegment::Memory { length, .. } => *length,
+        };
+        let seg_end = seg_start + seg_len; // exclusive
+
+        // Does this segment overlap the requested range?
+        let overlap_start = start.max(seg_start);
+        let overlap_end = (end + 1).min(seg_end); // exclusive
+
+        if overlap_start < overlap_end {
+            let overlap_len = overlap_end - overlap_start;
+            let offset_within_seg = overlap_start - seg_start;
+
+            match segment {
+                VirtualSegment::File { file_offset, .. } => {
+                    let mut file = File::open(&entry.path)?;
+                    file.seek(SeekFrom::Start(file_offset + offset_within_seg))?;
+                    copy_n_bytes(&mut file, stream, overlap_len)?;
+                }
+                VirtualSegment::Memory { data, .. } => {
+                    let slice_start = offset_within_seg as usize;
+                    let slice_end = (offset_within_seg + overlap_len) as usize;
+                    stream.write_all(&data[slice_start..slice_end])?;
+                }
+            }
+        }
+
+        seg_start = seg_end;
+        if seg_start > end {
+            break;
+        }
+    }
+
+    stream.flush()
 }
 
 fn parse_range(range_header: Option<&str>, file_len: u64) -> Result<Option<(u64, u64)>, ()> {
@@ -348,6 +591,7 @@ fn write_logged_empty_response(
     path: &str,
     details: &[(&str, &str)],
     headers: &[(&str, &str)],
+    keep_alive: bool,
 ) -> io::Result<()> {
     let mut detail_parts = String::new();
 
@@ -365,7 +609,7 @@ fn write_logged_empty_response(
         status, path, detail_parts
     );
 
-    write_response(stream, status, headers, None)
+    write_response(stream, status, headers, None, keep_alive)
 }
 
 fn write_response(
@@ -373,8 +617,9 @@ fn write_response(
     status: &str,
     headers: &[(&str, &str)],
     body: Option<&[u8]>,
+    keep_alive: bool,
 ) -> io::Result<()> {
-    write_response_head(stream, status, headers)?;
+    write_response_head(stream, status, headers, keep_alive)?;
     if let Some(body) = body {
         stream.write_all(body)?;
     }
@@ -385,12 +630,17 @@ fn write_response_head(
     stream: &mut TcpStream,
     status: &str,
     headers: &[(&str, &str)],
+    keep_alive: bool,
 ) -> io::Result<()> {
     write!(stream, "HTTP/1.1 {status}\r\n")?;
     for (name, value) in headers {
         write!(stream, "{name}: {value}\r\n")?;
     }
-    write!(stream, "Connection: close\r\n\r\n")
+    if keep_alive {
+        write!(stream, "Connection: keep-alive\r\n\r\n")
+    } else {
+        write!(stream, "Connection: close\r\n\r\n")
+    }
 }
 
 fn copy_n_bytes<R: Read, W: Write>(reader: &mut R, writer: &mut W, len: u64) -> io::Result<()> {
@@ -419,9 +669,16 @@ fn copy_n_bytes<R: Read, W: Write>(reader: &mut R, writer: &mut W, len: u64) -> 
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{
+        io::Cursor,
+        path::Path,
+        sync::{Arc, RwLock},
+    };
 
-    use super::{copy_n_bytes, parse_range};
+    use super::{
+        copy_n_bytes, parse_range, ready_faststart_layout, should_prepare_faststart,
+        FaststartStatus,
+    };
 
     #[test]
     fn parse_range_supports_open_and_suffix_ranges() {
@@ -450,5 +707,36 @@ mod tests {
         copy_n_bytes(&mut reader, &mut writer, source.len() as u64).unwrap();
 
         assert_eq!(writer, source);
+    }
+
+    #[test]
+    fn should_prepare_faststart_only_for_mp4_family_videos() {
+        assert!(should_prepare_faststart(
+            Path::new("/tmp/demo.MP4"),
+            "video/mp4"
+        ));
+        assert!(should_prepare_faststart(
+            Path::new("/tmp/demo.mov"),
+            "video/quicktime"
+        ));
+        assert!(!should_prepare_faststart(
+            Path::new("/tmp/demo.webm"),
+            "video/webm"
+        ));
+        assert!(!should_prepare_faststart(
+            Path::new("/tmp/demo.mp4"),
+            "audio/mp4"
+        ));
+    }
+
+    #[test]
+    fn ready_faststart_layout_is_absent_until_background_analysis_finishes() {
+        let entry = super::MediaStreamEntry {
+            path: Path::new("/tmp/demo.mp4").to_path_buf(),
+            mime_type: "video/mp4".to_string(),
+            faststart: Arc::new(RwLock::new(FaststartStatus::Pending)),
+        };
+
+        assert!(ready_faststart_layout(&entry).is_none());
     }
 }

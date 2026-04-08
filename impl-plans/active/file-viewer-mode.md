@@ -3,7 +3,7 @@
 **Status**: In Progress
 **Design Reference**: `design-docs/specs/design-file-viewer-mode.md`
 **Created**: 2026-03-19
-**Last Updated**: 2026-04-06
+**Last Updated**: 2026-04-07
 
 ## Design Document Reference
 
@@ -240,6 +240,18 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
 **Notes**: Default sorting no longer requires metadata reads for the entire directory before the first render, which improves large-directory behavior such as `/nix/store`. Verification passed with `bun run typecheck`, `bun run test`, `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml`, `CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml`, and `CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`.
+
+### Session: 2026-04-07 JST
+**Tasks Completed**: Moved MP4 faststart analysis off the synchronous preview-registration path so large video previews can return their localhost stream URL immediately; the media stream server now applies the virtual faststart layout only after background analysis completes and otherwise falls back to normal byte-range serving.
+**Tasks In Progress**: TASK-002 Rust viewer service, TASK-004 verification
+**Blockers**: Real Tauri playback behavior for large remote or mounted MP4 files still needs an interactive desktop smoke check.
+**Notes**: This keeps the previous keep-alive and range-serving work, but removes the up-front `moov` read that could stall preview opening on slower storage. Rust verification passed with `CARGO_TERM_QUIET=true cargo check`, `cargo test`, and `cargo clippy --all-targets -- -D warnings`.
+
+### Session: 2026-04-07 JST
+**Tasks Completed**: Switched stream-backed video previews to `preload="auto"` so the desktop WebView can start buffering localhost media before the first explicit play request instead of stopping at metadata-only preload.
+**Tasks In Progress**: TASK-003 frontend file view mode, TASK-004 verification
+**Blockers**: Full DOM verification still has an unrelated EPUB pagination failure in `src/features/preview/EpubPreviewPane.vitest.tsx`.
+**Notes**: `bun run typecheck` passed, and `bunx vitest run --config vitest.config.ts src/features/preview/MediaFilePreviewPane.vitest.tsx` passed. `bun run test:dom` still fails in the pre-existing EPUB pagination assertion path.
 
 ### Session: 2026-03-22 JST
 **Tasks Completed**: Restored file-tree filtering to the stateless server contract via a `query` parameter so searches cover not-yet-loaded entries; updated the frontend state and file browser input to use server-filtered pages instead of local filtering; added regressions proving the filter keeps focus while typing and can surface `notes-220.md` without loading all prior pages.

@@ -76,6 +76,10 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
   const usesLinuxVideoBlobFallback = isLinuxWebKitDesktop() && isVideo();
   const isLinuxVideoLayout = usesLinuxVideoBlobFallback && isVideo();
   const resolvedMediaSrc = () => props.streamUrl ?? convertFileSrc(props.path);
+  const mediaPreload = () =>
+    props.streamUrl !== undefined && props.streamUrl !== null && isVideo()
+      ? "auto"
+      : "metadata";
   const [playbackFailed, setPlaybackFailed] = createSignal(false);
   const [showPlayOverlay, setShowPlayOverlay] = createSignal(true);
   const [mediaSrc, setMediaSrc] = createSignal(resolvedMediaSrc());
@@ -277,7 +281,7 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
                 }}
                 class="preview-audio"
                 controls
-                preload="metadata"
+                preload={mediaPreload()}
                 src={mediaSrc()}
                 aria-label={props.fileName}
                 onCanPlay={() => {
@@ -313,7 +317,7 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
                 mediaElement = element ?? undefined;
               }}
               controls
-              preload="metadata"
+              preload={mediaPreload()}
               playsinline
               src={mediaSrc()}
               aria-label={props.fileName}
