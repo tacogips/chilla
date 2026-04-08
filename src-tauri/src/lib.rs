@@ -6,6 +6,7 @@ pub mod error;
 pub mod events;
 pub mod markdown;
 pub mod media_stream;
+pub mod mp4_faststart;
 pub mod syntax_highlight;
 pub mod viewer;
 pub mod watcher;

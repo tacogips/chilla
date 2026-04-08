@@ -220,6 +220,38 @@ describe("MediaFilePreviewPane", () => {
     expect(media.getAttribute("src")).toBe("asset:///tmp/demo.mp4");
   });
 
+  it("preloads streamed video aggressively to reduce play-start latency", () => {
+    const root = document.getElementById("root");
+
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+
+    dispose = render(
+      () => (
+        <MediaFilePreviewPane
+          kind="video"
+          path="/tmp/demo.mp4"
+          streamUrl="http://127.0.0.1:12345/media/token"
+          fileName="demo.mp4"
+          autoplayRequestId={0}
+        />
+      ),
+      root,
+    );
+
+    const media = document.querySelector("video");
+
+    if (!(media instanceof HTMLVideoElement)) {
+      throw new Error("missing video element");
+    }
+
+    expect(media.getAttribute("preload")).toBe("auto");
+    expect(media.getAttribute("src")).toBe(
+      "http://127.0.0.1:12345/media/token",
+    );
+  });
+
   it("does not hijack shortcuts when the native media element is the event target", () => {
     const root = document.getElementById("root");
 
