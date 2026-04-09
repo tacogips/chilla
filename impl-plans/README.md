@@ -40,6 +40,7 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                                | Status      | Design Reference                                                       | Last Updated |
 | ----------------------------------- | ----------- | ---------------------------------------------------------------------- | ------------ |
+| `macos-dmg-release.md`              | In Progress | `design-docs/specs/design-macos-dmg-release.md`                        | 2026-04-09   |
 | `markdown-workbench-first-slice.md` | Ready       | `design-docs/specs/design-markdown-workbench.md`                       | 2026-03-19   |
 | `file-viewer-mode.md`               | In Progress | `design-docs/specs/design-file-viewer-mode.md`                         | 2026-03-19   |
 
@@ -70,6 +71,7 @@ Only plans from eligible phases should be read to minimize context loading.
 ```
 PHASE_TO_PLANS = {
   1: [
+    "impl-plans/active/macos-dmg-release.md",
     "impl-plans/active/markdown-workbench-first-slice.md",
     "impl-plans/active/file-viewer-mode.md",
   ],

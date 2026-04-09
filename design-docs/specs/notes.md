@@ -10,6 +10,12 @@ Notable items that do not fit into architecture or client categories.
 
 ## Sections
 
+## macOS DMG Release Notes
+
+### Design Reference
+
+- See `design-docs/specs/design-macos-dmg-release.md` for the release-shape decision that keeps the current Darwin tarball contract but adds a separate Tauri `app,dmg` distribution path for signed/notarized macOS builds.
+
 ## Markdown Workbench Notes
 
 ### Scope Corrections Applied

@@ -4,6 +4,8 @@ This directory is the local staging area for packaged `chilla` release artifacts
 
 The repository root `install.sh` can install directly from this directory before assets are uploaded to GitHub Releases.
 
+This contract currently covers the existing Nix tarball release path used by `install.sh` and the current custom Homebrew cask. The repository also contains a separate macOS Tauri bundle flow for `.app` / `.dmg` creation; that bundle flow does not replace this tarball contract yet.
+
 ## Expected filenames
 
 Artifacts must use this naming scheme:
@@ -43,7 +45,7 @@ chilla-v0.1.1-x86_64-linux/
 └── lib/
 ```
 
-`bin/chilla` is currently a Nix-generated wrapper script. The release is therefore a full directory tree, not a single binary and not a `.app` bundle.
+`bin/chilla` is currently a Nix-generated wrapper script. The release is therefore a full directory tree, not a single binary and not the new Tauri `.app` / `.dmg` bundle path.
 
 ## Checksum format
 
@@ -91,6 +93,28 @@ chilla-v<version>-aarch64-darwin.tar.gz
 ```
 
 The cask links `bin/chilla` into Homebrew's `bin` directory using the `binary` artifact stanza rather than installing a `.app` bundle. Because the Darwin artifact is still produced from the Nix package output, the cask should be treated as a custom-tap convenience install and not as a fully self-contained macOS app distribution.
+
+## macOS DMG Bundle Flow
+
+The repository now also contains a dedicated Tauri macOS bundle config at `src-tauri/tauri.macos.release.conf.json` and a local task:
+
+```bash
+task bundle-macos-dmg
+```
+
+That flow targets `app,dmg` bundles and is intended for Apple signing/notarization. It is additive: it does not change the tarball filenames, directory layout, or installer behavior documented above.
+
+Apple signing/notarization support is driven by CI or local environment variables:
+
+- `APPLE_CERTIFICATE`
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_SIGNING_IDENTITY`
+- `APPLE_ID`
+- `APPLE_PASSWORD`
+- `APPLE_TEAM_ID`
+- `KEYCHAIN_PASSWORD`
+
+Until the Homebrew tap is migrated, the DMG flow should be treated as the direct-download macOS distribution path, while the tarball flow remains the installer/tap compatibility path.
 
 Users can install it with:
 

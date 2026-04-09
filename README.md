@@ -242,7 +242,27 @@ Installer behavior:
 - can update the user's shell profile with a managed PATH block unless `--no-modify-path` is used
 - supports `./install.sh uninstall` to remove the installed files and managed PATH block
 
-The current Nix-based release artifact is a directory tree containing `bin/chilla`, not a `.app` bundle or `.dmg`. It may still depend on `/nix/store` runtime paths on the target machine.
+The current installer-facing Darwin tarball remains a Nix-based release artifact containing `bin/chilla`, not a `.app` bundle. It may still depend on `/nix/store` runtime paths on the target machine.
+
+## macOS DMG Releases
+
+The repository now also contains a separate Tauri macOS bundle flow for direct `.app` and `.dmg` builds:
+
+```bash
+task bundle-macos-dmg
+```
+
+That path uses `src-tauri/tauri.macos.release.conf.json` and is intended for Apple signing/notarization on a macOS host or CI runner. Repository-local GitHub Actions support expects these secrets when you want signed/notarized artifacts:
+
+- `APPLE_CERTIFICATE`
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_SIGNING_IDENTITY`
+- `APPLE_ID`
+- `APPLE_PASSWORD`
+- `APPLE_TEAM_ID`
+- `KEYCHAIN_PASSWORD`
+
+Without those secrets, the repository can still build unsigned `.app`/`.dmg` bundles for local validation, but Gatekeeper may reject them on another machine.
 
 ## Installing with Homebrew Cask
 
@@ -255,9 +275,9 @@ brew install --cask chilla
 
 Current caveats:
 
-- the cask installs the existing `aarch64-darwin` release tarball, not a `.app` bundle
+- the cask currently installs the existing `aarch64-darwin` Nix tarball, not the new `.dmg` bundle flow
 - it is currently constrained to Apple Silicon via Homebrew `depends_on arch: :arm64`
-- the packaged binary may still depend on `/nix/store` runtime libraries, so this is suitable for a custom tap but not yet a polished standalone macOS distribution
+- the packaged binary may still depend on `/nix/store` runtime libraries until the tap is migrated to the signed/notarized macOS bundle artifacts
 
 ## Verification Status
 

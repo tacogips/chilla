@@ -45,6 +45,12 @@ tasks:
     cmds:
       - nix build .#chilla
 
+  bundle-macos-dmg:
+    desc: Build macOS .app and .dmg bundles through the Tauri release config
+    cmds:
+      - bun run build
+      - CARGO_TERM_QUIET=true bun run tauri build --config src-tauri/tauri.macos.release.conf.json --bundles app,dmg
+
   test:
     desc: Run frontend and backend verification
     cmds:
