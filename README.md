@@ -275,9 +275,9 @@ brew install --cask chilla
 
 Current caveats:
 
-- the cask currently installs the existing `aarch64-darwin` Nix tarball, not the new `.dmg` bundle flow
+- the cask now installs the macOS Apple Silicon DMG release artifact
 - it is currently constrained to Apple Silicon via Homebrew `depends_on arch: :arm64`
-- the packaged binary may still depend on `/nix/store` runtime libraries until the tap is migrated to the signed/notarized macOS bundle artifacts
+- the current DMG is not signed and notarized yet, so Gatekeeper may still block launch until the release pipeline publishes a trusted macOS artifact
 
 ## Verification Status
 

@@ -86,13 +86,13 @@ If a matching local archive exists in `release/`, the installer prefers it over 
 
 The custom Homebrew cask lives in the tap repository `tacogips/homebrew-tap`.
 
-That cask currently points at the published macOS Apple Silicon tarball:
+That cask currently points at the published macOS Apple Silicon DMG:
 
 ```text
-chilla-v<version>-aarch64-darwin.tar.gz
+chilla_<version>_aarch64.dmg
 ```
 
-The cask links `bin/chilla` into Homebrew's `bin` directory using the `binary` artifact stanza rather than installing a `.app` bundle. Because the Darwin artifact is still produced from the Nix package output, the cask should be treated as a custom-tap convenience install and not as a fully self-contained macOS app distribution.
+The cask installs `chilla.app` from the DMG and links `chilla.app/Contents/MacOS/chilla` into Homebrew's `bin` directory. The current DMG is still unsigned and not notarized, so the cask should be treated as a transitional distribution path until the macOS release pipeline publishes a trusted artifact.
 
 ## macOS DMG Bundle Flow
 
@@ -114,7 +114,7 @@ Apple signing/notarization support is driven by CI or local environment variable
 - `APPLE_TEAM_ID`
 - `KEYCHAIN_PASSWORD`
 
-Until the Homebrew tap is migrated, the DMG flow should be treated as the direct-download macOS distribution path, while the tarball flow remains the installer/tap compatibility path.
+The DMG flow now backs both direct-download macOS distribution and the Homebrew cask, while the tarball flow remains the `install.sh` compatibility path.
 
 Users can install it with:
 
