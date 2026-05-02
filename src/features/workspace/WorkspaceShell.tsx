@@ -1211,7 +1211,10 @@ export function WorkspaceShell() {
 
     if (doc !== null) {
       if (
-        !canReloadMarkdownSnapshotForPresentationRefresh(doc, markdownEditorBuffer())
+        !canReloadMarkdownSnapshotForPresentationRefresh(
+          doc,
+          markdownEditorBuffer(),
+        )
       ) {
         return;
       }

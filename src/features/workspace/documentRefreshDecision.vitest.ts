@@ -24,17 +24,19 @@ function snapshot(
 
 describe("canReloadMarkdownSnapshotForPresentationRefresh", () => {
   it("returns false when no document", () => {
-    expect(canReloadMarkdownSnapshotForPresentationRefresh(null, "")).toBe(false);
+    expect(canReloadMarkdownSnapshotForPresentationRefresh(null, "")).toBe(
+      false,
+    );
   });
 
   it("returns true only when buffer matches persisted baseline text", () => {
     const doc = snapshot("/a.md", "hello");
-    expect(
-      canReloadMarkdownSnapshotForPresentationRefresh(doc, "hello"),
-    ).toBe(true);
-    expect(
-      canReloadMarkdownSnapshotForPresentationRefresh(doc, "edited"),
-    ).toBe(false);
+    expect(canReloadMarkdownSnapshotForPresentationRefresh(doc, "hello")).toBe(
+      true,
+    );
+    expect(canReloadMarkdownSnapshotForPresentationRefresh(doc, "edited")).toBe(
+      false,
+    );
   });
 });
 
