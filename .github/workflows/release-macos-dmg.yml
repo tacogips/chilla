@@ -101,7 +101,9 @@ jobs:
         with:
           name: chilla-macos-dmg
           if-no-files-found: error
-          path: ${{ steps.build-signed.outputs.artifactPaths || steps.build-unsigned.outputs.artifactPaths }}
+          path: |
+            target/release/bundle/dmg/*.dmg
+            target/release/bundle/macos/*.app
 
       - name: Cleanup temporary keychain
         if: ${{ always() && env.APPLE_SIGNING_ENABLED == 'true' }}
