@@ -20,10 +20,13 @@ jobs:
     permissions:
       contents: write
     env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -40,11 +43,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Import Apple Developer certificate
-        if: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.KEYCHAIN_PASSWORD != '' }}
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        if: ${{ env.APPLE_CERTIFICATE != '' && env.APPLE_CERTIFICATE_PASSWORD != '' && env.KEYCHAIN_PASSWORD != '' }}
         run: |
           echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/chilla-signing-certificate.p12"
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/chilla-build.keychain"
@@ -86,5 +85,5 @@ jobs:
           path: ${{ steps.build.outputs.artifactPaths }}
 
       - name: Cleanup temporary keychain
-        if: ${{ always() && secrets.KEYCHAIN_PASSWORD != '' }}
+        if: ${{ always() && env.KEYCHAIN_PASSWORD != '' }}
         run: security delete-keychain "$RUNNER_TEMP/chilla-build.keychain" || true
