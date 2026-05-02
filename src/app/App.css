@@ -253,6 +253,22 @@ button {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
+.workspace__text-button {
+  margin: 0;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.workspace__text-button:hover {
+  background: var(--bg-hover);
+}
+
 .workspace__theme-toggle {
   display: inline-flex;
   align-items: center;
@@ -471,6 +487,31 @@ button {
   font-family: var(--font-mono);
   font-size: 0.86rem;
   line-height: 1.55;
+}
+
+.markdown-source-editor {
+  box-sizing: border-box;
+  width: 100%;
+  flex: 1;
+  min-height: 12rem;
+  margin: 0;
+  padding: var(--preview-content-block-padding)
+    var(--preview-content-inline-padding);
+  border: 1px solid var(--markdown-border);
+  border-radius: 6px;
+  background: var(--markdown-pre-bg);
+  color: var(--markdown-fg);
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.workspace__markdown-raw-pane .markdown-raw-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Light mode: main document column uses a white surface for preview / raw. */
@@ -1165,6 +1206,24 @@ button {
   font-weight: 400;
 }
 
+.file-browser__entry-labels {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.file-browser__path-hint {
+  font-size: 0.82em;
+  color: var(--text-subtle);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .file-browser__name {
   position: relative;
   flex: 1;
@@ -1234,6 +1293,100 @@ button {
   background: var(--bg-app);
   padding: 0.4rem;
   color: var(--text-muted);
+}
+
+.csv-preview-formatted {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 0;
+}
+
+.csv-preview-notice {
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.csv-preview-notice--truncate {
+  border: 1px solid var(--border);
+  background: var(--bg-pane-head);
+  color: var(--text-muted);
+}
+
+.csv-preview-notice--error {
+  border: 1px solid rgb(220 107 107 / 0.55);
+  background: rgb(254 237 237 / 0.45);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .csv-preview-notice--error {
+  border-color: rgb(239 147 147 / 0.45);
+  background: rgb(55 38 41 / 0.55);
+}
+
+.csv-preview-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 10rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-app);
+}
+
+.csv-preview-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  min-width: max(100%, 24rem);
+}
+
+.csv-preview-table__corner,
+.csv-preview-table__col-head,
+.csv-preview-table__row-head {
+  position: sticky;
+  z-index: 2;
+  background: var(--bg-pane-head);
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid var(--border);
+  padding: 0.28rem 0.45rem;
+  white-space: nowrap;
+}
+
+.csv-preview-table__corner {
+  top: 0;
+  left: 0;
+  z-index: 3;
+  min-width: 2.25rem;
+}
+
+.csv-preview-table__col-head {
+  top: 0;
+}
+
+.csv-preview-table__row-head {
+  left: 0;
+  z-index: 1;
+}
+
+.csv-preview-table__cell {
+  border: 1px solid var(--border);
+  padding: 0.28rem 0.45rem;
+  vertical-align: top;
+  background: var(--bg-app);
+  color: var(--text);
+  max-width: 18rem;
+}
+
+.csv-preview-table__cell-text {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .file-preview--epub {

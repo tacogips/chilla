@@ -1,9 +1,9 @@
 # macOS DMG Release Implementation Plan
 
-**Status**: In Progress
+**Status**: Completed
 **Design Reference**: `design-docs/specs/design-macos-dmg-release.md`
 **Created**: 2026-04-09
-**Last Updated**: 2026-04-09
+**Last Updated**: 2026-05-01
 
 ## Design Document Reference
 
@@ -24,7 +24,7 @@ Add the first repository-local macOS bundle flow for `chilla` so the project can
 
 #### `src-tauri/tauri.macos.release.conf.json`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```json
 {
@@ -42,28 +42,17 @@ Add the first repository-local macOS bundle flow for `chilla` so the project can
 
 #### `Taskfile.yml`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
-```yaml
-tasks:
-  bundle-macos-dmg:
-    cmds:
-      - CARGO_TERM_QUIET=true bun run tauri build --config src-tauri/tauri.macos.release.conf.json --bundles app,dmg
-```
+`bundle-macos-dmg` runs `bun run build` then `CARGO_TERM_QUIET=true bun run tauri build --config src-tauri/tauri.macos.release.conf.json --bundles app,dmg`.
 
 ### 3. GitHub Release Workflow
 
 #### `.github/workflows/release-macos-dmg.yml`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
-```yaml
-on:
-  workflow_dispatch:
-  push:
-    tags:
-      - "v*"
-```
+Runs on `workflow_dispatch` and `push` tags `v*`; pinned action SHAs; optional Apple certificate import; `tauri-apps/tauri-action` with `--bundles app,dmg`; uploads release assets on tags and workflow artifacts on manual runs.
 
 ### 4. Release Documentation
 
@@ -71,80 +60,69 @@ on:
 #### `release/README.md`
 #### `install.sh`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
-```bash
-./install.sh v0.1.3
-task bundle-macos-dmg
-```
+Tarball installer scope vs DMG bundle path documented; Apple secret list in README.
 
 ## Module Status
 
 | Module | File Path | Status | Tests |
 |--------|-----------|--------|-------|
-| macOS bundle config | `src-tauri/tauri.macos.release.conf.json` | NOT_STARTED | Tauri build |
-| local bundle task | `Taskfile.yml` | NOT_STARTED | Task smoke check |
-| release workflow | `.github/workflows/release-macos-dmg.yml` | NOT_STARTED | Workflow lint by review + local file validation |
-| docs | `README.md`, `release/README.md`, `install.sh` | NOT_STARTED | Manual review |
-
-## Dependencies
-
-| Feature | Depends On | Status |
-|---------|------------|--------|
-| local bundle task | macOS bundle config | BLOCKED |
-| release workflow | macOS bundle config | BLOCKED |
-| docs refresh | config + workflow decisions | BLOCKED |
+| macOS bundle config | `src-tauri/tauri.macos.release.conf.json` | COMPLETED | Tauri build (macOS) |
+| local bundle task | `Taskfile.yml` | COMPLETED | `task bundle-macos-dmg` |
+| release workflow | `.github/workflows/release-macos-dmg.yml` | COMPLETED | Review / CI |
+| docs | `README.md`, `release/README.md`, `install.sh` | COMPLETED | Manual review |
 
 ## Implementation Tasks
 
 ### TASK-001: macOS Bundle Config
-**Status**: IN_PROGRESS
+**Status**: COMPLETED
 **Parallelizable**: No
 **Deliverables**: `src-tauri/tauri.macos.release.conf.json`, `Taskfile.yml`
 
 **Completion Criteria**:
-- [ ] dedicated macOS release config enables `app,dmg`
-- [ ] local task invokes Tauri DMG build through that config
+- [x] dedicated macOS release config enables `app,dmg`
+- [x] local task invokes Tauri DMG build through that config
 
 ### TASK-002: Secure Release Workflow
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 **Parallelizable**: No
 **Depends On**: `TASK-001`
 **Deliverables**: `.github/workflows/release-macos-dmg.yml`
 
 **Completion Criteria**:
-- [ ] workflow uses pinned action SHAs
-- [ ] workflow supports optional Apple signing/notarization secrets
-- [ ] tag builds upload release assets
-- [ ] manual builds upload workflow artifacts
+- [x] workflow uses pinned action SHAs
+- [x] workflow supports optional Apple signing/notarization secrets
+- [x] tag builds upload release assets
+- [x] manual builds upload workflow artifacts
 
 ### TASK-003: Documentation Alignment
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 **Parallelizable**: No
 **Depends On**: `TASK-001`, `TASK-002`
 **Deliverables**: `README.md`, `release/README.md`, `install.sh`, `impl-plans/README.md`
 
 **Completion Criteria**:
-- [ ] docs distinguish tarball vs DMG release paths
-- [ ] docs list Apple signing/notarization inputs
-- [ ] active plan index references this plan
+- [x] docs distinguish tarball vs DMG release paths
+- [x] docs list Apple signing/notarization inputs
+- [x] active plan index references this plan (archived row in README completed table after closure)
 
 ### TASK-004: Verification
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 **Parallelizable**: No
 **Depends On**: `TASK-003`
 **Deliverables**: verification log updates
 
 **Completion Criteria**:
-- [ ] `bun run typecheck` passes
-- [ ] `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml` passes
-- [ ] `bun run tauri build --config src-tauri/tauri.macos.release.conf.json --bundles app,dmg` is at least syntax-validated or documented as blocked by missing signing/runtime prerequisites
+- [x] `bun run typecheck` passes
+- [x] `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml` passes
+- [x] full macOS DMG bundle requires a macOS host; config and workflow are validated in-repo (see `.claude/skills/macos-release-build/SKILL.md`)
 
 ## Completion Criteria
 
-- [ ] `chilla` repository contains a macOS DMG-capable Tauri config
-- [ ] `chilla` repository contains a secure macOS release workflow
-- [ ] repository docs describe the new macOS release path accurately
+- [x] `chilla` repository contains a macOS DMG-capable Tauri config
+- [x] `chilla` repository contains a secure macOS release workflow
+- [x] repository docs describe the new macOS release path accurately
 
 ## Progress Log
 
@@ -153,6 +131,10 @@ task bundle-macos-dmg
 **Tasks In Progress**: TASK-001 macOS bundle config
 **Blockers**: Apple signing/notarization secrets are not available in the local workspace, so CI notarization cannot be proven end-to-end in this session
 **Notes**: The implementation keeps the existing Nix tarball contract intact while adding a separate Tauri bundle path for direct macOS distribution.
+
+### Session: 2026-05-01
+**Tasks Completed**: TASK-001 through TASK-004 (implementation was already present; plan status synced with repo; verification run on Linux: typecheck + cargo check).
+**Notes**: DMG/binary smoke build remains macOS-only; `task bundle-macos-dmg` is the canonical local entrypoint.
 
 ## Related Plans
 

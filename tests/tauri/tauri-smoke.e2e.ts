@@ -30,6 +30,10 @@ const STARTUP_TIMEOUT_MS = 30_000;
 const FIXTURE_NOTE_COUNT = 220;
 const FIXTURE_README_TEXT =
   "This document comes from the real Tauri E2E fixture workspace.";
+const FIXTURE_CSV_NAME = "fixture-data.csv";
+const FIXTURE_CSV_MARKER = "chilla_fixture_csv_cell_a1";
+const FIXTURE_EXPLICIT_MD_MARKER = "FIXTURE_EXPLICIT_MD_LINE";
+const FIXTURE_EXPLICIT_CSV_MARKER = "FIXTURE_EXPLICIT_CSV_CELL";
 const FIXTURE_MP3_NAME = "file_example_MP3_1MG.mp3";
 const FIXTURE_MP4_NAME = "file_example_MP4_480_1_5MG.mp4";
 
@@ -39,6 +43,7 @@ const webkitDriverPath = requireEnv("CHILLA_TAURI_E2E_WEBKIT_DRIVER");
 
 let fixtureRoot: string | undefined;
 let fixtureWorkspaceRoot: string | undefined;
+const extraFixtureRoots: string[] = [];
 let tauriDriver: ChildProcess | undefined;
 let driver: WebDriver | undefined;
 let tauriDriverLogs = "";
@@ -103,6 +108,14 @@ async function main(): Promise<void> {
     });
     ensureTauriDriverHealthy();
 
+    await runStep(
+      "verify CSV formatted and raw presentation toggle",
+      async () => {
+        await verifyCsvPreviewFormattedRawToggle(driver!);
+      },
+    );
+    ensureTauriDriverHealthy();
+
     await runStep("verify MP4 inline playback preview", async () => {
       await verifyVideoPreview(driver!);
     });
@@ -113,10 +126,18 @@ async function main(): Promise<void> {
     });
     ensureTauriDriverHealthy();
 
+    await runStep("verify explicit CLI multi-file startup", async () => {
+      await verifyExplicitCliMultiFileStartup();
+    });
+    ensureTauriDriverHealthy();
+
     console.log("Linux Tauri E2E coverage passed.");
   } finally {
     await shutdown(driver, tauriDriver);
     await cleanupFixture(fixtureRoot);
+    for (const root of extraFixtureRoots) {
+      await cleanupFixture(root);
+    }
   }
 }
 
@@ -128,6 +149,36 @@ function requireEnv(name: string): string {
   }
 
   return value;
+}
+
+/** Predicates passed to {@link WebDriver.wait} must not throw on missing elements. */
+function isRecoverableWaitPredicateError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.name === "NoSuchElementError" ||
+    error.name === "StaleElementReferenceError"
+  );
+}
+
+async function waitUntil(
+  currentDriver: WebDriver,
+  predicate: () => Promise<boolean>,
+  timeoutMs: number = STARTUP_TIMEOUT_MS,
+): Promise<void> {
+  await currentDriver.wait(async () => {
+    try {
+      return await predicate();
+    } catch (error: unknown) {
+      if (isRecoverableWaitPredicateError(error)) {
+        return false;
+      }
+
+      throw error;
+    }
+  }, timeoutMs);
 }
 
 function startTauriDriver(): ChildProcess {
@@ -284,13 +335,13 @@ async function verifyReadmePreview(currentDriver: WebDriver): Promise<void> {
 
   await clickButtonByAriaLabel(currentDriver, "README.md");
 
-  await currentDriver.wait(async () => {
+  await waitUntil(currentDriver, async () => {
     const preview = await currentDriver.findElement(
       By.css(".preview__content.markdown-body"),
     );
     const text = await preview.getText();
     return text.includes(FIXTURE_README_TEXT);
-  }, STARTUP_TIMEOUT_MS);
+  });
 
   const styles = (await currentDriver.executeScript(
     `
@@ -328,6 +379,172 @@ async function verifyReadmePreview(currentDriver: WebDriver): Promise<void> {
       `Expected dark color-scheme, got ${JSON.stringify(styles.colorScheme)}`,
     );
   }
+
+  await currentDriver.wait(
+    until.elementLocated(By.css('[aria-label="Raw Markdown source"]')),
+    STARTUP_TIMEOUT_MS,
+  );
+  await currentDriver
+    .findElement(By.css('[aria-label="Raw Markdown source"]'))
+    .click();
+
+  await waitUntil(currentDriver, async () => {
+    const raw = await currentDriver.findElement(
+      By.css(".markdown-source-editor"),
+    );
+    const text = await raw.getAttribute("value");
+    return text !== null && text.includes(FIXTURE_README_TEXT);
+  });
+
+  await currentDriver
+    .findElement(By.css('[aria-label="Markdown preview"]'))
+    .click();
+
+  await waitUntil(currentDriver, async () => {
+    const preview = await currentDriver.findElement(
+      By.css(".preview__content.markdown-body"),
+    );
+    const text = await preview.getText();
+    return text.includes(FIXTURE_README_TEXT);
+  });
+}
+
+async function verifyCsvPreviewFormattedRawToggle(
+  currentDriver: WebDriver,
+): Promise<void> {
+  const filterInput = await waitForFilterInput(currentDriver);
+  await resetFilter(currentDriver, filterInput);
+
+  await replaceInputValue(currentDriver, filterInput, "fixture-data");
+  await clickButtonByAriaLabel(currentDriver, FIXTURE_CSV_NAME);
+
+  await currentDriver.wait(async () => {
+    const bodies = await currentDriver.findElements(
+      By.css(".csv-preview-table__cell-text"),
+    );
+    if (bodies.length === 0) {
+      return false;
+    }
+
+    const joined = (
+      await Promise.all(bodies.map(async (element) => element.getText()))
+    ).join("\n");
+
+    return joined.includes(FIXTURE_CSV_MARKER) && joined.includes("tail");
+  }, STARTUP_TIMEOUT_MS);
+
+  await currentDriver
+    .findElement(By.css('[aria-label="Raw CSV source"]'))
+    .click();
+
+  await waitUntil(currentDriver, async () => {
+    const outer = await currentDriver.findElement(
+      By.css(".preview__content.markdown-body"),
+    );
+    const html = await outer.getAttribute("innerHTML");
+    return (
+      typeof html === "string" &&
+      html.includes("<pre") &&
+      html.includes(FIXTURE_CSV_MARKER)
+    );
+  });
+
+  await currentDriver
+    .findElement(By.css('[aria-label="Formatted CSV table"]'))
+    .click();
+
+  await currentDriver.wait(async () => {
+    const bodies = await currentDriver.findElements(
+      By.css(".csv-preview-table__cell-text"),
+    );
+    if (bodies.length === 0) {
+      return false;
+    }
+
+    const joined = (
+      await Promise.all(bodies.map(async (element) => element.getText()))
+    ).join("\n");
+
+    return joined.includes(FIXTURE_CSV_MARKER);
+  }, STARTUP_TIMEOUT_MS);
+
+  await resetFilter(currentDriver, filterInput);
+}
+
+async function verifyExplicitCliMultiFileStartup(): Promise<void> {
+  const explicitRoot = await mkdtemp(
+    join(tmpdir(), "chilla-tauri-e2e-explicit-"),
+  );
+  extraFixtureRoots.push(explicitRoot);
+
+  const mdPath = join(explicitRoot, "cli-alpha.md");
+  const csvPath = join(explicitRoot, "cli-bravo.csv");
+
+  await writeFile(
+    mdPath,
+    ["# CLI alpha", "", FIXTURE_EXPLICIT_MD_MARKER, ""].join("\n"),
+  );
+  await writeFile(csvPath, `col,other\n${FIXTURE_EXPLICIT_CSV_MARKER},z\n`);
+
+  const explicitLauncher = await createAppLauncherWithPositionalPaths([
+    mdPath,
+    csvPath,
+  ]);
+
+  await shutdown(driver, tauriDriver);
+  driver = undefined;
+  tauriDriver = undefined;
+  tauriDriverLogs = "";
+  tauriDriverFailure = undefined;
+  isShuttingDown = false;
+
+  tauriDriver = startTauriDriver();
+  await waitForPort(DRIVER_HOST, DRIVER_PORT, STARTUP_TIMEOUT_MS);
+  ensureTauriDriverHealthy();
+
+  driver = await createWebDriver(explicitLauncher);
+  ensureTauriDriverHealthy();
+
+  await waitUntil(driver!, async () => {
+    const pathElement = await driver!.findElement(
+      By.css(".file-browser__path"),
+    );
+    const pathPrimary = await pathElement.getText();
+    return pathPrimary.includes("Opened from CLI selection");
+  });
+
+  await driver.wait(async () => {
+    return await buttonExists(driver!, "cli-alpha.md");
+  }, STARTUP_TIMEOUT_MS);
+
+  await driver.wait(async () => {
+    return await buttonExists(driver!, "cli-bravo.csv");
+  }, STARTUP_TIMEOUT_MS);
+
+  await waitUntil(driver!, async () => {
+    const preview = await driver!.findElement(
+      By.css(".preview__content.markdown-body"),
+    );
+    const text = await preview.getText();
+    return text.includes(FIXTURE_EXPLICIT_MD_MARKER);
+  });
+
+  await clickButtonByAriaLabel(driver!, "cli-bravo.csv");
+
+  await driver!.wait(async () => {
+    const bodies = await driver!.findElements(
+      By.css(".csv-preview-table__cell-text"),
+    );
+    if (bodies.length === 0) {
+      return false;
+    }
+
+    const joined = (
+      await Promise.all(bodies.map(async (element) => element.getText()))
+    ).join("\n");
+
+    return joined.includes(FIXTURE_EXPLICIT_CSV_MARKER);
+  }, STARTUP_TIMEOUT_MS);
 }
 
 async function verifyVideoPreview(currentDriver: WebDriver): Promise<void> {
@@ -341,28 +558,20 @@ async function verifyVideoPreview(currentDriver: WebDriver): Promise<void> {
     STARTUP_TIMEOUT_MS,
   );
 
-  const videoReady = await currentDriver
-    .wait(async () => {
-      const state = (await readMediaState(
-        currentDriver,
-        "video",
-      )) as MediaElementState;
-      return (
-        (state.attributeSrc.startsWith("http://127.0.0.1:") ||
-          state.attributeSrc.startsWith("blob:tauri://localhost/")) &&
-        state.errorCode === null
-      );
-    }, STARTUP_TIMEOUT_MS)
-    .catch(() => false);
+  await waitUntil(currentDriver, async () => {
+    const state = await maybeReadMediaState(currentDriver, "video");
+    if (state === null) {
+      return false;
+    }
+
+    return (
+      (state.attributeSrc.startsWith("http://127.0.0.1:") ||
+        state.attributeSrc.startsWith("blob:tauri://localhost/")) &&
+      state.errorCode === null
+    );
+  });
 
   const state = await readMediaState(currentDriver, "video");
-
-  if (!videoReady) {
-    const bodyText = await currentDriver.findElement(By.css("body")).getText();
-    throw new Error(
-      `Timed out waiting for inline MP4 preview state: ${JSON.stringify(state)}\n\nBody text:\n${bodyText}`,
-    );
-  }
 
   if (
     !state.attributeSrc.startsWith("http://127.0.0.1:") &&
@@ -394,28 +603,20 @@ async function verifyAudioPreview(currentDriver: WebDriver): Promise<void> {
     STARTUP_TIMEOUT_MS,
   );
 
-  const audioReady = await currentDriver
-    .wait(async () => {
-      const state = (await readMediaState(
-        currentDriver,
-        "audio",
-      )) as MediaElementState;
-      return (
-        (state.attributeSrc.startsWith("http://127.0.0.1:") ||
-          state.attributeSrc.startsWith("blob:tauri://localhost/")) &&
-        state.errorCode === null
-      );
-    }, STARTUP_TIMEOUT_MS)
-    .catch(() => false);
+  await waitUntil(currentDriver, async () => {
+    const state = await maybeReadMediaState(currentDriver, "audio");
+    if (state === null) {
+      return false;
+    }
+
+    return (
+      (state.attributeSrc.startsWith("http://127.0.0.1:") ||
+        state.attributeSrc.startsWith("blob:tauri://localhost/")) &&
+      state.errorCode === null
+    );
+  });
 
   const state = await readMediaState(currentDriver, "audio");
-
-  if (!audioReady) {
-    const bodyText = await currentDriver.findElement(By.css("body")).getText();
-    throw new Error(
-      `Timed out waiting for inline MP3 preview state: ${JSON.stringify(state)}\n\nBody text:\n${bodyText}`,
-    );
-  }
 
   if (
     !state.attributeSrc.startsWith("http://127.0.0.1:") &&
@@ -597,6 +798,10 @@ async function createWorkspaceFixture(root: string): Promise<string> {
     ].join("\n"),
   );
   await writeFile(
+    join(workspaceRoot, FIXTURE_CSV_NAME),
+    ["fixture_col,fixture_val", `${FIXTURE_CSV_MARKER},tail`].join("\n"),
+  );
+  await writeFile(
     join(docsRoot, "intro.md"),
     "# Intro\n\nThis folder confirms the real file tree is rendered.\n",
   );
@@ -621,6 +826,10 @@ async function copyFixtureMediaFile(
   );
 }
 
+function shellSingleQuoteUnix(path: string): string {
+  return `'${path.replace(/'/g, `'\\''`)}'`;
+}
+
 async function createAppLauncher(root: string): Promise<string> {
   const launcherPath = join(root, "launch-chilla.sh");
 
@@ -630,6 +839,33 @@ async function createAppLauncher(root: string): Promise<string> {
       "#!/usr/bin/env bash",
       "set -euo pipefail",
       'exec "${CHILLA_TAURI_E2E_REAL_APP:?}" "${CHILLA_TAURI_E2E_STARTUP_PATH:?}"',
+      "",
+    ].join("\n"),
+  );
+  await chmod(launcherPath, 0o755);
+
+  return launcherPath;
+}
+
+async function createAppLauncherWithPositionalPaths(
+  paths: readonly string[],
+): Promise<string> {
+  if (fixtureRoot === undefined) {
+    throw new Error("Fixture root directory is not initialized.");
+  }
+
+  if (paths.length === 0) {
+    throw new Error("Explicit launcher requires at least one positional path.");
+  }
+
+  const launcherPath = join(fixtureRoot, "launch-chilla-explicit-set.sh");
+
+  await writeFile(
+    launcherPath,
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `exec "\${CHILLA_TAURI_E2E_REAL_APP:?}" ${paths.map(shellSingleQuoteUnix).join(" ")}`,
       "",
     ].join("\n"),
   );
@@ -782,4 +1018,15 @@ async function readMediaState(
     `,
     selector,
   )) as MediaElementState;
+}
+
+async function maybeReadMediaState(
+  currentDriver: WebDriver,
+  selector: "audio" | "video",
+): Promise<MediaElementState | null> {
+  try {
+    return await readMediaState(currentDriver, selector);
+  } catch {
+    return null;
+  }
 }

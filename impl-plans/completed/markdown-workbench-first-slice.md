@@ -1,9 +1,9 @@
 # Markdown Workbench First Slice Implementation Plan
 
-**Status**: In Progress
+**Status**: Completed
 **Design Reference**: `design-docs/specs/design-markdown-workbench.md`
 **Created**: 2026-03-19
-**Last Updated**: 2026-03-19
+**Last Updated**: 2026-05-02
 
 ---
 
@@ -17,11 +17,11 @@
 - `design-docs/specs/notes.md#markdown-workbench-notes`
 
 ### Summary
-Implement the first usable `chilla` product slice as a Tauri + Bun desktop Markdown workbench. The plan covers repository migration from the current Rust-only scaffold, direct file-open CLI startup, backend parsing and file watching, and a Solid.js workspace with TOC, editor, and preview panes.
+Implement the first usable `chilla` product slice as a Tauri + Bun desktop Markdown workbench. The May 2026 design update treats the mixed-stack repository layout as the current baseline, so this plan now tracks Markdown-specific behavior and any remaining verification rather than new repository migration work.
 
 ### Scope
 **Included**:
-- migrate the repository from the Rust template baseline into the target mixed-stack layout
+- maintain the current mixed Tauri + Bun layout for Markdown workbench behavior
 - preserve `chilla <file_name>` as the only first-slice document-open flow
 - implement Rust-owned document loading, saving, Markdown rendering, heading extraction, and file watching
 - implement Tauri commands/events for open, save, reload, refresh, and conflict signaling
@@ -29,7 +29,8 @@ Implement the first usable `chilla` product slice as a Tauri + Bun desktop Markd
 - add Bun/Tauri-aware `task` automation and mixed-stack verification commands
 
 **Excluded**:
-- bare `chilla` startup without an initial file
+- bare `chilla` startup without an initial file, now covered by file view mode
+- repository restructuring, now completed baseline work
 - multi-document or recent-files workflows
 - export flows, browser mode, or non-desktop targets
 - advanced merge tooling for conflict resolution beyond explicit conflict state and manual reload/save retry paths
@@ -42,7 +43,7 @@ Implement the first usable `chilla` product slice as a Tauri + Bun desktop Markd
 
 #### `src-tauri/src/document/types.rs`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```rust
 pub type RevisionToken = String;
@@ -70,7 +71,7 @@ pub struct HeadingNode {
 
 #### `src/lib/tauri/document.ts`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```ts
 export type RevisionToken = string;
@@ -100,7 +101,7 @@ export interface DocumentSnapshot {
 #### `src-tauri/src/commands/document.rs`
 #### `src-tauri/src/main.rs`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```rust
 pub struct CliArgs {
@@ -124,7 +125,7 @@ pub async fn reload_document(path: String) -> Result<DocumentSnapshot, String>;
 #### `src-tauri/src/document/service.rs`
 #### `src-tauri/src/markdown/mod.rs`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```rust
 pub struct DocumentService;
@@ -148,7 +149,7 @@ pub struct RenderedDocument {
 #### `src-tauri/src/watcher/service.rs`
 #### `src-tauri/src/events.rs`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```rust
 pub const DOCUMENT_REFRESHED_EVENT: &str = "document_refreshed";
@@ -170,7 +171,7 @@ impl WatcherService {
 #### `src/features/preview/PreviewPane.tsx`
 #### `src/features/toc/TocPane.tsx`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```ts
 export interface WorkspaceViewState {
@@ -197,13 +198,16 @@ export interface WorkspaceActions {
 #### `src-tauri/Cargo.toml`
 #### `Taskfile.yml`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 Required repository outcomes:
 - current root Rust crate sources are relocated under `src-tauri/src/`
 - root `src/` is repurposed for the frontend application
 - Bun scripts exist for dev, build, typecheck, and test
 - `task dev`, `task build`, and `task test` orchestrate mixed-stack workflows
+
+May 2026 status:
+- these outcomes describe completed baseline state, not future migration scope
 
 ---
 
@@ -281,13 +285,13 @@ Required repository outcomes:
 - [x] manual reload path is available after conflict signaling
 
 ### TASK-006: Task Automation And Mixed-Stack Verification
-**Status**: IN_PROGRESS
+**Status**: COMPLETED
 **Parallelizable**: No
 **Depends On**: `TASK-001`, `TASK-002`, `TASK-003`, `TASK-004`, `TASK-005`
 **Deliverables**: updated `Taskfile.yml`, frontend verification scripts, backend verification commands, plan progress updates
 
 **Completion Criteria**:
-- [ ] `task dev` runs the Tauri development workflow
+- [x] `task dev` runs the Tauri development workflow (see `Taskfile.yml` `dev` target; interactive window not automated)
 - [x] `task build` builds frontend assets and desktop application
 - [x] `task test` runs Bun verification and Cargo verification
 - [x] verification guidance uses `CARGO_TERM_QUIET=true` for Cargo commands
@@ -304,15 +308,15 @@ Required repository outcomes:
 | TASK-003 CLI bootstrap and Tauri commands | TASK-001, TASK-002 | COMPLETED |
 | TASK-004 Frontend workspace shell | TASK-001, TASK-002 | COMPLETED |
 | TASK-005 Watcher refresh and conflict flow | TASK-002, TASK-003, TASK-004 | COMPLETED |
-| TASK-006 Task automation and verification | TASK-001 through TASK-005 | IN_PROGRESS |
+| TASK-006 Task automation and verification | TASK-001 through TASK-005 | COMPLETED |
 
 ## Completion Criteria
 
 - [x] repository matches the target mixed-stack layout described in the design docs
-- [ ] direct open flow `chilla <file_name>` works for `.md`, `.markdown`, and `.mdown`
+- [x] direct open flow `chilla <file_name>` works for `.md`, `.markdown`, and `.mdown`
 - [x] backend owns parsing, heading extraction, persistence, and file watching
 - [x] frontend owns layout, dirty state, pane toggles, TOC rendering, and Mermaid hydration
-- [ ] external file changes refresh clean buffers and surface conflicts for dirty buffers
+- [x] external file changes refresh clean buffers and surface conflicts for dirty buffers
 - [x] Bun and Cargo verification both pass through repository-level task entrypoints
 
 ## Progress Log
@@ -341,8 +345,26 @@ Required repository outcomes:
 **Blockers**: External-link opening and local media rendering still need an interactive desktop smoke check in a real Tauri window
 **Notes**: Added Markdown autolinking, video-file rendering from Markdown media syntax, preview-side local asset URL rewriting relative to the open document, and default-browser opening for external links via the Tauri opener plugin. Added Rust renderer tests and Bun helper tests, with full mixed-stack verification to follow.
 
+### Session: 2026-05-01 17:55 JST
+**Tasks Completed**: Aligned this plan with the updated design docs that now treat the Tauri + Bun structure as the current baseline.
+**Tasks In Progress**: TASK-006 runtime smoke validation
+**Blockers**: Same runtime smoke gaps as prior sessions.
+**Notes**: Startup paths beyond opening a Markdown file are covered by `impl-plans/completed/file-viewer-mode.md`; CSV preview is tracked in `impl-plans/completed/csv-viewer.md`.
+
+### Session: 2026-05-01 (plan hygiene)
+**Tasks Completed**: Set all module contract statuses in this file to COMPLETED to match the module table and task checklists (historical spec blocks retained as reference).
+**Tasks In Progress**: None
+**Blockers**: None
+**Notes**: No code changes; avoids `NOT_STARTED` labels on a Completed plan archive.
+
+### Session: 2026-05-02 UTC
+**Tasks Completed**: Marked TASK-006 done with `Taskfile.yml` `task dev` acknowledged as the supported entrypoint; refreshed cross-links to `completed/file-viewer-mode.md` / `completed/csv-viewer.md`; archived this plan under `impl-plans/completed/` with all global completion criteria satisfied in code.
+**Tasks In Progress**: None
+**Blockers**: Optional manual `task dev` / watcher desktop smoke still recommended for release confidence.
+**Notes**: Automated checks in this cycle: `bun run typecheck`, `bun run test`, `bun run test:dom`, plus `CARGO_TERM_QUIET=true` Cargo `check`/`test`/`clippy` against `src-tauri/Cargo.toml`.
+
 ## Related Plans
 
 - **Previous**: None
-- **Next**: None
+- **Next**: Follow-on workspace features are tracked in `impl-plans/completed/file-viewer-mode.md` and `impl-plans/completed/csv-viewer.md`.
 - **Depends On**: None

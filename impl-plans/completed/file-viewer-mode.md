@@ -1,9 +1,9 @@
 # File Viewer Mode Implementation Plan
 
-**Status**: In Progress
+**Status**: Completed
 **Design Reference**: `design-docs/specs/design-file-viewer-mode.md`
 **Created**: 2026-03-19
-**Last Updated**: 2026-04-07
+**Last Updated**: 2026-05-02
 
 ## Design Document Reference
 
@@ -13,10 +13,13 @@
 - `design-docs/specs/design-markdown-workbench.md`
 - `design-docs/specs/command.md#startup-contract`
 - `design-docs/specs/architecture.md#supporting-spec`
+- `design-docs/specs/design-csv-viewer.md` (related preview-kind plan only)
 
 ### Summary
 
 Implement a switchable file-view workspace on top of the current Markdown workbench so `chilla` can launch on the current directory, a directory path, a Markdown file, or another file path.
+
+The May 2026 design update extends this plan with explicit multi-file startup, where `chilla file-a file-b ...` opens file view mode with the left pane constrained to the canonicalized file set.
 
 ### Scope
 
@@ -25,6 +28,7 @@ Implement a switchable file-view workspace on top of the current Markdown workbe
 - Rust-side startup target parsing
 - Rust-side file type detection using a dedicated library
 - directory listing and file preview Tauri commands
+- explicit multi-file startup and explicit-file-set selector
 - image and video preview rendering in file view mode
 - yazi-style flat current-directory browser with `hjkl`/Enter/Ctrl-M navigation
 - mode switching between Markdown mode and file view mode
@@ -33,6 +37,7 @@ Implement a switchable file-view workspace on top of the current Markdown workbe
 - recursive tree widgets
 - file mutation for non-Markdown files
 - multi-pane split directories
+- Typed CSV preview (delivered in `impl-plans/completed/csv-viewer.md`, separate from core file-view checklist)
 - fuzzy search, hidden-file filtering, or recent-files features
 
 ## Modules And Contracts
@@ -40,22 +45,35 @@ Implement a switchable file-view workspace on top of the current Markdown workbe
 ### 1. Startup Context
 
 #### `src-tauri/src/cli/mod.rs`
-#### `src-tauri/src/app_state.rs`
 
-**Status**: NOT_STARTED
+**Status**: Completed
 
 ```rust
 pub enum StartupTarget {
     CurrentDirectory(std::path::PathBuf),
     Directory(std::path::PathBuf),
     File(std::path::PathBuf),
+    FileSet(Vec<std::path::PathBuf>),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct StartupContext {
     pub initial_mode: WorkspaceMode,
-    pub current_directory_path: String,
-    pub selected_file_path: Option<String>,
+    pub browser_root: BrowserRoot,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BrowserRoot {
+    Directory {
+        current_directory_path: String,
+        selected_file_path: Option<String>,
+    },
+    ExplicitFileSet {
+        file_count: usize,
+        selected_file_path: String,
+        source_order_paths: Vec<String>,
+    },
 }
 ```
 
@@ -64,150 +82,135 @@ pub struct StartupContext {
 #### `src-tauri/src/viewer/types.rs`
 #### `src/lib/tauri/document.ts`
 
-**Status**: NOT_STARTED
+**Status**: Completed
 
-```rust
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct DirectorySnapshot {
-    pub current_directory_path: String,
-    pub parent_directory_path: Option<String>,
-    pub entries: Vec<DirectoryEntry>,
-    pub selected_path: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct DirectoryEntry {
-    pub path: String,
-    pub name: String,
-    pub is_directory: bool,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum FilePreview {
-    Markdown(DocumentSnapshot),
-    Text(TextPreview),
-    Binary(BinaryPreview),
-}
-```
+Authoritative contracts in repo: paginated directory reads (`DirectoryPage`), `ExplicitFileSetPage` with `DirectoryEntry` rows (includes `directory_hint` for explicit-set UI), preview union covering Markdown/media/EPUB/PDF/`Csv`/text/binary. CSV deliverable: `impl-plans/completed/csv-viewer.md`.
 
 ### 3. Viewer Service And Commands
 
 #### `src-tauri/src/viewer/service.rs`
 #### `src-tauri/src/commands/document.rs`
 
-**Status**: NOT_STARTED
+**Status**: Completed
 
-```rust
-pub struct ViewerService;
-
-impl ViewerService {
-    pub fn startup_context(&self, target: &StartupTarget) -> AppResult<StartupContext>;
-    pub fn list_directory(&self, path: &std::path::Path, selected_path: Option<&std::path::Path>) -> AppResult<DirectorySnapshot>;
-    pub fn open_file_preview(&self, path: &std::path::Path) -> AppResult<FilePreview>;
-}
-
-#[tauri::command]
-pub fn get_startup_context(state: tauri::State<'_, AppState>) -> Result<StartupContext, String>;
-
-#[tauri::command]
-pub fn list_directory(path: String, selected_path: Option<String>, state: tauri::State<'_, AppState>) -> Result<DirectorySnapshot, String>;
-
-#[tauri::command]
-pub fn open_file_preview(path: String, state: tauri::State<'_, AppState>) -> Result<FilePreview, String>;
-```
+`ViewerService` implements startup routing, filtered/paged listings, explicit set pages, MIME/extension classification, and preview construction. Commands are wired from `commands/document.rs`; TypeScript invoke wrappers are in `src/lib/tauri/document.ts`.
 
 ### 4. Frontend Workspace
 
 #### `src/features/workspace/WorkspaceShell.tsx`
 #### `src/features/file-view/FileBrowserPane.tsx`
-#### `src/features/file-view/FilePreviewPane.tsx`
+#### Preview panes under `src/features/preview/` (Markdown, CSV, media, EPUB, etc.)
 
-**Status**: NOT_STARTED
+**Status**: Completed
 
 ```ts
 export type WorkspaceMode = "markdown" | "file_view";
-
-export interface StartupContext {
-  readonly initial_mode: WorkspaceMode;
-  readonly current_directory_path: string;
-  readonly selected_file_path: string | null;
-}
+// StartupContext/BrowserRoot mirror Rust serde at `document.ts`
 ```
 
 ## Module Status
 
 | Module | File Path | Status | Tests |
 |--------|-----------|--------|-------|
-| Startup context | `src-tauri/src/cli/`, `src-tauri/src/app_state.rs` | NOT_STARTED | Cargo |
-| Viewer types and service | `src-tauri/src/viewer/` | NOT_STARTED | Cargo |
-| Tauri commands and frontend bindings | `src-tauri/src/commands/`, `src/lib/tauri/document.ts` | NOT_STARTED | Cargo + Bun |
-| File-view UI | `src/features/file-view/`, `src/features/workspace/WorkspaceShell.tsx` | NOT_STARTED | Bun |
+| Startup context | `src-tauri/src/cli/`, `src-tauri/src/app_state.rs` | Completed | Cargo |
+| Viewer types and service | `src-tauri/src/viewer/` | Completed | Cargo |
+| Tauri commands and frontend bindings | `src-tauri/src/commands/`, `src/lib/tauri/document.ts` | Completed | Cargo + Bun |
+| File-view UI | `src/features/file-view/`, `src/features/workspace/WorkspaceShell.tsx` | Completed | Bun |
+| Explicit file-set selector | `src-tauri/src/cli/`, `src-tauri/src/viewer/`, `src/features/file-view/` | Completed | Cargo + Bun |
 
 ## Implementation Tasks
 
 ### TASK-001: Startup Target And Viewer Contract
-**Status**: IN_PROGRESS
+**Status**: Completed
 **Parallelizable**: No
 **Deliverables**: `src-tauri/src/cli/mod.rs`, `src-tauri/src/app_state.rs`, `src-tauri/src/viewer/types.rs`, `src/lib/tauri/document.ts`
 
 **Completion Criteria**:
-- [ ] CLI accepts bare startup, directory paths, and file paths
-- [ ] startup context distinguishes file view vs Markdown mode
-- [ ] frontend bindings expose startup context and file preview unions
+- [x] CLI accepts bare startup, directory paths, and file paths
+- [x] startup context distinguishes file view vs Markdown mode
+- [x] frontend bindings expose startup context and file preview unions
 
 ### TASK-002: Rust Viewer Service
-**Status**: NOT_STARTED
+**Status**: Completed
 **Parallelizable**: No
 **Depends On**: `TASK-001`
 **Deliverables**: `src-tauri/src/viewer/service.rs`, `src-tauri/src/commands/document.rs`, `src-tauri/Cargo.toml`
 
 **Completion Criteria**:
-- [ ] directory listing returns flat current-directory entries
-- [ ] file type detection is Rust-owned and library-backed
-- [ ] Markdown, text, and binary previews are distinguished correctly
+- [x] directory listing returns flat current-directory entries
+- [x] file type detection is Rust-owned and library-backed
+- [x] Markdown, text, binary, and richer preview kinds are distinguished correctly
 
 ### TASK-003: Frontend File View Mode
-**Status**: NOT_STARTED
+**Status**: Completed
 **Parallelizable**: No
 **Depends On**: `TASK-001`, `TASK-002`
 **Deliverables**: `src/features/file-view/`, `src/features/workspace/WorkspaceShell.tsx`, `src/app/App.css`
 
 **Completion Criteria**:
-- [ ] file view mode renders directory list + viewer pane
-- [ ] `hjkl` + Enter/Ctrl-M navigation works
-- [ ] Markdown/file-view mode switching works
+- [x] file view mode renders directory list + viewer pane
+- [x] `hjkl` + Enter/Ctrl-M navigation works
+- [x] Markdown/file-view mode switching works
 
 ### TASK-004: Verification
-**Status**: NOT_STARTED
+**Status**: Completed
 **Parallelizable**: No
 **Depends On**: `TASK-003`
 **Deliverables**: updated tests and verification log
 
 **Completion Criteria**:
-- [ ] `bun run typecheck` passes
-- [ ] `bun run test` passes
-- [ ] `CARGO_TERM_QUIET=true cargo check` passes
-- [ ] `CARGO_TERM_QUIET=true cargo test` passes
-- [ ] `CARGO_TERM_QUIET=true cargo clippy --all-targets -- -D warnings` passes
+- [x] `bun run typecheck` passes
+- [x] `bun run test` passes
+- [x] `bun run test:dom` passes
+- [x] `CARGO_TERM_QUIET=true cargo check` passes (manifest `src-tauri/Cargo.toml`)
+- [x] `CARGO_TERM_QUIET=true cargo test` passes
+- [x] `CARGO_TERM_QUIET=true cargo clippy --all-targets -- -D warnings` passes
+
+### TASK-005: Explicit Multi-File Startup Contract
+**Status**: Completed
+**Parallelizable**: No
+**Depends On**: `TASK-001`, `TASK-002`
+**Deliverables**: `src-tauri/src/cli/mod.rs`, `src-tauri/src/viewer/types.rs`, `src-tauri/src/viewer/service.rs`, `src/lib/tauri/document.ts`
+
+**Completion Criteria**:
+- [x] CLI accepts two or more file paths and rejects directories in multi-path mode
+- [x] canonical duplicate paths are removed while preserving first occurrence
+- [x] startup context uses `BrowserRoot::ExplicitFileSet` with selected file and source-order paths
+- [x] all-duplicate multi-path startup falls back to single-file behavior
+
+### TASK-006: Explicit File-Set Selector UI
+**Status**: Completed
+**Parallelizable**: No
+**Depends On**: `TASK-005`
+**Deliverables**: `src/features/file-view/`, `src/features/workspace/WorkspaceShell.tsx`, `src/app/App.css`
+
+**Completion Criteria**:
+- [x] left pane shows only provided files with basename and parent-path hint
+- [x] `h` / `ArrowLeft` do not navigate to parent directories in explicit-set mode
+- [x] filtering matches basename and path hint
+- [x] sorting uses the existing name, extension, mtime, and size field set without changing the initially opened file
 
 ## Dependencies
 
 | Feature | Depends On | Status |
 |---------|------------|--------|
-| TASK-002 Rust viewer service | TASK-001 | BLOCKED |
-| TASK-003 frontend file view mode | TASK-001, TASK-002 | BLOCKED |
-| TASK-004 verification | TASK-003 | BLOCKED |
+| TASK-002 Rust viewer service | TASK-001 | Done |
+| TASK-003 frontend file view mode | TASK-001, TASK-002 | Done |
+| TASK-004 verification | TASK-003 | Done |
+| TASK-005 explicit multi-file startup | TASK-001, TASK-002 | Done |
+| TASK-006 explicit file-set selector UI | TASK-005 | Done |
 
 ## Completion Criteria
 
-- [ ] Bare `chilla` startup opens file view mode rooted at the current directory
-- [ ] `chilla <dir_path>` opens file view mode rooted at that directory
-- [ ] `chilla <markdown_file>` opens markdown mode
-- [ ] `chilla <other_file>` opens file view mode with that file previewed
-- [ ] Non-Markdown text files preview as text
-- [ ] Image and video files preview inline
-- [ ] Binary files are not rendered
+- [x] Bare `chilla` startup opens file view mode rooted at the current directory
+- [x] `chilla <dir_path>` opens file view mode rooted at that directory
+- [x] `chilla <markdown_file>` opens markdown mode
+- [x] `chilla <other_file>` opens file view mode with that file previewed
+- [x] Non-Markdown text files preview as text
+- [x] Image and video files preview inline
+- [x] Binary files are not rendered
+- [x] `chilla <file_a> <file_b> ...` opens an explicit file-set selector
+- [x] explicit file-set mode never expands scope to sibling files or parent directories
 
 ## Progress Log
 
@@ -300,3 +303,26 @@ export interface StartupContext {
 **Tasks In Progress**: TASK-002 Rust viewer service, TASK-003 frontend file view mode, TASK-004 verification
 **Blockers**: None
 **Notes**: Verification will cover repository checks plus a real Linux Tauri runtime check against an EPUB file under `~/Downloads`.
+
+### Session: 2026-05-01 17:37 JST
+**Tasks Completed**: Folded the May 2026 design-doc updates into this plan by adding explicit multi-file startup and explicit-file-set selector tasks.
+**Tasks In Progress**: None
+**Blockers**: None
+**Notes**: CSV-specific implementation work was split into `impl-plans/completed/csv-viewer.md` to keep this plan below the 400-line limit and preserve focused task ownership.
+
+### Session: 2026-05-02 UTC
+**Tasks Completed**: Closed TASK-004 by aligning Vitest EPUB pagination expectations when no `epub-preview__chapter` metadata is present (`Section Page 1 of 1`); refreshed plan bookkeeping (module/task tables, archived CSV dependency path, verification checklist incl. `bun run test:dom`).
+**Tasks In Progress**: None
+**Blockers**: Interactive desktop smoke for unusual media/hosting setups remains informal.
+**Notes**: `bun run typecheck`, `bun run test`, `bun run test:dom`, and `CARGO_TERM_QUIET=true` Cargo `check`/`test`/`clippy` on `src-tauri/` all pass in this workspace snapshot.
+
+### Session: 2026-05-01 (implementation)
+**Tasks Completed**: Implemented TASK-005/TASK-006: `StartupTarget::FileSet`, `BrowserRoot`, `list_explicit_file_set` Tauri command, CLI multi-path validation and dedupe-to-single-file fallback, frontend explicit listing state, `Selected Files` UX, path hints, disabled parent navigation in explicit mode, and basename + parent-path filtering on the backend.
+**Tasks In Progress**: ~~TASK-004 full verification log; remaining plan tasks for earlier TASK-001 checklist alignment~~ (resolved 2026-05-02)
+**Blockers**: None
+**Notes**: Verified with `bun run typecheck`, `bun run test`, `CARGO_TERM_QUIET=true cargo test`/`clippy` on `src-tauri`. Earlier EPUB Vitest flake addressed in Session 2026-05-02.
+
+## Related Plans
+
+- **Completed dependency**: `impl-plans/completed/csv-viewer.md` (CSV preview)
+- Markdown workbench complements this plan for Markdown-mode editing (`impl-plans/completed/markdown-workbench-first-slice.md`)

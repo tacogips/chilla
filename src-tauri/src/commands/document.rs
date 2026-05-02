@@ -7,7 +7,9 @@ use crate::{
     document::types::{DocumentSnapshot, HeadingNode},
     markdown::render_markdown,
     syntax_highlight::SyntaxUiTheme,
-    viewer::types::{DirectoryListSort, DirectoryPage, FilePreview, StartupContext},
+    viewer::types::{
+        DirectoryListSort, DirectoryPage, ExplicitFileSetPage, FilePreview, StartupContext,
+    },
 };
 
 fn format_command_error(error: impl std::fmt::Display) -> String {
@@ -151,6 +153,31 @@ pub fn list_directory(
             Path::new(&resolved_path),
             resolved_sort,
             resolved_query.as_deref(),
+            resolved_offset,
+            resolved_limit,
+        )
+        .map_err(format_command_error)
+}
+
+#[tauri::command]
+pub fn list_explicit_file_set(
+    paths: Vec<String>,
+    sort: Option<DirectoryListSort>,
+    query: Option<String>,
+    offset: Option<usize>,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<ExplicitFileSetPage, String> {
+    let resolved_sort = sort.unwrap_or_default();
+    let resolved_offset = offset.unwrap_or(0);
+    let resolved_limit = limit.unwrap_or(0);
+
+    state
+        .viewer_service()
+        .list_explicit_file_set(
+            &paths,
+            resolved_sort,
+            query.as_deref(),
             resolved_offset,
             resolved_limit,
         )

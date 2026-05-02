@@ -8,11 +8,11 @@ This document specifies the user-facing workspace behavior and the mixed-stack r
 
 ## Status And Scope Boundary
 
-This is a target-state design document for the first Markdown workbench slice.
+This document now describes the Markdown workbench behavior inside the current mixed Tauri + Bun application.
 
-- The current repository is still the Rust-template baseline and does not yet contain the frontend or `src-tauri/` layout described here.
-- This document defines the intended behavior and component boundaries after the repository is migrated into a Tauri application.
-- Repository restructuring is part of the implementation scope and should not be treated as already complete.
+- The repository already contains the frontend `src/` tree and the Tauri backend under `src-tauri/`.
+- This document defines Markdown-specific behavior and component boundaries; file-view startup behavior is covered by `design-docs/specs/design-file-viewer-mode.md`.
+- Repository restructuring is no longer part of the Markdown workbench scope.
 
 ## User Experience
 
@@ -26,7 +26,7 @@ This is a target-state design document for the first Markdown workbench slice.
   - show the editor immediately
   - show the table of contents by default
   - keep the preview collapsed by default
-- Bare `chilla` startup without a file is out of scope for the first slice.
+- Bare `chilla` startup is handled by file view mode and opens the current working directory.
 
 ### Workspace Layout
 

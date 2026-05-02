@@ -10,10 +10,32 @@ pub enum WorkspaceMode {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BrowserRoot {
+    Directory {
+        current_directory_path: String,
+        selected_file_path: Option<String>,
+    },
+    ExplicitFileSet {
+        file_count: usize,
+        selected_file_path: String,
+        source_order_paths: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct StartupContext {
     pub initial_mode: WorkspaceMode,
-    pub current_directory_path: String,
-    pub selected_file_path: Option<String>,
+    pub browser_root: BrowserRoot,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ExplicitFileSetPage {
+    pub entries: Vec<DirectoryEntry>,
+    pub total_entry_count: usize,
+    pub offset: usize,
+    pub limit: usize,
+    pub has_more: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -63,6 +85,7 @@ pub struct DirectoryEntry {
     pub path: String,
     pub canonical_path: String,
     pub name: String,
+    pub directory_hint: String,
     pub is_directory: bool,
     pub size_bytes: u64,
     pub modified_at_unix_ms: u64,
@@ -128,6 +151,21 @@ pub enum FilePreview {
         mime_type: String,
         file_type: String,
         html: String,
+        size_bytes: u64,
+        last_modified: String,
+    },
+    Csv {
+        path: String,
+        file_name: String,
+        mime_type: String,
+        raw_html: String,
+        rows: Vec<Vec<String>>,
+        column_count: usize,
+        displayed_row_count: usize,
+        total_row_count: Option<usize>,
+        truncated: bool,
+        formatted_available: bool,
+        parse_error: Option<String>,
         size_bytes: u64,
         last_modified: String,
     },

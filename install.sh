@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+#
+# Tarball installer: downloads `chilla-v<version>-<target>.tar.gz` GitHub release assets (see README).
+# For macOS .app / .dmg bundles built from this repository, see README "macOS DMG Releases" and `task bundle-macos-dmg`.
 
 set -euo pipefail
 

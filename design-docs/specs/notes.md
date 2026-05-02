@@ -20,9 +20,9 @@ Notable items that do not fit into architecture or client categories.
 
 ### Scope Corrections Applied
 
-- The architecture documents a target Tauri + Bun + TypeScript application, not the current checked-in repository shape.
-- The current repository still reflects the Rust-template baseline, so migration work has to be planned explicitly.
-- Bare `chilla` startup without a file was removed from the first-slice command contract to keep startup behavior internally consistent.
+- The architecture now treats the checked-in Tauri + Bun + TypeScript structure as the current project baseline.
+- The root Rust manifest is workspace-level; backend crate implementation belongs under `src-tauri/`.
+- Bare `chilla` startup without a file opens the current working directory in file view mode.
 - Cargo development variables such as `CARGO_TERM_QUIET` belong to implementation tooling, not the product CLI surface.
 
 ### Key Assumptions
@@ -30,34 +30,43 @@ Notable items that do not fit into architecture or client categories.
 - "Editor is default hidden" was interpreted as "the preview pane is hidden by default while the editor remains the primary visible pane."
 - The table of contents is generated from Markdown headings only, not from arbitrary HTML headings embedded in source.
 - Mermaid support applies to fenced code blocks marked for Mermaid diagrams.
-- The first-slice file-type policy accepts `.md`, `.markdown`, and `.mdown` paths only.
+- Markdown mode recognizes `.md`, `.markdown`, and `.mdown`; file view mode handles additional previewable file types.
 
 ## File Viewer Mode Notes
 
 ### Scope Additions
 
 - `chilla` is no longer Markdown-file-only at startup; it must handle directories, Markdown files, other text files, and binary files.
+- `chilla` also needs an explicit multi-file startup path where the left pane is constrained to only the provided filepaths.
 - File type parsing is a Rust responsibility and should use a dedicated library rather than frontend sniffing.
 - Binary files are previewable only as metadata/placeholders, not as rendered content.
 - File view mode uses a yazi-style flat current-directory list, not a recursive tree widget.
+- CSV should be promoted from generic text preview to a dedicated structured preview kind with raw/formatted switching.
 
 ### Interaction Assumptions
 
 - The flat file list still counts as the "file tree" for product language because directory navigation preserves filesystem hierarchy through current-directory replacement.
+- Multi-file startup should not pretend to be directory navigation; it should use a dedicated explicit-file-set selector view in the same left-pane slot.
 - `Ctrl-M` should be treated as equivalent to Enter/confirm in the webview key handler.
 - Markdown mode remains the only editable mode in this feature slice; non-Markdown files are view-only.
+- CSV formatted view should not infer a schema/header row in the first slice; numeric row/column labels preserve data fidelity.
+- CSV raw/formatted switching should reuse the existing source/rendered workspace control instead of introducing a CSV-only toolbar.
 
-### Verification Targets For Later Implementation
+### Design Reference
 
-- Bun typecheck and frontend tests for Solid.js workspace behavior
-- Cargo checks and tests for Markdown parsing, heading extraction, and file watcher behavior
-- Mixed-stack validation that Tauri events keep editor, TOC, preview, and file-view selection in sync
+- See `design-docs/specs/design-file-viewer-mode.md` for the detailed explicit-file-set selector design, startup contract, and left-pane behavior.
+- See `design-docs/specs/design-csv-viewer.md` for CSV preview classification, payload shape, and table rendering behavior.
+
+### Verification Targets
+
+- Keep Bun typecheck, Vitest (`bun run test:dom`), and Cargo checks/tests/clippy aligned with Markdown parsing, heading extraction, watcher behavior, and new preview kinds such as CSV.
+- Linux WebDriver smoke (`bun run test:tauri:e2e:linux`) remains the authoritative mixed-stack probe for startup roots, listing, selection, Markdown preview styling, CSV raw/formatted toggles, and explicit argv file sets (`impl-plans/completed/file-view-mixed-stack-validation.md`).
 
 ### Implementation Follow-Up
 
-- Before coding begins, create an implementation plan under `impl-plans/active/` covering repository migration, CLI/bootstrap, backend parsing/watch services, frontend workspace layout, and task automation.
+- File-view mode, CSV preview, Markdown workbench first slice, DMG packaging, mixed-stack smoke validation, and Markdown save/conflict slices are archived under `impl-plans/completed/`; see `impl-plans/README.md` for the authoritative index before extending those areas.
+- New features in this surface should still start from `impl-plans/active/` plans that enumerate CLI/bootstrap, backend parsing/watch, frontend workspace behavior, task automation impacts, and every Rust/TypeScript IPC contract change.
 - Mixed-stack changes should be implemented as a Tauri feature rather than isolated frontend or Rust-only work.
-- The implementation plan should include when `src/` is repurposed for frontend code and where the current Rust crate is relocated.
 
 ## EPUB Navigation Notes
 
