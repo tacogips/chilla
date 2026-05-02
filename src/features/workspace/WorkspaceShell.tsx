@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { ParentProps } from "solid-js";
 import {
   For,
@@ -55,6 +56,10 @@ import {
   canReloadMarkdownSnapshotForPresentationRefresh,
   decideMarkdownDocumentRefresh,
 } from "./documentRefreshDecision";
+import {
+  classifyDialogSelection,
+  startupContextForPickedTarget,
+} from "./openFiles";
 import type { WorkspaceSelection } from "./state";
 
 const EMPTY_STATE_IMAGE_PATH = "/empty-state-cat.png";
@@ -109,6 +114,7 @@ type ShortcutDefinition = {
 };
 
 const SHORTCUT_LABELS = {
+  openFiles: "Ctrl+O / Cmd+O",
   copyPath: "Y",
   reload: "R",
   toggleToc: "Shift+T",
@@ -127,6 +133,10 @@ const SHORTCUT_SECTIONS: readonly {
       { keys: ["?"], description: "Show this help" },
       { keys: ["Esc"], description: "Close help" },
       { keys: ["Q"], description: "Quit application" },
+      {
+        keys: ["Ctrl", "O"],
+        description: "Open one or more files (also Cmd+O on macOS)",
+      },
       {
         keys: ["Ctrl", "D"],
         description:
@@ -1338,6 +1348,58 @@ export function WorkspaceShell() {
 
   const currentSelectedPath = () => selectedBrowserPath() ?? currentOpenPath();
 
+  const handleOpenFiles = async () => {
+    try {
+      const selection = await open({
+        multiple: true,
+        directory: false,
+        title: "Open files",
+      });
+      const target = classifyDialogSelection(selection);
+
+      if (target === null) {
+        return;
+      }
+
+      setLoading(true);
+      setDirectoryQuery("");
+      setErrorMessage(null);
+      setTocOpen(false);
+      clearSelectionPreviewDebounce();
+      stopWatchingCurrentDocument();
+      clearDocumentArea();
+      setStartupContext(startupContextForPickedTarget(target));
+
+      if (target.kind === "single_file") {
+        setFileTreeOpen(false);
+        await loadDirectoryState(
+          target.directoryPath,
+          target.filePath,
+          directorySort(),
+          "",
+        );
+        await previewSelectedFile(target.filePath);
+      } else {
+        setFileTreeOpen(true);
+        await loadExplicitFileSetState(
+          target.filePaths,
+          target.selectedFilePath,
+          directorySort(),
+          "",
+        );
+        await previewSelectedFile(target.selectedFilePath);
+      }
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to open the selected files",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCopyCurrentPath = async () => {
     const path = currentSelectedPath();
 
@@ -1682,6 +1744,18 @@ export function WorkspaceShell() {
         return;
       }
 
+      const openShortcut =
+        event.key.toLowerCase() === "o" &&
+        !event.shiftKey &&
+        !event.altKey &&
+        (event.ctrlKey || event.metaKey);
+
+      if (openShortcut) {
+        event.preventDefault();
+        void handleOpenFiles();
+        return;
+      }
+
       if (isEditableKeyboardTarget(event.target)) {
         return;
       }
@@ -1966,6 +2040,18 @@ export function WorkspaceShell() {
                 );
               }}
             </Show>
+
+            <button
+              class="button"
+              type="button"
+              aria-label="Open one or more files"
+              title={`Open files (${SHORTCUT_LABELS.openFiles})`}
+              onClick={() => {
+                void handleOpenFiles();
+              }}
+            >
+              Open files
+            </button>
 
             <Show when={hasTocDocument()}>
               <button

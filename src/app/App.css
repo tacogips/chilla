@@ -1225,54 +1225,12 @@ button {
 }
 
 .file-browser__name {
-  position: relative;
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  --file-browser-name-scroll-distance: 0px;
-  --file-browser-name-scroll-duration: 4s;
-}
-
-.file-browser__name-static {
   display: block;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.file-browser__name-marquee {
-  position: absolute;
-  inset: 0 auto 0 0;
-  display: block;
-  width: max-content;
-  min-width: 100%;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(0);
-  will-change: transform;
-}
-
-.file-browser__button:focus .file-browser__name[data-overflowing="true"] .file-browser__name-static {
-  opacity: 0;
-}
-
-.file-browser__button:focus .file-browser__name[data-overflowing="true"] .file-browser__name-marquee {
-  opacity: 1;
-  animation: file-browser-name-marquee var(--file-browser-name-scroll-duration)
-    linear infinite alternate;
-}
-
-@keyframes file-browser-name-marquee {
-  0%,
-  18% {
-    transform: translateX(0);
-  }
-
-  82%,
-  100% {
-    transform: translateX(calc(-1 * var(--file-browser-name-scroll-distance)));
-  }
 }
 
 .file-browser__status {

@@ -45,6 +45,7 @@ There are no active implementation plans.
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
 | `linux-tauri-e2e-github-actions.md` | 2026-05-01 | `design-docs/specs/notes.md#linux-tauri-webdriver-e2e-notes` |
+| `in-app-multi-file-open.md` | 2026-05-02 | `design-docs/specs/design-file-viewer-mode.md#explicit-file-set-contract` |
 | `linux-ci-nix-flake-and-bun.md` | 2026-05-01 | `design-docs/specs/notes.md` (Linux CI follow-up); `design-docs/specs/design-markdown-workbench.md` |
 | `markdown-editor-save-and-conflict.md` | 2026-05-01 | `design-docs/specs/design-markdown-workbench.md`           |
 | `file-view-mixed-stack-validation.md` | 2026-05-01 | `design-docs/specs/notes.md#file-viewer-mode-notes`          |

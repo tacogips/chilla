@@ -255,7 +255,7 @@ function readWorkspaceMode(value: unknown): WorkspaceMode | null {
   return value === "markdown" || value === "file_view" ? value : null;
 }
 
-function inferDirectoryPath(filePath: string): string | null {
+export function inferDirectoryPath(filePath: string): string | null {
   const normalizedPath = filePath.replace(/\\/g, "/");
   const separatorIndex = normalizedPath.lastIndexOf("/");
   if (separatorIndex < 0) {

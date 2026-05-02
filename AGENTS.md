@@ -206,6 +206,7 @@ This repository was originally generated from `ign-template`'s `rust-v1` templat
 **IMPORTANT**: When a task spans the frontend and `src-tauri/`, you (the LLM model) MUST treat it as Tauri application work rather than independent Rust or TypeScript work.
 
 **Skill Reference**: Refer to `.agents/skills/tauri-development/SKILL.md` for frontend/backend boundary rules, command contract guidance, and mixed-stack verification expectations.
+**Post-Edit Launch Skill**: Refer to `.agents/skills/chilla-post-edit-launch/SKILL.md` when runtime-affecting code changes should be validated by launching the local app. Do not ask the user to run `chilla` manually when the LLM can rebuild and launch `target/debug/chilla` itself.
 
 **Mixed-Stack Rules**:
 - Changes to Tauri commands, invoke payloads, events, or persisted document formats must update both Rust and TypeScript sides together

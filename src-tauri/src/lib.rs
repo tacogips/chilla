@@ -23,6 +23,7 @@ use watcher::service::WatcherService;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(startup_target: StartupTarget) -> Result<(), String> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
             let app_handle = app.handle().clone();

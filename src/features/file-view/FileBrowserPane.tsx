@@ -3,7 +3,6 @@ import {
   Show,
   createEffect,
   createMemo,
-  createSignal,
   createUniqueId,
   on,
   onCleanup,
@@ -14,7 +13,6 @@ import type {
   DirectoryEntry,
   DirectoryListSort,
 } from "../../lib/tauri/document";
-import { middleEllipsisForWidth } from "./middleEllipsis";
 import { DEFAULT_FILE_TREE_SORT, describeFileTreeSort } from "./sort";
 
 function FolderGlyph() {
@@ -88,91 +86,9 @@ interface FileBrowserPaneProps {
 }
 
 function FileBrowserEntryName(props: { readonly name: string }) {
-  let outer: HTMLSpanElement | undefined;
-  let marquee: HTMLSpanElement | undefined;
-  let observer: ResizeObserver | undefined;
-
-  const [shown, setShown] = createSignal(props.name);
-  const [overflowPx, setOverflowPx] = createSignal(0);
-
-  const recompute = () => {
-    const outerEl = outer;
-    const marqueeEl = marquee;
-    if (outerEl === undefined || marqueeEl === undefined) {
-      return;
-    }
-
-    const width = outerEl.clientWidth;
-    const font = getComputedStyle(outerEl).font;
-    const nextOverflow = Math.max(0, marqueeEl.scrollWidth - width);
-
-    setOverflowPx(nextOverflow);
-    setShown(
-      width <= 0 ? props.name : middleEllipsisForWidth(props.name, width, font),
-    );
-  };
-
-  createEffect(() => {
-    void props.name;
-    queueMicrotask(recompute);
-  });
-
-  const setOuterRef = (el: HTMLSpanElement | undefined) => {
-    observer?.disconnect();
-    observer = undefined;
-    outer = el;
-
-    if (el !== undefined) {
-      observer = new ResizeObserver(recompute);
-      observer.observe(el);
-      if (marquee !== undefined) {
-        observer.observe(marquee);
-      }
-      queueMicrotask(recompute);
-    }
-  };
-
-  const setMarqueeRef = (el: HTMLSpanElement | undefined) => {
-    marquee = el;
-    if (el !== undefined) {
-      observer?.observe(el);
-      queueMicrotask(recompute);
-    }
-  };
-
-  onCleanup(() => {
-    observer?.disconnect();
-  });
-
-  const isOverflowing = createMemo(() => overflowPx() > 0);
-  const scrollDuration = createMemo(() => {
-    return `${Math.max(4, overflowPx() / 28).toFixed(2)}s`;
-  });
-
   return (
-    <span
-      class="file-browser__name"
-      ref={setOuterRef}
-      data-overflowing={isOverflowing() ? "true" : "false"}
-      style={{
-        "--file-browser-name-scroll-distance": `${overflowPx()}px`,
-        "--file-browser-name-scroll-duration": scrollDuration(),
-      }}
-    >
-      <span
-        class="file-browser__name-static"
-        data-file-name-display=""
-        data-truncated={isOverflowing() ? "true" : "false"}
-      >
-        {shown()}
-      </span>
-      <span
-        class="file-browser__name-marquee"
-        ref={setMarqueeRef}
-        aria-hidden="true"
-      >
-        {props.name}
-      </span>
+    <span class="file-browser__name" title={props.name}>
+      {props.name}
     </span>
   );
 }
