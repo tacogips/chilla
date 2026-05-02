@@ -69,4 +69,4 @@ jobs:
 
       - name: Linux Tauri WebDriver smoke
         run: |
-          nix develop -c bash -euo pipefail -c "bun install --frozen-lockfile && export PATH=\"$PATH:$HOME/.cargo/bin\" && if ! command -v tauri-driver >/dev/null 2>&1; then CARGO_TERM_QUIET=true cargo install tauri-driver --locked; fi && bun run test:tauri:e2e:linux"
+          nix develop -c bash -euo pipefail -c "bun install --frozen-lockfile && export PATH=\"\$PATH:\$HOME/.cargo/bin\" && if ! command -v tauri-driver >/dev/null 2>&1; then CARGO_TERM_QUIET=true cargo install tauri-driver --locked; fi && bun run test:tauri:e2e:linux"
