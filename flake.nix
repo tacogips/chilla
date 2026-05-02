@@ -158,6 +158,7 @@
               export HOME=$(mktemp -d)
               export BUN_INSTALL_CACHE_DIR=$(mktemp -d)
               cp -RL ${frontendBunDeps}/share/bun-cache/. "$BUN_INSTALL_CACHE_DIR"
+              chmod -R u+w "$BUN_INSTALL_CACHE_DIR"
               runHook postPatch
             '';
 
