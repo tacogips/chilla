@@ -16,13 +16,14 @@ This section defines the target architecture for the desktop Markdown viewer/edi
 
 ### Repository Baseline And Migration Context
 
-The repository is still on the Rust-template baseline today:
+The repository is now a mixed Tauri + Bun application:
 
-- Rust binary and library code live under the root `src/` directory.
-- `Taskfile.yml` currently exposes Cargo-oriented tasks only.
-- Frontend and Tauri directories such as `package.json` and `src-tauri/` have not been introduced yet.
+- Solid.js / TypeScript frontend code lives under `src/`.
+- Tauri backend code lives under `src-tauri/`.
+- The root `Cargo.toml` is a workspace manifest for the Tauri crate.
+- `package.json`, `bun.lock`, and `Taskfile.yml` provide Bun, Vite, Tauri, Cargo, and go-task workflows.
 
-This design therefore describes the target mixed-stack architecture and the migration direction from the current baseline. Statements about `src/` frontend code, `src-tauri/`, Bun, and Tauri should be read as target-state design, not as a claim that those pieces already exist in the worktree.
+New design work should treat the mixed-stack structure as the current project baseline.
 
 ### Product Scope
 
@@ -63,12 +64,12 @@ The target application is a mixed Tauri desktop system with clear responsibility
 
 ### Transition Plan Constraints
 
-The architecture has to support a staged migration from the current Rust-only scaffold.
+The original Rust-only scaffold has already moved to the mixed-stack structure, so transition constraints now focus on preserving contracts across the Tauri boundary.
 
-- Root-level Rust bootstrap can remain temporarily while the Tauri backend is introduced.
-- The frontend `src/` tree should only be repurposed after the current Rust sources move under `src-tauri/` or another backend location.
-- Task automation should not claim Bun or Tauri support until the corresponding manifests and scripts exist.
-- Implementation plans should treat repository restructuring as a first-class deliverable, not an incidental cleanup.
+- Root-level Rust configuration should remain workspace-oriented; backend package configuration belongs under `src-tauri/`.
+- Frontend feature work should keep TypeScript IPC types aligned with Rust `serde` payloads.
+- Task automation should continue to orchestrate Bun and Cargo workflows rather than reintroducing Rust-only checks.
+- Implementation plans should call out cross-boundary contract changes explicitly.
 
 ### Data Flow
 
@@ -157,24 +158,72 @@ Expected behavior:
 - Large documents should degrade primarily in editor rendering cost, not in TOC extraction cost.
 - File watch event handling should avoid triggering redundant Mermaid rerenders when the preview is hidden.
 
+## CSV Preview Architecture
+
+This section defines the architecture for CSV as a structured file-view preview kind.
+
+### Product Scope
+
+- CSV opens in file view mode, not Markdown mode.
+- CSV supports a two-state presentation switch:
+  - raw source
+  - formatted table
+- CSV remains read-only in this slice.
+
+### Responsibility Split
+
+- Rust in `src-tauri/` owns CSV detection, parsing, record truncation policy, and typed preview payload generation.
+- Solid.js in `src/` owns the raw/formatted mode switch, table layout, sticky headers, and cell rendering.
+- The existing preview command boundary should extend rather than introducing a parallel CSV-only open flow.
+
+### Contract Direction
+
+CSV should become a typed `FilePreview` variant rather than being emitted as generic highlighted HTML text.
+
+Reasoning:
+
+- raw CSV is still text-oriented
+- formatted CSV is naturally structured data
+- a typed variant avoids forcing the backend to serialize large HTML tables
+
+### Rendering Policy
+
+- Raw CSV reuses the source-oriented highlighted preview path.
+- Formatted CSV renders from structured row/cell data into a semantic table component.
+- CSV content is rendered as text, not interpreted HTML.
+- CSV previews do not participate in TOC or anchor navigation.
+
+### Performance Policy
+
+- Formatted CSV preview should be bounded by explicit row and/or cell budgets.
+- When bounds are exceeded, the UI must show truncation or raw-only fallback rather than blocking the workspace.
+
 ### Suggested Project Structure
 
 Current baseline:
 
 ```text
 src/
-  lib.rs
-  main.rs
+  app/
+  features/
+  lib/
+src-tauri/
+  src/
+    cli/
+    commands/
+    document/
+    markdown/
+    viewer/
+    watcher/
 Taskfile.yml
 Cargo.toml
+package.json
 ```
 
-Target layout after migration:
+Expected extension points:
 
 ```text
 src/
-  app/
-  components/
   features/workspace/
   features/editor/
   features/preview/
@@ -186,6 +235,7 @@ src-tauri/
     commands/
     document/
     markdown/
+    viewer/
     watcher/
 ```
 
@@ -193,6 +243,7 @@ src-tauri/
 
 See `design-docs/specs/design-markdown-workbench.md` for the detailed workspace behavior, event contract, and implementation-oriented design notes.
 See `design-docs/specs/design-file-viewer-mode.md` for the file browser, startup-mode, and typed file preview contract.
+See `design-docs/specs/design-csv-viewer.md` for CSV-specific preview detection, contracts, and table rendering behavior.
 See `design-docs/specs/design-epub-navigation.md` for EPUB TOC extraction, reader navigation, and reading-location persistence.
 
 ---

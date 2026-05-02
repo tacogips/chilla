@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type RevisionToken = string;
 export type WorkspaceMode = "markdown" | "file_view";
+/** Raw vs formatted/rendered presentation (Markdown and CSV file preview). */
+export type DocumentPresentationMode = "raw" | "formatted";
 
 export interface HeadingNode {
   readonly level: number;
@@ -25,14 +27,27 @@ export interface DocumentSnapshot {
 
 export interface StartupContext {
   readonly initial_mode: WorkspaceMode;
-  readonly current_directory_path: string;
-  readonly selected_file_path: string | null;
+  readonly browser_root: BrowserRoot;
 }
+
+export type BrowserRoot =
+  | {
+      readonly kind: "directory";
+      readonly current_directory_path: string;
+      readonly selected_file_path: string | null;
+    }
+  | {
+      readonly kind: "explicit_file_set";
+      readonly file_count: number;
+      readonly selected_file_path: string;
+      readonly source_order_paths: readonly string[];
+    };
 
 export interface DirectoryEntry {
   readonly path: string;
   readonly canonical_path: string;
   readonly name: string;
+  readonly directory_hint: string;
   readonly is_directory: boolean;
   readonly size_bytes: number;
   readonly modified_at_unix_ms: number;
@@ -112,6 +127,22 @@ export type FilePreview =
       readonly last_modified: string;
     }
   | {
+      readonly kind: "csv";
+      readonly path: string;
+      readonly file_name: string;
+      readonly mime_type: string;
+      readonly raw_html: string;
+      readonly rows: readonly (readonly string[])[];
+      readonly column_count: number;
+      readonly displayed_row_count: number;
+      readonly total_row_count: number | null;
+      readonly truncated: boolean;
+      readonly formatted_available: boolean;
+      readonly parse_error: string | null;
+      readonly size_bytes: number;
+      readonly last_modified: string;
+    }
+  | {
       readonly kind: "text";
       readonly path: string;
       readonly file_name: string;
@@ -150,6 +181,34 @@ function toErrorMessage(error: unknown): string {
 export async function getStartupContext(): Promise<StartupContext> {
   try {
     return await invoke<StartupContext>("get_startup_context");
+  } catch (error: unknown) {
+    throw new Error(toErrorMessage(error));
+  }
+}
+
+export interface ExplicitFileSetPage {
+  readonly entries: readonly DirectoryEntry[];
+  readonly total_entry_count: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly has_more: boolean;
+}
+
+export async function listExplicitFileSet(
+  paths: readonly string[],
+  sort: DirectoryListSort,
+  query: string,
+  offset: number,
+  limit: number,
+): Promise<ExplicitFileSetPage> {
+  try {
+    return await invoke<ExplicitFileSetPage>("list_explicit_file_set", {
+      paths,
+      sort,
+      query,
+      offset,
+      limit,
+    });
   } catch (error: unknown) {
     throw new Error(toErrorMessage(error));
   }

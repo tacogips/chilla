@@ -60,6 +60,7 @@ export interface FileBrowserSelectOptions {
 }
 
 interface FileBrowserPaneProps {
+  readonly listingKind: "directory" | "explicit_file_set";
   readonly active: boolean;
   readonly directory: {
     readonly current_directory_path: string;
@@ -288,6 +289,21 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
 
   const sortSummary = createMemo(() => describeFileTreeSort(props.sort));
 
+  const filterPlaceholder = (): string =>
+    props.listingKind === "explicit_file_set"
+      ? "Filter by name or path..."
+      : "Filter by name...";
+
+  const pathLinePrimary = (): string => {
+    if (props.directory === null) {
+      return "Loading...";
+    }
+
+    return props.listingKind === "explicit_file_set"
+      ? "Opened from CLI selection"
+      : props.directory.current_directory_path;
+  };
+
   const isFileBrowserShortcutTarget = (target: EventTarget | null): boolean => {
     return (
       target instanceof HTMLElement && target.closest(".file-browser") !== null
@@ -383,6 +399,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
       () =>
         props.active
           ? {
+              listingKind: props.listingKind,
               cwd: props.directory?.current_directory_path ?? null,
               selectedPath: props.selectedPath,
             }
@@ -502,6 +519,11 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
 
       if (key === "h" || event.key === "ArrowLeft") {
         event.preventDefault();
+
+        if (props.listingKind === "explicit_file_set") {
+          return;
+        }
+
         props.onNavigateToParent();
         return;
       }
@@ -581,7 +603,11 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
   return (
     <section class="pane">
       <header class="pane__header">
-        <span class="pane__title">File View</span>
+        <span class="pane__title">
+          {props.listingKind === "explicit_file_set"
+            ? "Selected Files"
+            : "File View"}
+        </span>
         <span>
           {filterSummary()} | {sortSummary()}
         </span>
@@ -597,13 +623,14 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
       >
         <div
           class={`file-browser__path${
+            props.listingKind === "directory" &&
             props.directory !== null &&
             props.selectedPath === props.directory.current_directory_path
               ? " file-browser__path--selected"
               : ""
           }`}
         >
-          {props.directory?.current_directory_path ?? "Loading directory..."}
+          {pathLinePrimary()}
         </div>
         <div class="file-browser__filter-row">
           <label class="file-browser__filter-label" for={filterInputId}>
@@ -615,7 +642,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
             type="text"
             role="searchbox"
             inputMode="search"
-            placeholder="Filter by name..."
+            placeholder={filterPlaceholder()}
             title="Focus filter: /   First row: Enter or Ctrl+M   Clear filter & first row: Esc   Sort: a/A name, e/E extension, m/M mtime, s/S size"
             autocomplete="off"
             spellcheck={false}
@@ -653,7 +680,16 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
           when={totalEntryCount() > 0}
           fallback={
             <div class="empty">
-              No entries in this directory. Use <code>h</code> to move up.
+              <Show
+                when={props.listingKind === "explicit_file_set"}
+                fallback={
+                  <>
+                    No entries in this directory. Use <code>h</code> to move up.
+                  </>
+                }
+              >
+                No files were provided.
+              </Show>
             </div>
           }
         >
@@ -661,8 +697,17 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
             when={filteredEntries().length > 0}
             fallback={
               <div class="empty">
-                No file or folder names match this filter. Use <code>h</code> to
-                move up.
+                <Show
+                  when={props.listingKind === "explicit_file_set"}
+                  fallback={
+                    <>
+                      No file or folder names match this filter. Use{" "}
+                      <code>h</code> to move up.
+                    </>
+                  }
+                >
+                  No selected files match this filter.
+                </Show>
               </div>
             }
           >
@@ -718,7 +763,14 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
                       <span class="file-browser__icon" aria-hidden="true">
                         {entry.is_directory ? <FolderGlyph /> : <FileGlyph />}
                       </span>
-                      <FileBrowserEntryName name={entry.name} />
+                      <span class="file-browser__entry-labels">
+                        <FileBrowserEntryName name={entry.name} />
+                        <Show when={entry.directory_hint.trim().length > 0}>
+                          <span class="file-browser__path-hint">
+                            {entry.directory_hint}
+                          </span>
+                        </Show>
+                      </span>
                     </button>
                   </li>
                 )}

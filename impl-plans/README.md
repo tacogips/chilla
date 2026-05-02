@@ -38,16 +38,20 @@ Large features are split into multiple related plans with cross-references.
 
 ## Active Plans
 
-| Plan                                | Status      | Design Reference                                                       | Last Updated |
-| ----------------------------------- | ----------- | ---------------------------------------------------------------------- | ------------ |
-| `macos-dmg-release.md`              | In Progress | `design-docs/specs/design-macos-dmg-release.md`                        | 2026-04-09   |
-| `markdown-workbench-first-slice.md` | Ready       | `design-docs/specs/design-markdown-workbench.md`                       | 2026-03-19   |
-| `file-viewer-mode.md`               | In Progress | `design-docs/specs/design-file-viewer-mode.md`                         | 2026-03-19   |
+There are no active implementation plans.
 
 ## Completed Plans
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `linux-tauri-e2e-github-actions.md` | 2026-05-01 | `design-docs/specs/notes.md#linux-tauri-webdriver-e2e-notes` |
+| `linux-ci-nix-flake-and-bun.md` | 2026-05-01 | `design-docs/specs/notes.md` (Linux CI follow-up); `design-docs/specs/design-markdown-workbench.md` |
+| `markdown-editor-save-and-conflict.md` | 2026-05-01 | `design-docs/specs/design-markdown-workbench.md`           |
+| `file-view-mixed-stack-validation.md` | 2026-05-01 | `design-docs/specs/notes.md#file-viewer-mode-notes`          |
+| `macos-dmg-release.md`         | 2026-05-01 | `design-docs/specs/design-macos-dmg-release.md`              |
+| `file-viewer-mode.md`          | 2026-05-02 | `design-docs/specs/design-file-viewer-mode.md`               |
+| `markdown-workbench-first-slice.md` | 2026-05-02 | `design-docs/specs/design-markdown-workbench.md`            |
+| `csv-viewer.md`                | 2026-05-01 | `design-docs/specs/design-csv-viewer.md`                     |
 | `epub-navigation-and-location.md` | 2026-04-06 | `design-docs/specs/design-epub-navigation.md` |
 | `linux-tauri-e2e-webdriver.md` | 2026-03-24 | `design-docs/specs/notes.md#linux-tauri-webdriver-e2e-notes` |
 | `browser-tests-to-tauri-e2e.md` | 2026-03-24 | `design-docs/specs/notes.md#browser-test-migration-to-tauri-e2e-notes` |
@@ -60,26 +64,38 @@ Only plans from eligible phases should be read to minimize context loading.
 
 ### Phase Status
 
-| Phase | Status  | Depends On |
-| ----- | ------- | ---------- |
-| 1     | READY   | -          |
-| 2     | BLOCKED | Phase 1    |
-| 3     | BLOCKED | Phase 2    |
+| Phase | Status    | Depends On |
+| ----- | --------- | ---------- |
+| 1     | COMPLETED | -          |
+| 2     | COMPLETED | Phase 1    |
+| 3     | COMPLETED | Phase 2    |
+| 4     | COMPLETED | Phase 3    |
+| 5     | COMPLETED | Phase 4    |
+
+Phase 2 `file-view-mixed-stack-validation`, Phase 3 `markdown-editor-save-and-conflict`, Phase 4 `linux-ci-nix-flake-and-bun`, and Phase 5 `linux-tauri-e2e-github-actions` are archived under `impl-plans/completed/`. Phase 1 feature work remains under `impl-plans/completed/`. **Post-merge**: confirm a green GitHub Actions `CI` run on `main`, including job `tauri-e2e-linux` (see `impl-plans/completed/linux-tauri-e2e-github-actions.md` completion criteria).
 
 ### Phase to Plans Mapping
 
 ```
 PHASE_TO_PLANS = {
   1: [
-    "impl-plans/active/macos-dmg-release.md",
-    "impl-plans/active/markdown-workbench-first-slice.md",
-    "impl-plans/active/file-viewer-mode.md",
+    # Completed references (do not load for new execution unless needed):
+    # impl-plans/completed/macos-dmg-release.md
+    # impl-plans/completed/file-viewer-mode.md
+    # impl-plans/completed/csv-viewer.md
+    # impl-plans/completed/markdown-workbench-first-slice.md
   ],
   2: [
-    # Add Phase 2 plan files here
+    # Completed: impl-plans/completed/file-view-mixed-stack-validation.md
   ],
   3: [
-    # Add Phase 3 plan files here
+    # Completed: impl-plans/completed/markdown-editor-save-and-conflict.md
+  ],
+  4: [
+    # Completed: impl-plans/completed/linux-ci-nix-flake-and-bun.md
+  ],
+  5: [
+    # Completed: impl-plans/completed/linux-tauri-e2e-github-actions.md
   ]
 }
 ```

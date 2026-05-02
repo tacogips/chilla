@@ -70,6 +70,7 @@ describe("FileBrowserPane", () => {
       () => (
         <FileBrowserPane
           active={true}
+          listingKind="directory"
           directory={{
             current_directory_path: "/workspace",
             parent_directory_path: "/",
@@ -79,6 +80,7 @@ describe("FileBrowserPane", () => {
                 canonical_path:
                   "/workspace/very-long-file-name-for-scroll-behavior.md",
                 name: "very-long-file-name-for-scroll-behavior.md",
+                directory_hint: "",
                 is_directory: false,
                 size_bytes: 42,
                 modified_at_unix_ms: 0,

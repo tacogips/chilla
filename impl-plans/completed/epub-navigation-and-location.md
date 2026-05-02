@@ -273,7 +273,7 @@ Verification targets:
 
 ## Related Plans
 
-- **Previous**: `impl-plans/active/file-viewer-mode.md`
+- **Previous**: `impl-plans/completed/file-viewer-mode.md`
 - **Next**: -
 - **Depends On**: `design-docs/specs/design-epub-navigation.md`
 
@@ -285,6 +285,6 @@ Verification targets:
 
 ## Related Plans
 
-- **Previous**: `impl-plans/active/file-viewer-mode.md`
+- **Previous**: `impl-plans/completed/file-viewer-mode.md`
 - **Next**: None
-- **Depends On**: `impl-plans/active/file-viewer-mode.md`
+- **Depends On**: `impl-plans/completed/file-viewer-mode.md`

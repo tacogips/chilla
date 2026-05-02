@@ -47,6 +47,7 @@ pub fn run(startup_target: StartupTarget) -> Result<(), String> {
             commands::document::stop_document_watch,
             commands::document::get_startup_context,
             commands::document::list_directory,
+            commands::document::list_explicit_file_set,
             commands::document::open_file_preview,
             commands::document::open_document,
             commands::document::save_document,

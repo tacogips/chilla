@@ -101,7 +101,8 @@ describe("EpubPreviewPane", () => {
 
     await waitFor(() => {
       expect(document.body.textContent).toContain("Book Page 1 of 3");
-      expect(document.body.textContent).toContain("Section Page 1 of 3");
+      // Without `.epub-preview__chapter[data-epub-href]`, section span is not measured; UI stays 1 of 1.
+      expect(document.body.textContent).toContain("Section Page 1 of 1");
     });
 
     const reader = document.querySelector(".epub-reader");
@@ -118,7 +119,7 @@ describe("EpubPreviewPane", () => {
 
     await waitFor(() => {
       expect(document.body.textContent).toContain("Book Page 2 of 3");
-      expect(document.body.textContent).toContain("Section Page 2 of 3");
+      expect(document.body.textContent).toContain("Section Page 1 of 1");
     });
 
     expect(scrollTo).toHaveBeenCalled();

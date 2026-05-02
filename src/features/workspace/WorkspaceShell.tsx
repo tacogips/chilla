@@ -13,6 +13,7 @@ import { Portal } from "solid-js/web";
 import type {
   DirectoryEntry,
   DirectoryListSort,
+  DocumentPresentationMode,
   DocumentSnapshot,
   EpubNavigationItem,
   FilePreview,
@@ -31,9 +32,11 @@ import {
   isMarkdownPath,
   listenDocumentRefreshed,
   listDirectory,
+  listExplicitFileSet,
   openDocument,
   openFilePreview,
   reloadDocument,
+  saveDocument,
   stopDocumentWatch,
 } from "../../lib/tauri/document";
 import { FileBrowserPane } from "../file-view/FileBrowserPane";
@@ -46,7 +49,12 @@ import {
   EpubPreviewPane,
   EPUB_PAGINATION_STEP_EVENT,
 } from "../preview/EpubPreviewPane";
+import { CsvFilePreviewPane } from "../preview/CsvFilePreviewPane";
 import { TocPane, type TocItem } from "../toc/TocPane";
+import {
+  canReloadMarkdownSnapshotForPresentationRefresh,
+  decideMarkdownDocumentRefresh,
+} from "./documentRefreshDecision";
 import type { WorkspaceSelection } from "./state";
 
 const EMPTY_STATE_IMAGE_PATH = "/empty-state-cat.png";
@@ -66,6 +74,10 @@ const SELECTION_PREVIEW_DEBOUNCE_FAST_MS = 120;
 const SMALL_MEDIA_SEEK_SECONDS = 5;
 
 function selectionPreviewDebounceMsForPath(filePath: string): number {
+  if (/\.csv$/i.test(filePath)) {
+    return SELECTION_PREVIEW_DEBOUNCE_FAST_MS;
+  }
+
   if (/\.(pdf|png|apng|jpe?g|gif|webp)$/i.test(filePath)) {
     return SELECTION_PREVIEW_DEBOUNCE_FAST_MS;
   }
@@ -159,11 +171,15 @@ const SHORTCUT_SECTIONS: readonly {
       },
       {
         keys: ["Shift", "P"],
-        description: "Toggle Raw / Preview (Markdown)",
+        description: "Toggle Raw / Preview (Markdown) or Raw / Formatted (CSV)",
       },
       {
         keys: ["Shift", "S"],
         description: "Toggle light / dark theme",
+      },
+      {
+        keys: ["Ctrl", "S"],
+        description: "Save Markdown document (also Cmd+S on macOS)",
       },
     ],
   },
@@ -490,10 +506,19 @@ function previewPath(preview: FilePreview | null): string | null {
 }
 
 function previewHtml(preview: FilePreview | null): string {
-  return (
-    preview?.html ??
-    '<section class="file-preview-empty"><p class="file-preview-empty__title">No file selected</p><p class="file-preview-empty__hint">Pick a file in the file tree to open it here.</p></section>'
-  );
+  if (preview === null) {
+    return '<section class="file-preview-empty"><p class="file-preview-empty__title">No file selected</p><p class="file-preview-empty__hint">Pick a file in the file tree to open it here.</p></section>';
+  }
+
+  if (preview.kind === "csv") {
+    return preview.raw_html;
+  }
+
+  if ("html" in preview) {
+    return preview.html;
+  }
+
+  return '<section class="file-preview-empty"><p class="file-preview-empty__title">No file selected</p><p class="file-preview-empty__hint">Pick a file in the file tree to open it here.</p></section>';
 }
 
 function previewMimeType(preview: FilePreview | null): string {
@@ -518,6 +543,10 @@ function formatPreviewSize(sizeBytes: number): string {
 }
 
 function previewSubtitle(preview: FilePreview | null): string {
+  if (preview?.kind === "csv") {
+    return `File type: CSV | File size: ${formatPreviewSize(preview.size_bytes)}`;
+  }
+
   if (preview?.kind === "epub") {
     return "File type: EPUB";
   }
@@ -608,8 +637,10 @@ function isMediaFilePreview(
 }
 
 interface LoadedDirectoryState {
+  readonly listingKind: "directory" | "explicit_file_set";
   readonly current_directory_path: string;
   readonly parent_directory_path: string | null;
+  readonly explicit_source_paths: readonly string[] | null;
   readonly entries: readonly DirectoryEntry[];
   readonly total_entry_count: number;
   readonly next_offset: number;
@@ -625,11 +656,15 @@ function defaultFocusedEntryPath(
 }
 
 function resolveSelectedPath(
+  listingKind: "directory" | "explicit_file_set",
   currentDirectoryPath: string,
   entries: readonly DirectoryEntry[],
   requestedPath: string | null,
 ): string | null {
-  if (requestedPath === null || requestedPath === currentDirectoryPath) {
+  if (
+    requestedPath === null ||
+    (listingKind === "directory" && requestedPath === currentDirectoryPath)
+  ) {
     return defaultFocusedEntryPath(entries);
   }
 
@@ -742,7 +777,12 @@ export function WorkspaceShell() {
   const [markdownDoc, setMarkdownDoc] = createSignal<DocumentSnapshot | null>(
     null,
   );
+  const [markdownEditorBuffer, setMarkdownEditorBuffer] = createSignal("");
+  const [markdownExternalConflict, setMarkdownExternalConflict] =
+    createSignal<DocumentSnapshot | null>(null);
   const [markdownPane, setMarkdownPane] = createSignal<MarkdownPane>("preview");
+  const [csvPaneMode, setCsvPaneMode] =
+    createSignal<DocumentPresentationMode>("formatted");
   const [isTocOpen, setTocOpen] = createSignal(false);
   const [isFileTreeOpen, setFileTreeOpen] = createSignal(true);
   const [isShortcutsHelpOpen, setShortcutsHelpOpen] = createSignal(false);
@@ -763,6 +803,7 @@ export function WorkspaceShell() {
       setDirectoryState(nextState);
       setSelectedBrowserPath(
         resolveSelectedPath(
+          nextState.listingKind,
           nextState.current_directory_path,
           nextState.entries,
           requestedSelectedPath,
@@ -772,10 +813,18 @@ export function WorkspaceShell() {
     });
   };
 
+  const applyMarkdownSnapshot = (snapshot: DocumentSnapshot) => {
+    setMarkdownDoc(snapshot);
+    setMarkdownEditorBuffer(snapshot.source_text);
+    setMarkdownExternalConflict(null);
+  };
+
   const clearDocumentArea = () => {
     previewRequestId += 1;
     setFilePreview(null);
     setMarkdownDoc(null);
+    setMarkdownEditorBuffer("");
+    setMarkdownExternalConflict(null);
     setSelection({
       anchorId: null,
       lineStart: null,
@@ -812,8 +861,10 @@ export function WorkspaceShell() {
     }
 
     let nextState: LoadedDirectoryState = {
+      listingKind: "directory",
       current_directory_path: nextPage.current_directory_path,
       parent_directory_path: nextPage.parent_directory_path,
+      explicit_source_paths: null,
       entries: nextPage.entries,
       total_entry_count: nextPage.total_entry_count,
       next_offset: nextPage.offset + nextPage.entries.length,
@@ -843,8 +894,87 @@ export function WorkspaceShell() {
       }
 
       nextState = {
+        listingKind: "directory",
         current_directory_path: nextPage.current_directory_path,
         parent_directory_path: nextPage.parent_directory_path,
+        explicit_source_paths: null,
+        entries: [...nextState.entries, ...nextPage.entries],
+        total_entry_count: nextPage.total_entry_count,
+        next_offset: nextPage.offset + nextPage.entries.length,
+        sort,
+        query,
+      };
+    }
+
+    if (requestId !== directoryRequestId) {
+      return;
+    }
+
+    applyDirectoryState(nextState, selectedPath);
+  };
+
+  const loadExplicitFileSetState = async (
+    sourceOrderPaths: readonly string[],
+    selectedPath: string | null,
+    sort: DirectoryListSort = directorySort(),
+    query: string = directoryQuery(),
+  ) => {
+    clearSelectionPreviewDebounce();
+    const requestId = ++directoryRequestId;
+    setLoadingMoreDirectoryEntries(false);
+
+    const paths = [...sourceOrderPaths];
+
+    let nextPage = await listExplicitFileSet(
+      paths,
+      sort,
+      query,
+      0,
+      DIRECTORY_PAGE_SIZE,
+    );
+
+    if (requestId !== directoryRequestId) {
+      return;
+    }
+
+    let nextState: LoadedDirectoryState = {
+      listingKind: "explicit_file_set",
+      current_directory_path: "",
+      parent_directory_path: null,
+      explicit_source_paths: sourceOrderPaths,
+      entries: nextPage.entries,
+      total_entry_count: nextPage.total_entry_count,
+      next_offset: nextPage.offset + nextPage.entries.length,
+      sort,
+      query,
+    };
+
+    while (
+      selectedPath !== null &&
+      selectedPath !== "" &&
+      !nextState.entries.some(
+        (entry) =>
+          entry.path === selectedPath || entry.canonical_path === selectedPath,
+      ) &&
+      nextPage.has_more
+    ) {
+      nextPage = await listExplicitFileSet(
+        paths,
+        sort,
+        query,
+        nextState.next_offset,
+        DIRECTORY_PAGE_SIZE,
+      );
+
+      if (requestId !== directoryRequestId) {
+        return;
+      }
+
+      nextState = {
+        listingKind: "explicit_file_set",
+        current_directory_path: "",
+        parent_directory_path: null,
+        explicit_source_paths: sourceOrderPaths,
         entries: [...nextState.entries, ...nextPage.entries],
         total_entry_count: nextPage.total_entry_count,
         next_offset: nextPage.offset + nextPage.entries.length,
@@ -865,6 +995,7 @@ export function WorkspaceShell() {
 
     if (
       currentDirectory === null ||
+      currentDirectory.listingKind !== "directory" ||
       isLoadingMoreDirectoryEntries() ||
       currentDirectory.entries.length >= currentDirectory.total_entry_count
     ) {
@@ -891,6 +1022,7 @@ export function WorkspaceShell() {
         setDirectoryState((previous) => {
           if (
             previous === null ||
+            previous.listingKind !== "directory" ||
             previous.current_directory_path !==
               nextPage.current_directory_path ||
             previous.sort.field !== currentDirectory.sort.field ||
@@ -910,8 +1042,81 @@ export function WorkspaceShell() {
           ];
 
           return {
+            listingKind: "directory",
             current_directory_path: nextPage.current_directory_path,
             parent_directory_path: nextPage.parent_directory_path,
+            explicit_source_paths: null,
+            entries: dedupedEntries,
+            total_entry_count: nextPage.total_entry_count,
+            next_offset: nextPage.offset + nextPage.entries.length,
+            sort: previous.sort,
+            query: previous.query,
+          };
+        });
+      });
+    } finally {
+      if (requestId === directoryRequestId) {
+        setLoadingMoreDirectoryEntries(false);
+      }
+    }
+  };
+
+  const loadMoreExplicitFileSetEntries = async () => {
+    const current = directoryState();
+
+    if (
+      current === null ||
+      current.listingKind !== "explicit_file_set" ||
+      current.explicit_source_paths === null ||
+      isLoadingMoreDirectoryEntries() ||
+      current.entries.length >= current.total_entry_count
+    ) {
+      return;
+    }
+
+    setLoadingMoreDirectoryEntries(true);
+    const requestId = directoryRequestId;
+
+    try {
+      const nextPage = await listExplicitFileSet(
+        [...current.explicit_source_paths],
+        current.sort,
+        current.query,
+        current.next_offset,
+        DIRECTORY_PAGE_SIZE,
+      );
+
+      if (requestId !== directoryRequestId) {
+        return;
+      }
+
+      startTransition(() => {
+        setDirectoryState((previous) => {
+          if (
+            previous === null ||
+            previous.listingKind !== "explicit_file_set" ||
+            previous.explicit_source_paths === null ||
+            previous.sort.field !== current.sort.field ||
+            previous.sort.direction !== current.sort.direction
+          ) {
+            return previous;
+          }
+
+          const dedupedEntries = [
+            ...previous.entries,
+            ...nextPage.entries.filter(
+              (entry) =>
+                !previous.entries.some(
+                  (existing) => existing.path === entry.path,
+                ),
+            ),
+          ];
+
+          return {
+            listingKind: "explicit_file_set",
+            current_directory_path: "",
+            parent_directory_path: null,
+            explicit_source_paths: previous.explicit_source_paths,
             entries: dedupedEntries,
             total_entry_count: nextPage.total_entry_count,
             next_offset: nextPage.offset + nextPage.entries.length,
@@ -939,7 +1144,7 @@ export function WorkspaceShell() {
         }
 
         startTransition(() => {
-          setMarkdownDoc(doc);
+          applyMarkdownSnapshot(doc);
           setFilePreview(null);
           setMarkdownPane("preview");
           setSelection({
@@ -963,7 +1168,14 @@ export function WorkspaceShell() {
 
         startTransition(() => {
           setMarkdownDoc(null);
+          setMarkdownEditorBuffer("");
+          setMarkdownExternalConflict(null);
           setFilePreview(nextPreview);
+          if (nextPreview.kind === "csv") {
+            setCsvPaneMode(
+              nextPreview.formatted_available ? "formatted" : "raw",
+            );
+          }
           setSelection({
             anchorId: null,
             lineStart: null,
@@ -998,9 +1210,14 @@ export function WorkspaceShell() {
     const doc = markdownDoc();
 
     if (doc !== null) {
+      if (
+        !canReloadMarkdownSnapshotForPresentationRefresh(doc, markdownEditorBuffer())
+      ) {
+        return;
+      }
       try {
         const nextSnapshot = await reloadDocument(doc.path);
-        setMarkdownDoc(nextSnapshot);
+        applyMarkdownSnapshot(nextSnapshot);
       } catch (error: unknown) {
         setErrorMessage(
           error instanceof Error
@@ -1017,6 +1234,24 @@ export function WorkspaceShell() {
     if (path !== null) {
       clearSelectionPreviewDebounce();
       await previewSelectedFile(path);
+    }
+  };
+
+  const handleSaveMarkdown = async () => {
+    const doc = markdownDoc();
+
+    if (doc === null) {
+      return;
+    }
+
+    try {
+      const nextSnapshot = await saveDocument(doc.path, markdownEditorBuffer());
+      applyMarkdownSnapshot(nextSnapshot);
+      setErrorMessage(null);
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to save document",
+      );
     }
   };
 
@@ -1040,15 +1275,29 @@ export function WorkspaceShell() {
     try {
       const nextStartupContext = await getStartupContext();
       setStartupContext(nextStartupContext);
-      setFileTreeOpen(nextStartupContext.selected_file_path === null);
 
-      await loadDirectoryState(
-        nextStartupContext.current_directory_path,
-        nextStartupContext.selected_file_path,
-      );
+      const browserRoot = nextStartupContext.browser_root;
 
-      if (nextStartupContext.selected_file_path !== null) {
-        await previewSelectedFile(nextStartupContext.selected_file_path);
+      if (browserRoot.kind === "directory") {
+        setFileTreeOpen(browserRoot.selected_file_path === null);
+
+        await loadDirectoryState(
+          browserRoot.current_directory_path,
+          browserRoot.selected_file_path,
+        );
+
+        if (browserRoot.selected_file_path !== null) {
+          await previewSelectedFile(browserRoot.selected_file_path);
+        }
+      } else {
+        setFileTreeOpen(true);
+
+        await loadExplicitFileSetState(
+          browserRoot.source_order_paths,
+          browserRoot.selected_file_path,
+        );
+
+        await previewSelectedFile(browserRoot.selected_file_path);
       }
     } catch (error: unknown) {
       setErrorMessage(
@@ -1065,7 +1314,7 @@ export function WorkspaceShell() {
     if (doc !== null) {
       try {
         const nextSnapshot = await reloadDocument(doc.path);
-        setMarkdownDoc(nextSnapshot);
+        applyMarkdownSnapshot(nextSnapshot);
         setErrorMessage(null);
       } catch (error: unknown) {
         setErrorMessage(
@@ -1119,12 +1368,26 @@ export function WorkspaceShell() {
     setDirectorySort(nextSort);
 
     try {
-      await loadDirectoryState(
-        currentDirectory.current_directory_path,
-        selectedBrowserPath(),
-        nextSort,
-        directoryQuery(),
-      );
+      if (currentDirectory.listingKind === "explicit_file_set") {
+        const sourcePaths = currentDirectory.explicit_source_paths;
+        if (sourcePaths === null) {
+          return;
+        }
+
+        await loadExplicitFileSetState(
+          sourcePaths,
+          selectedBrowserPath(),
+          nextSort,
+          directoryQuery(),
+        );
+      } else {
+        await loadDirectoryState(
+          currentDirectory.current_directory_path,
+          selectedBrowserPath(),
+          nextSort,
+          directoryQuery(),
+        );
+      }
     } catch (error: unknown) {
       setErrorMessage(
         error instanceof Error
@@ -1193,6 +1456,10 @@ export function WorkspaceShell() {
   };
 
   const handleNavigateToParent = async () => {
+    if (directoryState()?.listingKind === "explicit_file_set") {
+      return;
+    }
+
     const parentDirectory = directoryState()?.parent_directory_path;
     const currentDirectory = directoryState()?.current_directory_path;
 
@@ -1235,11 +1502,23 @@ export function WorkspaceShell() {
   };
 
   const md = () => markdownDoc();
+  const markdownIsDirty = createMemo(() => {
+    const doc = md();
+    if (doc === null) {
+      return false;
+    }
+
+    return markdownEditorBuffer() !== doc.source_text;
+  });
   const fp = () => filePreview();
   const epubPreview = () => {
     const preview = fp();
     return preview?.kind === "epub" ? preview : null;
   };
+  const csvPreview = createMemo(() => {
+    const preview = fp();
+    return preview?.kind === "csv" ? preview : null;
+  });
   const currentOpenPath = () => md()?.path ?? previewPath(fp());
   const hasOpenDocument = () => md() !== null || fp() !== null;
   const hasTocDocument = createMemo(
@@ -1292,12 +1571,26 @@ export function WorkspaceShell() {
     }
 
     try {
-      await loadDirectoryState(
-        currentDirectory.current_directory_path,
-        selectedBrowserPath(),
-        currentDirectory.sort,
-        nextQuery,
-      );
+      if (currentDirectory.listingKind === "explicit_file_set") {
+        const sourcePaths = currentDirectory.explicit_source_paths;
+        if (sourcePaths === null) {
+          return;
+        }
+
+        await loadExplicitFileSetState(
+          sourcePaths,
+          selectedBrowserPath(),
+          currentDirectory.sort,
+          nextQuery,
+        );
+      } else {
+        await loadDirectoryState(
+          currentDirectory.current_directory_path,
+          selectedBrowserPath(),
+          currentDirectory.sort,
+          nextQuery,
+        );
+      }
     } catch (error: unknown) {
       setErrorMessage(
         error instanceof Error
@@ -1330,10 +1623,19 @@ export function WorkspaceShell() {
     void handleInitialLoad();
 
     void listenDocumentRefreshed((refreshedSnapshot) => {
-      const current = markdownDoc();
+      const decision = decideMarkdownDocumentRefresh(
+        markdownDoc(),
+        markdownEditorBuffer(),
+        refreshedSnapshot,
+      );
 
-      if (current !== null && current.path === refreshedSnapshot.path) {
-        setMarkdownDoc(refreshedSnapshot);
+      if (decision.kind === "conflict") {
+        setMarkdownExternalConflict(decision.snapshot);
+        return;
+      }
+
+      if (decision.kind === "apply") {
+        applyMarkdownSnapshot(decision.snapshot);
       }
     })
       .then((dispose) => {
@@ -1362,6 +1664,18 @@ export function WorkspaceShell() {
           event.preventDefault();
           setShortcutsHelpOpen(false);
         }
+        return;
+      }
+
+      const saveShortcut =
+        event.key.toLowerCase() === "s" &&
+        !event.shiftKey &&
+        !event.altKey &&
+        (event.ctrlKey || event.metaKey);
+
+      if (saveShortcut && markdownDoc() !== null) {
+        event.preventDefault();
+        void handleSaveMarkdown();
         return;
       }
 
@@ -1481,12 +1795,23 @@ export function WorkspaceShell() {
         return;
       }
 
-      if (
-        matchesShortcut(event, "p", { shift: true }) &&
-        markdownDoc() !== null
-      ) {
-        event.preventDefault();
-        setMarkdownPane((pane) => (pane === "preview" ? "raw" : "preview"));
+      if (matchesShortcut(event, "p", { shift: true })) {
+        const doc = markdownDoc();
+        if (doc !== null) {
+          event.preventDefault();
+          setMarkdownPane((pane) => (pane === "preview" ? "raw" : "preview"));
+          return;
+        }
+
+        const preview = fp();
+        if (preview?.kind === "csv" && preview.formatted_available) {
+          event.preventDefault();
+          setCsvPaneMode((mode) =>
+            mode === "formatted" ? "raw" : "formatted",
+          );
+          return;
+        }
+
         return;
       }
 
@@ -1598,6 +1923,47 @@ export function WorkspaceShell() {
               </div>
             </Show>
 
+            <Show when={csvPreview()}>
+              {(getCsv) => {
+                const csvRow = getCsv();
+                return (
+                  <div
+                    class="workspace__mode-group"
+                    role="group"
+                    aria-label="CSV view"
+                  >
+                    <button
+                      class={`workspace__mode${
+                        csvPaneMode() === "raw"
+                          ? " workspace__mode--active"
+                          : ""
+                      }`}
+                      type="button"
+                      aria-label="Raw CSV source"
+                      title={`Raw (${SHORTCUT_LABELS.toggleMarkdownPane})`}
+                      onClick={() => setCsvPaneMode("raw")}
+                    >
+                      <RawSourceGlyph />
+                    </button>
+                    <button
+                      class={`workspace__mode${
+                        csvPaneMode() === "formatted"
+                          ? " workspace__mode--active"
+                          : ""
+                      }`}
+                      type="button"
+                      disabled={!csvRow.formatted_available}
+                      aria-label="Formatted CSV table"
+                      title={`Formatted (${SHORTCUT_LABELS.toggleMarkdownPane})`}
+                      onClick={() => setCsvPaneMode("formatted")}
+                    >
+                      <PreviewGlyph />
+                    </button>
+                  </div>
+                );
+              }}
+            </Show>
+
             <Show when={hasTocDocument()}>
               <button
                 class={`button button--ghost workspace__icon-button${
@@ -1690,10 +2056,41 @@ export function WorkspaceShell() {
           <div class="banner banner--error">{errorMessage()}</div>
         </Show>
 
+        <Show when={markdownExternalConflict() !== null}>
+          <div class="banner">
+            <span>
+              This file changed on disk while you have unsaved edits in the
+              editor.
+            </span>
+            <div class="banner__actions">
+              <button
+                type="button"
+                class="workspace__text-button"
+                onClick={() => {
+                  const disk = markdownExternalConflict();
+                  if (disk !== null) {
+                    applyMarkdownSnapshot(disk);
+                  }
+                }}
+              >
+                Reload from disk
+              </button>
+              <button
+                type="button"
+                class="workspace__text-button"
+                onClick={() => setMarkdownExternalConflict(null)}
+              >
+                Keep editing
+              </button>
+            </div>
+          </div>
+        </Show>
+
         <div class={viewerGridClassName()}>
           <Show when={isFileTreeOpen()}>
             <FileBrowserPane
               active={true}
+              listingKind={directoryState()?.listingKind ?? "directory"}
               directory={directoryState()}
               sort={directorySort()}
               query={directoryQuery()}
@@ -1710,7 +2107,12 @@ export function WorkspaceShell() {
                 void handleChangeDirectoryQuery(nextQuery);
               }}
               onLoadMore={() => {
-                void loadMoreDirectoryEntries();
+                const state = directoryState();
+                if (state?.listingKind === "explicit_file_set") {
+                  void loadMoreExplicitFileSetEntries();
+                } else {
+                  void loadMoreDirectoryEntries();
+                }
               }}
               onNavigateToParent={() => void handleNavigateToParent()}
               onSelectEntry={handleSelectEntry}
@@ -1733,15 +2135,17 @@ export function WorkspaceShell() {
               <section class="pane workspace__markdown-raw-pane">
                 <header class="pane__header">
                   <span class="pane__title">Markdown</span>
-                  <span>Source</span>
+                  <span>Source (editable)</span>
                 </header>
                 <div class="pane__body markdown-raw-body">
-                  <div class="markdown-raw-body__content">
-                    <div
-                      class="markdown-source"
-                      innerHTML={md()?.source_html ?? ""}
-                    />
-                  </div>
+                  <textarea
+                    class="markdown-source-editor"
+                    spellcheck={false}
+                    value={markdownEditorBuffer()}
+                    onInput={(event) =>
+                      setMarkdownEditorBuffer(event.currentTarget.value)
+                    }
+                  />
                 </div>
               </section>
             </Show>
@@ -1752,6 +2156,12 @@ export function WorkspaceShell() {
                 documentPath={md()?.path ?? null}
                 html={md()?.html ?? ""}
                 selectedAnchorId={selection().anchorId}
+                {...(markdownIsDirty()
+                  ? {
+                      subtitle:
+                        "Unsaved changes; preview shows last saved content.",
+                    }
+                  : {})}
                 visible={true}
               />
             </Show>
@@ -1776,12 +2186,24 @@ export function WorkspaceShell() {
               />
             </Show>
 
+            <Show when={csvPreview()}>
+              {(getCsv) => (
+                <CsvFilePreviewPane
+                  colorScheme={colorScheme()}
+                  presentationMode={csvPaneMode()}
+                  preview={getCsv()}
+                  subtitle={previewSubtitle(fp())}
+                />
+              )}
+            </Show>
+
             <Show
               when={
                 md() === null &&
                 fp() !== null &&
                 inferPreviewKind(fp()) === "default" &&
-                fp()?.kind !== "epub"
+                fp()?.kind !== "epub" &&
+                fp()?.kind !== "csv"
               }
             >
               <PreviewPane
@@ -1870,9 +2292,18 @@ export function WorkspaceShell() {
         <Show when={isLoading()}>
           <div class="workspace__loading" role="status" aria-live="polite">
             <div class="workspace__loading-inner">
-              {startupContext()?.selected_file_path !== null
-                ? "Opening the requested file..."
-                : "Loading workspace..."}
+              {(() => {
+                const context = startupContext();
+                if (context === null) {
+                  return "Loading workspace...";
+                }
+
+                return context.browser_root.kind === "explicit_file_set"
+                  ? "Opening the requested files..."
+                  : context.browser_root.selected_file_path !== null
+                    ? "Opening the requested file..."
+                    : "Loading workspace...";
+              })()}
             </div>
           </div>
         </Show>

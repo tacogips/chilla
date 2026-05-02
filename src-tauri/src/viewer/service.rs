@@ -9,10 +9,11 @@ use crate::{
     document::service::DocumentService,
     error::{AppError, AppResult},
     syntax_highlight::{self, SyntaxUiTheme},
+    viewer::csv::{parse_csv_preview, CsvPreviewLimits},
     viewer::epub::render_epub,
     viewer::types::{
-        DirectoryEntry, DirectoryListSort, DirectoryPage, DirectorySortDirection,
-        DirectorySortField, FilePreview, StartupContext, WorkspaceMode,
+        BrowserRoot, DirectoryEntry, DirectoryListSort, DirectoryPage, DirectorySortDirection,
+        DirectorySortField, ExplicitFileSetPage, FilePreview, StartupContext, WorkspaceMode,
     },
 };
 
@@ -31,7 +32,7 @@ const TEXTUAL_APPLICATION_MIME_TYPES: [&str; 10] = [
     "application/yaml",
 ];
 /// When magic(1) reports `application/octet-stream` but the path is a known text config/data suffix.
-const TEXT_PREVIEW_EXTENSIONS: [&str; 11] = [
+const TEXT_PREVIEW_EXTENSIONS: [&str; 10] = [
     "toml",
     "json",
     "jsonc",
@@ -40,7 +41,6 @@ const TEXT_PREVIEW_EXTENSIONS: [&str; 11] = [
     "xml",
     "lock",
     "svg",
-    "csv",
     "webmanifest",
     "gradle",
 ];
@@ -87,6 +87,16 @@ struct DirectoryEntryRecord {
     modified_at_unix_ms: u64,
 }
 
+#[derive(Debug)]
+struct ExplicitEntryRecord {
+    path: PathBuf,
+    canonical_path: String,
+    name: String,
+    directory_hint: String,
+    size_bytes: u64,
+    modified_at_unix_ms: u64,
+}
+
 #[derive(Clone, Default)]
 pub struct ViewerService;
 
@@ -101,8 +111,10 @@ impl ViewerService {
                 let directory_path = canonicalize_directory_path(path)?;
                 Ok(StartupContext {
                     initial_mode: WorkspaceMode::FileView,
-                    current_directory_path: display_path(&directory_path),
-                    selected_file_path: None,
+                    browser_root: BrowserRoot::Directory {
+                        current_directory_path: display_path(&directory_path),
+                        selected_file_path: None,
+                    },
                 })
             }
             StartupTarget::File(path) => {
@@ -111,8 +123,28 @@ impl ViewerService {
 
                 Ok(StartupContext {
                     initial_mode: WorkspaceMode::FileView,
-                    current_directory_path: display_path(&current_directory_path),
-                    selected_file_path: Some(display_path(&file_path)),
+                    browser_root: BrowserRoot::Directory {
+                        current_directory_path: display_path(&current_directory_path),
+                        selected_file_path: Some(display_path(&file_path)),
+                    },
+                })
+            }
+            StartupTarget::FileSet(paths) => {
+                let source_order_paths: Vec<String> =
+                    paths.iter().map(|p| display_path(p.as_path())).collect();
+                let Some(selected_file_path) = source_order_paths.first().cloned() else {
+                    return Err(AppError::State(
+                        "multi-file startup must include at least one path".into(),
+                    ));
+                };
+
+                Ok(StartupContext {
+                    initial_mode: WorkspaceMode::FileView,
+                    browser_root: BrowserRoot::ExplicitFileSet {
+                        file_count: source_order_paths.len(),
+                        selected_file_path,
+                        source_order_paths,
+                    },
                 })
             }
         }
@@ -183,6 +215,81 @@ impl ViewerService {
         }
     }
 
+    pub fn list_explicit_file_set(
+        &self,
+        paths: &[String],
+        sort: DirectoryListSort,
+        query: Option<&str>,
+        offset: usize,
+        limit: usize,
+    ) -> AppResult<ExplicitFileSetPage> {
+        let page_limit = normalize_directory_page_limit(limit);
+        let normalized_query = normalize_directory_query(query);
+
+        let mut dedup_ordered = Vec::new();
+        let mut seen_canonical_paths = std::collections::HashSet::<String>::new();
+
+        for raw_path in paths {
+            let canonical_path_buf = canonicalize_file_path(Path::new(raw_path))?;
+            let key = display_path(&canonical_path_buf);
+            if seen_canonical_paths.insert(key.clone()) {
+                dedup_ordered.push(explicit_entry_record_from_canonical(
+                    canonical_path_buf,
+                    key,
+                )?);
+            }
+        }
+
+        let mut records = dedup_ordered;
+        if let Some(query_slice) = normalized_query.as_deref() {
+            records.retain(|entry| {
+                explicit_entry_matches_query(&entry.name, &entry.directory_hint, query_slice)
+            });
+        }
+
+        match sort.field {
+            DirectorySortField::Name | DirectorySortField::Extension => {
+                records.sort_by(|left, right| compare_explicit_seed_entries(left, right, sort));
+            }
+            DirectorySortField::Mtime | DirectorySortField::Size => {
+                records.sort_by(|left, right| {
+                    compare_explicit_entry_records(left, right, sort)
+                        .then_with(|| {
+                            compare_directory_names(
+                                &left.name,
+                                &right.name,
+                                DirectorySortDirection::Asc,
+                            )
+                        })
+                        .then_with(|| left.canonical_path.cmp(&right.canonical_path))
+                })
+            }
+        }
+
+        let total_entry_count = records.len();
+        let (start, end) = page_bounds(total_entry_count, offset, page_limit);
+        let entries = records[start..end]
+            .iter()
+            .map(|record| DirectoryEntry {
+                path: display_path(&record.path),
+                canonical_path: record.canonical_path.clone(),
+                name: record.name.clone(),
+                directory_hint: record.directory_hint.clone(),
+                is_directory: false,
+                size_bytes: record.size_bytes,
+                modified_at_unix_ms: record.modified_at_unix_ms,
+            })
+            .collect();
+
+        Ok(ExplicitFileSetPage {
+            entries,
+            total_entry_count,
+            offset: start,
+            limit: page_limit,
+            has_more: end < total_entry_count,
+        })
+    }
+
     pub fn open_file_preview(
         &self,
         path: &Path,
@@ -218,6 +325,10 @@ impl ViewerService {
 
         if mime_type == "application/epub+zip" {
             return self.open_epub_preview(&file_path, mime_type);
+        }
+
+        if should_preview_as_csv(&file_path, &mime_type) {
+            return self.open_csv_preview(&file_path, mime_type, ui_theme);
         }
 
         if is_textual_mime(&mime_type) {
@@ -343,6 +454,56 @@ impl ViewerService {
         })
     }
 
+    fn open_csv_preview(
+        &self,
+        path: &Path,
+        mime_type: String,
+        ui_theme: SyntaxUiTheme,
+    ) -> AppResult<FilePreview> {
+        let file_bytes = fs::read(path).map_err(|source| AppError::io("read", path, source))?;
+        let source_text = String::from_utf8_lossy(&file_bytes);
+        let source_owned = source_text.into_owned();
+        let source_for_view = source_owned
+            .strip_prefix('\u{feff}')
+            .unwrap_or(source_owned.as_str());
+
+        let normalized_mime = if is_csv_path(path) {
+            "text/csv".to_string()
+        } else {
+            mime_type
+        };
+
+        let file_type = syntax_highlight::describe_file_syntax(path);
+        let highlighted_html =
+            syntax_highlight::highlight_file_source(source_for_view, path, ui_theme);
+        let raw_html = format!(
+            "<section class=\"file-preview file-preview--text\"><p class=\"file-preview__meta\">File type: {} | File size: {}</p>{}</section>",
+            escape_html_text(&file_type),
+            escape_html_text(&format_file_size(file_bytes.len() as u64)),
+            highlighted_html,
+        );
+
+        let parsed = parse_csv_preview(source_for_view, CsvPreviewLimits::default());
+        let formatted_available = parsed.parse_error.is_none();
+        let parse_error = parsed.parse_error.clone();
+
+        Ok(FilePreview::Csv {
+            path: display_path(path),
+            file_name: file_name(path),
+            mime_type: normalized_mime,
+            raw_html,
+            rows: parsed.rows,
+            column_count: parsed.column_count,
+            displayed_row_count: parsed.displayed_row_count,
+            total_row_count: parsed.total_row_count,
+            truncated: parsed.truncated,
+            formatted_available,
+            parse_error,
+            size_bytes: file_bytes.len() as u64,
+            last_modified: last_modified_string(path)?,
+        })
+    }
+
     fn open_binary_preview(&self, path: &Path, mime_type: String) -> AppResult<FilePreview> {
         let message = "Binary file preview is not available.".to_string();
 
@@ -449,6 +610,71 @@ fn directory_entry_matches_query(name: &str, query: &str) -> bool {
     name.to_ascii_lowercase().contains(query)
 }
 
+fn explicit_entry_record_from_canonical(
+    path: PathBuf,
+    canonical_path: String,
+) -> AppResult<ExplicitEntryRecord> {
+    let entry_metadata =
+        fs::metadata(&path).map_err(|source| AppError::io("read metadata for", &path, source))?;
+    let modified_at_unix_ms = metadata_modified_at_unix_ms(&entry_metadata)
+        .map_err(|source| AppError::io("read modified time for", &path, source))?;
+
+    Ok(ExplicitEntryRecord {
+        directory_hint: path.parent().map(display_path).unwrap_or_default(),
+        name: file_name(&path),
+        canonical_path,
+        path,
+        size_bytes: entry_metadata.len(),
+        modified_at_unix_ms,
+    })
+}
+
+fn explicit_entry_matches_query(name: &str, directory_hint: &str, query: &str) -> bool {
+    directory_entry_matches_query(name, query)
+        || directory_hint.to_ascii_lowercase().contains(query)
+}
+
+fn compare_explicit_seed_entries(
+    left: &ExplicitEntryRecord,
+    right: &ExplicitEntryRecord,
+    sort: DirectoryListSort,
+) -> std::cmp::Ordering {
+    match sort.field {
+        DirectorySortField::Name => {
+            compare_directory_names(&left.name, &right.name, sort.direction)
+        }
+        DirectorySortField::Extension => {
+            compare_directory_extensions(&left.name, &right.name, sort.direction)
+        }
+        DirectorySortField::Mtime | DirectorySortField::Size => std::cmp::Ordering::Equal,
+    }
+    .then_with(|| compare_directory_names(&left.name, &right.name, DirectorySortDirection::Asc))
+    .then_with(|| left.canonical_path.cmp(&right.canonical_path))
+}
+
+fn compare_explicit_entry_records(
+    left: &ExplicitEntryRecord,
+    right: &ExplicitEntryRecord,
+    sort: DirectoryListSort,
+) -> std::cmp::Ordering {
+    match sort.field {
+        DirectorySortField::Mtime => compare_numbers(
+            left.modified_at_unix_ms,
+            right.modified_at_unix_ms,
+            sort.direction,
+        ),
+        DirectorySortField::Size => {
+            compare_numbers(left.size_bytes, right.size_bytes, sort.direction)
+        }
+        DirectorySortField::Name => {
+            compare_directory_names(&left.name, &right.name, sort.direction)
+        }
+        DirectorySortField::Extension => {
+            compare_directory_extensions(&left.name, &right.name, sort.direction)
+        }
+    }
+}
+
 fn page_bounds(total_entries: usize, offset: usize, limit: usize) -> (usize, usize) {
     let start = offset.min(total_entries);
     let end = start.saturating_add(limit).min(total_entries);
@@ -549,6 +775,7 @@ fn directory_entry_from_seed(seed: &DirectoryEntrySeed) -> AppResult<DirectoryEn
         path: display_path(&seed.path),
         canonical_path: display_path(&canonicalize_path(&seed.path)?),
         name: seed.name.clone(),
+        directory_hint: String::new(),
         is_directory: seed.is_directory,
         size_bytes: entry_metadata.len(),
         modified_at_unix_ms,
@@ -560,6 +787,7 @@ fn directory_entry_from_record(record: &DirectoryEntryRecord) -> AppResult<Direc
         path: display_path(&record.seed.path),
         canonical_path: display_path(&canonicalize_path(&record.seed.path)?),
         name: record.seed.name.clone(),
+        directory_hint: String::new(),
         is_directory: record.seed.is_directory,
         size_bytes: record.size_bytes,
         modified_at_unix_ms: record.modified_at_unix_ms,
@@ -699,6 +927,19 @@ fn is_markdown_path(path: &Path) -> bool {
         .is_some_and(|extension| MARKDOWN_EXTENSIONS.contains(&extension.as_str()))
 }
 
+fn is_csv_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("csv"))
+}
+
+fn should_preview_as_csv(path: &Path, mime_type: &str) -> bool {
+    if is_csv_path(path) {
+        return true;
+    }
+    mime_type.eq_ignore_ascii_case("text/csv")
+}
+
 fn is_textual_mime(mime_type: &str) -> bool {
     let lower = mime_type.to_ascii_lowercase();
     TEXTUAL_MIME_PREFIXES
@@ -810,8 +1051,8 @@ mod tests {
         cli::StartupTarget,
         syntax_highlight::SyntaxUiTheme,
         viewer::types::{
-            DirectoryListSort, DirectorySortDirection, DirectorySortField, FilePreview,
-            WorkspaceMode,
+            BrowserRoot, DirectoryListSort, DirectorySortDirection, DirectorySortField,
+            FilePreview, WorkspaceMode,
         },
     };
 
@@ -868,16 +1109,100 @@ mod tests {
             .expect("startup context");
 
         assert_eq!(context.initial_mode, WorkspaceMode::FileView);
-        assert_eq!(
-            context.selected_file_path,
-            Some(
-                markdown_path
-                    .canonicalize()
-                    .expect("canonical path")
-                    .display()
-                    .to_string()
+        match &context.browser_root {
+            BrowserRoot::Directory {
+                selected_file_path, ..
+            } => {
+                assert_eq!(
+                    *selected_file_path,
+                    Some(
+                        markdown_path
+                            .canonicalize()
+                            .expect("canonical path")
+                            .display()
+                            .to_string()
+                    )
+                );
+            }
+            BrowserRoot::ExplicitFileSet { .. } => panic!("expected directory startup root"),
+        }
+    }
+
+    #[test]
+    fn startup_context_explicit_file_set_preserves_ordered_paths() {
+        let test_dir = TestDir::new();
+        let first = test_dir.path().join("a.txt");
+        let second = test_dir.path().join("b.txt");
+        fs::write(&first, "one").expect("write file");
+        fs::write(&second, "two").expect("write file");
+        let first_canon = first.canonicalize().expect("canonical path");
+        let second_canon = second.canonicalize().expect("canonical path");
+
+        let context = ViewerService::new()
+            .startup_context(&StartupTarget::FileSet(vec![
+                first_canon.clone(),
+                second_canon.clone(),
+            ]))
+            .expect("startup context");
+
+        match &context.browser_root {
+            BrowserRoot::ExplicitFileSet {
+                file_count,
+                selected_file_path,
+                source_order_paths,
+            } => {
+                assert_eq!(*file_count, 2);
+                assert_eq!(selected_file_path, &first_canon.display().to_string());
+                let expected = vec![
+                    first_canon.display().to_string(),
+                    second_canon.display().to_string(),
+                ];
+                assert_eq!(source_order_paths.as_slice(), expected.as_slice());
+            }
+            BrowserRoot::Directory { .. } => panic!("expected explicit file-set root"),
+        }
+    }
+
+    #[test]
+    fn list_explicit_file_set_filters_across_hints_and_basenames() {
+        let test_dir = TestDir::new();
+        let reports = test_dir.path().join("reports");
+        fs::create_dir_all(&reports).expect("reports directory");
+
+        let left = reports.join("notes.txt");
+        let right = test_dir.path().join("readme.txt");
+
+        fs::write(&left, "left").expect("write left");
+        fs::write(&right, "right").expect("write right");
+
+        let source_order = vec![
+            left.canonicalize()
+                .expect("canonical")
+                .display()
+                .to_string(),
+            right
+                .canonicalize()
+                .expect("canonical")
+                .display()
+                .to_string(),
+        ];
+
+        let page = ViewerService::new()
+            .list_explicit_file_set(
+                &source_order,
+                default_directory_sort(),
+                Some("reports"),
+                0,
+                200,
             )
-        );
+            .expect("explicit page");
+
+        assert_eq!(page.entries.len(), 1);
+        assert_eq!(page.entries[0].name, "notes.txt");
+        assert!(page.entries[0].directory_hint.contains("reports"));
+
+        assert_eq!(page.total_entry_count, 1);
+        assert!(!page.has_more);
     }
 
     #[test]
@@ -1217,6 +1542,41 @@ mod tests {
                 assert_eq!(message, "Binary file preview is not available.");
             }
             _ => panic!("expected binary preview"),
+        }
+    }
+
+    #[test]
+    fn open_file_preview_treats_csv_as_structured_preview() {
+        let test_dir = TestDir::new();
+        let csv_path = test_dir.path().join("data.csv");
+        fs::write(&csv_path, "a,b\n\"c,d\",e\n").expect("write csv");
+
+        match ViewerService::new()
+            .open_file_preview(&csv_path, SyntaxUiTheme::Dark)
+            .expect("csv preview")
+        {
+            FilePreview::Csv {
+                mime_type,
+                rows,
+                column_count,
+                formatted_available,
+                parse_error,
+                raw_html,
+                ..
+            } => {
+                assert_eq!(mime_type, "text/csv");
+                assert!(formatted_available);
+                assert!(parse_error.is_none());
+                assert_eq!(column_count, 2);
+                assert_eq!(rows.len(), 2);
+                assert_eq!(rows[0], vec!["a", "b"]);
+                assert_eq!(rows[1], vec!["c,d", "e"]);
+                assert!(
+                    raw_html.contains("file-preview") && raw_html.contains("<pre"),
+                    "expected highlighted raw HTML wrapper, got: {raw_html}"
+                );
+            }
+            _ => panic!("expected CSV preview"),
         }
     }
 
