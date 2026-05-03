@@ -37,6 +37,14 @@ const FIXTURE_EXPLICIT_CSV_MARKER = "FIXTURE_EXPLICIT_CSV_CELL";
 const FIXTURE_MP3_NAME = "file_example_MP3_1MG.mp3";
 const FIXTURE_MP4_NAME = "file_example_MP4_480_1_5MG.mp4";
 const SHUTDOWN_TIMEOUT_MS = 5_000;
+const HEADLESS_RENDER_ENV_EXPORTS = [
+  'export GDK_BACKEND="${GDK_BACKEND:-x11}"',
+  'export GSK_RENDERER="${GSK_RENDERER:-cairo}"',
+  'export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"',
+  'export NO_AT_BRIDGE="${NO_AT_BRIDGE:-1}"',
+  'export WEBKIT_DISABLE_COMPOSITING_MODE="${WEBKIT_DISABLE_COMPOSITING_MODE:-1}"',
+  'export WEBKIT_DISABLE_DMABUF_RENDERER="${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"',
+] as const;
 
 const repoRoot = requireEnv("CHILLA_TAURI_E2E_REPO_ROOT");
 const appBinaryPath = requireEnv("CHILLA_TAURI_E2E_APP");
@@ -863,6 +871,7 @@ async function createAppLauncher(root: string): Promise<string> {
     [
       "#!/usr/bin/env bash",
       "set -euo pipefail",
+      ...HEADLESS_RENDER_ENV_EXPORTS,
       'exec "${CHILLA_TAURI_E2E_REAL_APP:?}" "${CHILLA_TAURI_E2E_STARTUP_PATH:?}"',
       "",
     ].join("\n"),
@@ -890,6 +899,7 @@ async function createAppLauncherWithPositionalPaths(
     [
       "#!/usr/bin/env bash",
       "set -euo pipefail",
+      ...HEADLESS_RENDER_ENV_EXPORTS,
       `exec "\${CHILLA_TAURI_E2E_REAL_APP:?}" ${paths.map(shellSingleQuoteUnix).join(" ")}`,
       "",
     ].join("\n"),
