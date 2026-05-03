@@ -36,6 +36,7 @@ const FIXTURE_EXPLICIT_MD_MARKER = "FIXTURE_EXPLICIT_MD_LINE";
 const FIXTURE_EXPLICIT_CSV_MARKER = "FIXTURE_EXPLICIT_CSV_CELL";
 const FIXTURE_MP3_NAME = "file_example_MP3_1MG.mp3";
 const FIXTURE_MP4_NAME = "file_example_MP4_480_1_5MG.mp4";
+const SHUTDOWN_TIMEOUT_MS = 5_000;
 
 const repoRoot = requireEnv("CHILLA_TAURI_E2E_REPO_ROOT");
 const appBinaryPath = requireEnv("CHILLA_TAURI_E2E_APP");
@@ -50,10 +51,14 @@ let tauriDriverLogs = "";
 let tauriDriverFailure: Error | undefined;
 let isShuttingDown = false;
 
-void main().catch((error: unknown) => {
-  console.error(formatError(error));
-  process.exitCode = 1;
-});
+void main()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((error: unknown) => {
+    console.error(formatError(error));
+    process.exit(1);
+  });
 
 async function main(): Promise<void> {
   try {
@@ -651,7 +656,11 @@ async function shutdown(
 
   if (currentDriver !== undefined) {
     try {
-      await currentDriver.quit();
+      await withTimeout(
+        currentDriver.quit(),
+        SHUTDOWN_TIMEOUT_MS,
+        "stop WebDriver session",
+      );
     } catch (error) {
       console.error("Failed to stop WebDriver session:", error);
     }
@@ -668,6 +677,18 @@ async function shutdown(
       currentTauriDriver.kill("SIGKILL");
     }
   }
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  const timeout = delay(timeoutMs).then(() => {
+    throw new Error(`Timed out waiting to ${label}`);
+  });
+
+  return await Promise.race([promise, timeout]);
 }
 
 async function restartDesktopSession(launcherPath: string): Promise<{
