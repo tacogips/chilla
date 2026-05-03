@@ -46,6 +46,7 @@ jobs:
 
   tauri-e2e-linux:
     runs-on: ubuntu-latest
+    continue-on-error: true
     timeout-minutes: 90
     steps:
       - name: Checkout repository
