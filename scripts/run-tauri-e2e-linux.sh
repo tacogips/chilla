@@ -21,6 +21,10 @@ if ! command -v WebKitWebDriver >/dev/null 2>&1; then
 fi
 
 export CARGO_TERM_QUIET=true
+export GDK_BACKEND="${GDK_BACKEND:-x11}"
+export GSK_RENDERER="${GSK_RENDERER:-cairo}"
+export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
+export WEBKIT_DISABLE_COMPOSITING_MODE="${WEBKIT_DISABLE_COMPOSITING_MODE:-1}"
 export WEBKIT_DISABLE_DMABUF_RENDERER="${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"
 export CHILLA_TAURI_E2E_REPO_ROOT="$repo_root"
 export CHILLA_TAURI_E2E_APP="$repo_root/target/debug/chilla"
