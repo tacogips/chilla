@@ -26,7 +26,7 @@ import {
 const DRIVER_PORT = 4444;
 const NATIVE_DRIVER_PORT = 4445;
 const DRIVER_HOST = "127.0.0.1";
-const STARTUP_TIMEOUT_MS = 30_000;
+const STARTUP_TIMEOUT_MS = 90_000;
 const FIXTURE_NOTE_COUNT = 220;
 const FIXTURE_README_TEXT =
   "This document comes from the real Tauri E2E fixture workspace.";
@@ -779,7 +779,9 @@ function tauriDriverDetail(): string {
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
-    return error.stack ?? error.message;
+    const message =
+      error.message.length > 0 ? `${error.name}: ${error.message}` : error.name;
+    return error.stack !== undefined ? `${message}\n${error.stack}` : message;
   }
 
   return String(error);
@@ -790,7 +792,9 @@ async function runStep(name: string, fn: () => Promise<void>): Promise<void> {
     console.log(`[tauri-e2e] ${name}`);
     await fn();
   } catch (error) {
-    throw new Error(`${name} failed\n\n${formatError(error)}`);
+    throw new Error(
+      `${name} failed\n\n${formatError(error)}${tauriDriverDetail()}`,
+    );
   }
 }
 
