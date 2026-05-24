@@ -252,17 +252,22 @@ The repository now also contains a separate Tauri macOS bundle flow for direct `
 task bundle-macos-dmg
 ```
 
-That path uses `src-tauri/tauri.macos.release.conf.json` and is intended for Apple signing/notarization on a macOS host or CI runner. Repository-local GitHub Actions support expects these secrets when you want signed/notarized artifacts:
+That path uses `src-tauri/tauri.macos.release.conf.json` and is intended for Apple Developer ID signing/notarization on a local macOS release machine. Apple certificate material should stay in the local keychain and password manager, not in GitHub Actions secrets.
 
-- `APPLE_CERTIFICATE`
-- `APPLE_CERTIFICATE_PASSWORD`
+The local release task expects these environment variables to be exported by the local password-manager workflow:
+
 - `APPLE_SIGNING_IDENTITY`
 - `APPLE_ID`
-- `APPLE_PASSWORD`
+- `APPLE_PASSWORD` (an Apple app-specific password)
 - `APPLE_TEAM_ID`
-- `KEYCHAIN_PASSWORD`
 
-Without those secrets, the repository can still build unsigned `.app`/`.dmg` bundles for local validation, but Gatekeeper may reject them on another machine.
+Publish signed/notarized macOS release assets from the local machine with:
+
+```bash
+task release-macos-dmg-local -- v0.1.5
+```
+
+Repository-local GitHub Actions build unsigned `.app`/`.dmg` artifacts only for validation. They do not sign, notarize, or publish trusted release assets.
 
 ## Installing with Homebrew Cask
 
@@ -277,7 +282,7 @@ Current caveats:
 
 - the cask now installs the macOS Apple Silicon DMG release artifact
 - it is currently constrained to Apple Silicon via Homebrew `depends_on arch: :arm64`
-- the current DMG is not signed and notarized yet, so Gatekeeper may still block launch until the release pipeline publishes a trusted macOS artifact
+- Homebrew trust comes from the published DMG; after the local signing/notarization release task uploads a new trusted DMG, the tap should update the cask SHA and remove any stale unsigned-artifact caveat
 
 ## Verification Status
 

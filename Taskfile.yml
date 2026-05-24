@@ -51,6 +51,11 @@ tasks:
       - bun run build
       - CARGO_TERM_QUIET=true bun run tauri build --config src-tauri/tauri.macos.release.conf.json --bundles app,dmg
 
+  release-macos-dmg-local:
+    desc: Sign, notarize, validate, and upload macOS DMG release assets from the local keychain
+    cmds:
+      - bash scripts/release-macos-dmg-local.sh {{.CLI_ARGS}}
+
   test:
     desc: Run frontend and backend verification
     cmds:

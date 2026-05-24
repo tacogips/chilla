@@ -44,6 +44,7 @@ There are no active implementation plans.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `macos-dmg-local-signing-release.md` | 2026-05-21 | `design-docs/specs/design-macos-dmg-release.md#signing-and-notarization` |
 | `linux-tauri-e2e-github-actions.md` | 2026-05-01 | `design-docs/specs/notes.md#linux-tauri-webdriver-e2e-notes` |
 | `in-app-multi-file-open.md` | 2026-05-02 | `design-docs/specs/design-file-viewer-mode.md#explicit-file-set-contract` |
 | `linux-ci-nix-flake-and-bun.md` | 2026-05-01 | `design-docs/specs/notes.md` (Linux CI follow-up); `design-docs/specs/design-markdown-workbench.md` |

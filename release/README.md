@@ -92,7 +92,7 @@ That cask currently points at the published macOS Apple Silicon DMG:
 chilla_<version>_aarch64.dmg
 ```
 
-The cask installs `chilla.app` from the DMG and links `chilla.app/Contents/MacOS/chilla` into Homebrew's `bin` directory. The current DMG is still unsigned and not notarized, so the cask should be treated as a transitional distribution path until the macOS release pipeline publishes a trusted artifact.
+The cask installs `chilla.app` from the DMG and links `chilla.app/Contents/MacOS/chilla` into Homebrew's `bin` directory. The current DMG is still unsigned and not notarized, so the cask should be treated as a transitional distribution path until a local macOS release publishes a trusted artifact.
 
 ## macOS DMG Bundle Flow
 
@@ -104,15 +104,20 @@ task bundle-macos-dmg
 
 That flow targets `app,dmg` bundles and is intended for Apple signing/notarization. It is additive: it does not change the tarball filenames, directory layout, or installer behavior documented above.
 
-Apple signing/notarization support is driven by CI or local environment variables:
+Trusted macOS release assets are signed and notarized locally. Apple certificate material should remain in the local keychain and password manager, not in GitHub Actions secrets. Export the notarization environment from the local password-manager workflow:
 
-- `APPLE_CERTIFICATE`
-- `APPLE_CERTIFICATE_PASSWORD`
 - `APPLE_SIGNING_IDENTITY`
 - `APPLE_ID`
 - `APPLE_PASSWORD`
 - `APPLE_TEAM_ID`
-- `KEYCHAIN_PASSWORD`
+
+Then publish the trusted DMG and `.app` zip with:
+
+```bash
+task release-macos-dmg-local -- v0.1.5
+```
+
+GitHub Actions only produce unsigned validation artifacts for this bundle flow.
 
 The DMG flow now backs both direct-download macOS distribution and the Homebrew cask, while the tarball flow remains the `install.sh` compatibility path.
 
