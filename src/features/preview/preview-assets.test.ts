@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import {
   isDefaultBrowserUrl,
+  isHeicImageResource,
   isVideoResource,
+  resolveDocumentResource,
   resolveDocumentResourceUrl,
   shouldResolveLocalResource,
   type PreviewPathApi,
@@ -36,6 +38,14 @@ describe("preview asset helpers", () => {
     expect(isVideoResource("./photo.png")).toBe(false);
   });
 
+  it("identifies HEIC and HEIF image resources by extension", () => {
+    expect(isHeicImageResource("./images/photo.heic")).toBe(true);
+    expect(isHeicImageResource("./images/photo.HEIF?download=1")).toBe(true);
+    expect(isHeicImageResource("./images/burst.heics#primary")).toBe(true);
+    expect(isHeicImageResource("./images/burst.heifs")).toBe(true);
+    expect(isHeicImageResource("./images/photo.png")).toBe(false);
+  });
+
   it("only resolves local non-anchor resources", () => {
     expect(shouldResolveLocalResource("./images/photo.png")).toBe(true);
     expect(shouldResolveLocalResource("/var/tmp/video.mp4")).toBe(true);
@@ -51,6 +61,19 @@ describe("preview asset helpers", () => {
         stubPathApi,
       ),
     ).resolves.toBe("asset:///docs/notes/./images/photo.png");
+  });
+
+  it("returns resolved HEIC resource URLs and absolute paths for fallback actions", async () => {
+    await expect(
+      resolveDocumentResource(
+        "./images/photo.heic?variant=primary#preview",
+        "/docs/notes/guide.md",
+        stubPathApi,
+      ),
+    ).resolves.toEqual({
+      path: "/docs/notes/./images/photo.heic",
+      url: "asset:///docs/notes/./images/photo.heic?variant=primary#preview",
+    });
   });
 
   it("preserves absolute local file paths when converting to asset URLs", async () => {

@@ -1,6 +1,33 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "solid-js/web";
 import { mermaidThemeVariables, PreviewPane } from "./PreviewPane";
+
+vi.mock("@tauri-apps/api/core", () => ({
+  convertFileSrc(path: string) {
+    return `asset://${path}`;
+  },
+}));
+
+vi.mock("@tauri-apps/api/path", () => ({
+  async dirname(path: string) {
+    return path.slice(0, path.lastIndexOf("/"));
+  },
+  async join(...paths: string[]) {
+    return paths.join("/").replace(/\/{2,}/g, "/");
+  },
+  async normalize(path: string) {
+    return path.replace(/\\/g, "/");
+  },
+}));
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  async openPath() {
+    return undefined;
+  },
+  async openUrl() {
+    return undefined;
+  },
+}));
 
 describe("PreviewPane", () => {
   let dispose: VoidFunction | undefined;
@@ -138,6 +165,40 @@ describe("PreviewPane", () => {
     });
   });
 
+  it("shows an open-path fallback when a local HEIC image fails to load", async () => {
+    const root = document.getElementById("root");
+
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath="/docs/notes/guide.md"
+          html='<p><img src="./images/photo.heic" alt="photo" /></p>'
+          selectedAnchorId={null}
+          visible={true}
+        />
+      ),
+      root,
+    );
+
+    const image = await waitForElement<HTMLImageElement>(
+      'img[src="asset:///docs/notes/./images/photo.heic"]',
+    );
+    image.dispatchEvent(new Event("error"));
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain(
+        "Image preview is not available.",
+      );
+      expect(document.body.textContent).toContain("./images/photo.heic");
+      expect(document.body.textContent).toContain("Open in default app");
+    });
+  });
+
   it("maps Mermaid theme colors from the active preview element", () => {
     const root = document.getElementById("root");
 
@@ -250,4 +311,22 @@ async function waitFor(
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
   }
+}
+
+async function waitForElement<T extends Element>(
+  selector: string,
+  timeoutMs = 2_000,
+): Promise<T> {
+  let element: T | null = null;
+
+  await waitFor(() => {
+    element = document.querySelector<T>(selector);
+    expect(element).not.toBeNull();
+  }, timeoutMs);
+
+  if (element === null) {
+    throw new Error(`missing element for selector: ${selector}`);
+  }
+
+  return element;
 }

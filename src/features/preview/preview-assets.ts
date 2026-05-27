@@ -5,6 +5,11 @@ export interface PreviewPathApi {
   readonly convertFileSrc: (path: string) => string;
 }
 
+export interface ResolvedDocumentResource {
+  readonly url: string;
+  readonly path: string;
+}
+
 const DEFAULT_BROWSER_URL_PATTERN = /^(https?|mailto|tel):/i;
 const GENERIC_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[a-zA-Z]:[\\/]/;
@@ -17,6 +22,11 @@ export function isDefaultBrowserUrl(value: string): boolean {
 export function isVideoResource(value: string): boolean {
   const pathname = value.split(/[?#]/, 1)[0] ?? "";
   return /\.(mp4|m4v|mov|webm|ogv)$/i.test(pathname);
+}
+
+export function isHeicImageResource(value: string): boolean {
+  const pathname = value.split(/[?#]/, 1)[0] ?? "";
+  return /\.(heic|heif|heics|heifs)$/i.test(pathname);
 }
 
 export function shouldResolveLocalResource(value: string): boolean {
@@ -46,6 +56,20 @@ export async function resolveDocumentResourceUrl(
   documentPath: string | null,
   pathApi: PreviewPathApi,
 ): Promise<string | null> {
+  const resolved = await resolveDocumentResource(
+    resourcePath,
+    documentPath,
+    pathApi,
+  );
+
+  return resolved?.url ?? null;
+}
+
+export async function resolveDocumentResource(
+  resourcePath: string,
+  documentPath: string | null,
+  pathApi: PreviewPathApi,
+): Promise<ResolvedDocumentResource | null> {
   const trimmedResourcePath = resourcePath.trim();
 
   if (
@@ -64,7 +88,10 @@ export async function resolveDocumentResourceUrl(
         await pathApi.join(await pathApi.dirname(documentPath), pathname),
       );
 
-  return `${pathApi.convertFileSrc(absolutePath)}${suffix}`;
+  return {
+    path: absolutePath,
+    url: `${pathApi.convertFileSrc(absolutePath)}${suffix}`,
+  };
 }
 
 function splitResourcePath(resourcePath: string): {

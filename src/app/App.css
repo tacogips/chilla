@@ -746,6 +746,51 @@ button {
   border-radius: var(--radius-sm);
 }
 
+.preview-image--failed {
+  display: none;
+}
+
+.preview-image-fallback {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.8rem 0;
+  padding: 0.875rem;
+  border: 1px solid var(--markdown-border);
+  border-radius: var(--radius-sm);
+  background: var(--markdown-pre-bg);
+  color: var(--markdown-fg);
+}
+
+.preview-image-fallback__title,
+.preview-image-fallback__detail {
+  margin: 0;
+}
+
+.preview-image-fallback__title {
+  font-weight: 600;
+}
+
+.preview-image-fallback__detail {
+  color: var(--markdown-muted);
+  overflow-wrap: anywhere;
+}
+
+.preview-image-fallback__button {
+  justify-self: start;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--markdown-border);
+  border-radius: var(--radius-sm);
+  background: var(--markdown-surface);
+  color: var(--markdown-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.preview-image-fallback__button:hover {
+  border-color: var(--preview-link);
+  color: var(--preview-link-hover);
+}
+
 .preview video {
   width: 100%;
   background: #000;
@@ -1404,9 +1449,12 @@ button {
   flex: 1;
   min-height: 0;
   flex-direction: column;
-  background:
-    radial-gradient(circle at top, rgb(255 253 247 / 0.96), rgb(245 239 226))
-      no-repeat;
+  background: radial-gradient(
+      circle at top,
+      rgb(255 253 247 / 0.96),
+      rgb(245 239 226)
+    )
+    no-repeat;
 }
 
 .epub-reader__footer {

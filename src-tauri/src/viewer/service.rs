@@ -44,9 +44,13 @@ const TEXT_PREVIEW_EXTENSIONS: [&str; 10] = [
     "webmanifest",
     "gradle",
 ];
-const IMAGE_EXTENSION_MIME_TYPES: [(&str, &str); 6] = [
+const IMAGE_EXTENSION_MIME_TYPES: [(&str, &str); 10] = [
     ("apng", "image/apng"),
     ("gif", "image/gif"),
+    ("heic", "image/heic"),
+    ("heics", "image/heic-sequence"),
+    ("heif", "image/heif"),
+    ("heifs", "image/heif-sequence"),
     ("jpeg", "image/jpeg"),
     ("jpg", "image/jpeg"),
     ("png", "image/png"),
@@ -1046,7 +1050,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::ViewerService;
+    use super::{fallback_media_mime_type, ViewerService};
     use crate::{
         cli::StartupTarget,
         syntax_highlight::SyntaxUiTheme,
@@ -1083,6 +1087,24 @@ mod tests {
         DirectoryListSort {
             field: DirectorySortField::Name,
             direction: DirectorySortDirection::Asc,
+        }
+    }
+
+    #[test]
+    fn fallback_media_mime_type_infers_heic_and_heif_extensions() {
+        let cases = [
+            ("photo.heic", "image/heic"),
+            ("photo.HEIF", "image/heif"),
+            ("burst.heics", "image/heic-sequence"),
+            ("burst.HEIFS", "image/heif-sequence"),
+        ];
+
+        for (file_name, expected_mime_type) in cases {
+            assert_eq!(
+                fallback_media_mime_type(Path::new(file_name), "application/octet-stream"),
+                Some(expected_mime_type),
+                "expected MIME fallback for {file_name}"
+            );
         }
     }
 
@@ -1378,6 +1400,7 @@ mod tests {
         let markdown_path = test_dir.path().join("guide.md");
         let text_path = test_dir.path().join("notes.txt");
         let image_path = test_dir.path().join("photo.png");
+        let heic_path = test_dir.path().join("photo.HEIC");
         let video_path = test_dir.path().join("clip.mp4");
         let audio_path = test_dir.path().join("podcast.mp3");
         let pdf_path = test_dir.path().join("notes.pdf");
@@ -1391,6 +1414,7 @@ mod tests {
             [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82],
         )
         .expect("write png header");
+        fs::write(&heic_path, [0_u8, 1, 2, 3, 4, 5]).expect("write heic placeholder");
         fs::write(
             &video_path,
             [0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109],
@@ -1457,6 +1481,20 @@ mod tests {
                 assert!(html.contains("photo.png"));
             }
             _ => panic!("expected image preview"),
+        }
+
+        match viewer_service
+            .open_file_preview(&heic_path, SyntaxUiTheme::Dark)
+            .expect("heic preview")
+        {
+            FilePreview::Image {
+                html, mime_type, ..
+            } => {
+                assert_eq!(mime_type, "image/heic");
+                assert!(html.contains("<img"));
+                assert!(html.contains("photo.HEIC"));
+            }
+            _ => panic!("expected heic image preview"),
         }
 
         match viewer_service
@@ -1542,6 +1580,37 @@ mod tests {
                 assert_eq!(message, "Binary file preview is not available.");
             }
             _ => panic!("expected binary preview"),
+        }
+    }
+
+    #[test]
+    fn open_file_preview_treats_heic_and_heif_paths_as_images() {
+        let test_dir = TestDir::new();
+        let viewer_service = ViewerService::new();
+        let cases = [
+            ("photo.heic", "image/heic"),
+            ("photo.heif", "image/heif"),
+            ("burst.heics", "image/heic-sequence"),
+            ("burst.heifs", "image/heif-sequence"),
+        ];
+
+        for (file_name, expected_mime_type) in cases {
+            let image_path = test_dir.path().join(file_name);
+            fs::write(&image_path, [0_u8, 0, 0, 0]).expect("write placeholder HEIC fixture");
+
+            match viewer_service
+                .open_file_preview(&image_path, SyntaxUiTheme::Dark)
+                .expect("HEIC/HEIF preview")
+            {
+                FilePreview::Image {
+                    mime_type, html, ..
+                } => {
+                    assert_eq!(mime_type, expected_mime_type);
+                    assert!(html.contains("<img"));
+                    assert!(html.contains(file_name));
+                }
+                _ => panic!("expected image preview for {file_name}"),
+            }
         }
     }
 

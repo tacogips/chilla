@@ -247,3 +247,60 @@ See `design-docs/specs/design-csv-viewer.md` for CSV-specific preview detection,
 See `design-docs/specs/design-epub-navigation.md` for EPUB TOC extraction, reader navigation, and reading-location persistence.
 
 ---
+
+## HEIC / HEIF Image Display Architecture
+
+This section defines the design target for displaying HEIC and HEIF images in Markdown previews and file-view image previews.
+
+### Product Scope
+
+- Markdown documents may reference local `.heic`, `.heif`, `.heics`, or `.heifs` images using normal Markdown image syntax or safe raw `<img>` tags.
+- File view mode should classify local HEIC / HEIF assets as previewable images instead of generic binary files.
+- Users should see a rendered image when the current platform can decode the asset directly or when the backend can provide a renderable representation.
+- If decoding is unavailable, the UI should show a clear non-rendered image-preview fallback rather than silently displaying a broken image.
+
+### Responsibility Split
+
+- Rust in `src-tauri/` owns HEIC / HEIF file classification, MIME normalization, filesystem access, and any platform or dependency-backed conversion/transcoding required for WebView display.
+- Solid.js in `src/` owns DOM enhancement of Markdown image sources, typed preview rendering, error-state presentation, and any open-in-default-app action.
+- The Tauri command boundary should extend the existing Markdown preview and `open_file_preview` flows instead of adding a HEIC-only command path.
+- Frontend extension checks may be used only for presentation hints; authoritative support decisions belong to the backend.
+
+### Data Flow
+
+Markdown embedded image flow:
+
+1. Rust renders Markdown image syntax and safe raw image tags without stripping HEIC / HEIF sources.
+2. The frontend preview enhancement resolves relative or absolute local image paths against the current Markdown document.
+3. The resolved source points either to a WebView-readable file URL when direct decode is supported or to a backend-provided converted/streamed representation when required.
+4. Image load failure is surfaced as a preview fallback with the original path preserved for diagnostics or opening externally.
+
+File-view image flow:
+
+1. `open_file_preview` canonicalizes the selected file path.
+2. Rust detects HEIC / HEIF by normalized extension and, where feasible, MIME sniffing.
+3. Rust returns the existing typed `FilePreview::Image` shape when the asset can be displayed directly.
+4. If conversion is needed, Rust still presents the result through the image preview contract, with the display URL or HTML pointing at the converted representation rather than exposing conversion internals to the frontend.
+5. Unsupported or failed conversion falls back to an explicit image-preview error state, not to unrelated text or binary rendering.
+
+### MIME And Extension Policy
+
+- Normalize `.heic`, `.heif`, `.heics`, and `.heifs` as HEIC / HEIF image inputs.
+- Prefer standards-based MIME labels such as `image/heic`, `image/heif`, `image/heic-sequence`, and `image/heif-sequence` when detected or inferred.
+- Existing raster image support remains unchanged for APNG, GIF, JPEG, PNG, and WebP.
+- Detection changes must not cause SVG or text-like files to bypass their existing sanitization and preview paths.
+
+### Conversion And Runtime Constraints
+
+- Direct WebView display is acceptable only when verified for the target platform.
+- Backend conversion should be bounded by file size, decoded pixel count, and memory use before loading the full image.
+- Converted outputs should be treated as transient preview artifacts and must not overwrite source files.
+- Any generated preview URL must remain local to the app runtime and avoid exposing arbitrary filesystem paths beyond the existing Tauri asset or media serving model.
+- Multi-image HEIF sequences may initially render the primary frame only; sequence navigation is outside this issue unless implementation discovery proves it is already trivial.
+
+### Verification Expectations
+
+- Bun verification should cover Markdown preview resource resolution and frontend fallback behavior.
+- Cargo verification should cover HEIC / HEIF extension-to-MIME classification and `open_file_preview` routing into image preview behavior.
+- Mixed-stack runtime verification should launch the debug app after implementation and exercise a Markdown document that references a local HEIC / HEIF image plus direct file-view preview of the same asset.
+- Cargo commands must be run with `CARGO_TERM_QUIET=true`.

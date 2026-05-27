@@ -26,8 +26,9 @@ The repository design documents started from a Markdown workbench concept, then 
   - heading extraction
   - a toggleable table of contents
   - Mermaid rendering in the preview pane
+  - local image links, including HEIC / HEIF assets when the platform WebView can decode them
 - Non-Markdown files are previewed according to type:
-  - images: inline image preview
+  - images: inline image preview, including HEIC / HEIF when the platform WebView can decode the file
   - video: embedded video preview
   - PDF: embedded iframe preview
   - text-like files: syntax-highlighted source preview
@@ -41,6 +42,8 @@ At the moment, Markdown source is viewable in a raw pane, but this app does not 
 - Markdown heading extraction and table of contents
 - Backend-owned Markdown parsing in Rust
 - Mermaid hydration on the frontend after preview render
+- Local Markdown image resolution with HEIC / HEIF image fallback and open-in-default-app affordance when the WebView cannot render an image
+- Direct image-file previews for common raster formats and HEIC / HEIF files that the platform WebView can decode
 - Automatic refresh of opened Markdown documents when the file changes on disk
 - Theme toggle with frontend CSS variables and backend syntax-theme synchronization
 - Custom undecorated desktop window chrome
@@ -87,6 +90,12 @@ Video preview:
 - The preview overlay uses a focused play button with an icon-only affordance and an accessible label for the current file.
 - `Space`: play/pause when supported by the platform/webview
 
+Image preview:
+
+- Markdown image links resolve local image paths relative to the Markdown document, including `.heic`, `.heif`, `.heics`, and `.heifs` files.
+- Direct file previews classify HEIC / HEIF files as images instead of generic binary files.
+- HEIC / HEIF display depends on the platform WebView decoder; when an image cannot render, chilla shows a fallback with an option to open the file in the default app.
+
 ## Architecture
 
 The app is split across a typed Tauri boundary:
@@ -100,7 +109,7 @@ The app is split across a typed Tauri boundary:
 - `src/`
   - workspace shell and desktop UI
   - file browser interactions
-  - preview panes for Markdown, text, PDF, and video
+  - preview panes for Markdown, image, text, PDF, and video
   - theme management
   - Mermaid enhancement after HTML injection
 

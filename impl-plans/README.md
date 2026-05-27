@@ -38,7 +38,9 @@ Large features are split into multiple related plans with cross-references.
 
 ## Active Plans
 
-There are no active implementation plans.
+| Plan | Created | Design Reference |
+| ---- | ------- | ---------------- |
+| `heic-image-display.md` | 2026-05-27 | `design-docs/specs/architecture.md#heic--heif-image-display-architecture` |
 
 ## Completed Plans
 

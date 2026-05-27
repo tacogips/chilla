@@ -1,6 +1,6 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { dirname, join, normalize } from "@tauri-apps/api/path";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import "github-markdown-css/github-markdown.css";
@@ -8,7 +8,7 @@ import { createEffect, on, onCleanup, onMount, type JSX } from "solid-js";
 import type { ColorScheme } from "../../lib/theme";
 import {
   isDefaultBrowserUrl,
-  resolveDocumentResourceUrl,
+  resolveDocumentResource,
   type PreviewPathApi,
 } from "./preview-assets";
 
@@ -312,6 +312,62 @@ const previewPathApi: PreviewPathApi = {
   convertFileSrc,
 };
 
+function attachImageLoadFallback(
+  image: HTMLImageElement,
+  sourceLabel: string,
+  openPathValue: string | null,
+): void {
+  if (image.dataset["chillaFallbackAttached"] === "true") {
+    return;
+  }
+
+  image.dataset["chillaFallbackAttached"] = "true";
+
+  image.addEventListener(
+    "error",
+    () => {
+      if (image.dataset["chillaFallbackShown"] === "true") {
+        return;
+      }
+
+      image.dataset["chillaFallbackShown"] = "true";
+      image.classList.add("preview-image--failed");
+
+      const fallback = document.createElement("div");
+      fallback.className = "preview-image-fallback";
+
+      const title = document.createElement("p");
+      title.className = "preview-image-fallback__title";
+      title.textContent = "Image preview is not available.";
+
+      const detail = document.createElement("p");
+      detail.className = "preview-image-fallback__detail";
+      detail.textContent = sourceLabel;
+
+      fallback.append(title, detail);
+
+      if (openPathValue !== null) {
+        const button = document.createElement("button");
+        button.className = "preview-image-fallback__button";
+        button.type = "button";
+        button.textContent = "Open in default app";
+        button.addEventListener("click", () => {
+          void openPath(openPathValue).catch((error: unknown) => {
+            console.error(
+              "Failed to open image in the default application.",
+              error,
+            );
+          });
+        });
+        fallback.append(button);
+      }
+
+      image.after(fallback);
+    },
+    { once: true },
+  );
+}
+
 async function enhancePreviewMedia(
   container: HTMLElement,
   documentPath: string | null,
@@ -329,14 +385,18 @@ async function enhancePreviewMedia(
       continue;
     }
 
-    const resolvedSource = await resolveDocumentResourceUrl(
+    const resolvedResource = await resolveDocumentResource(
       source,
       documentPath,
       previewPathApi,
     );
 
-    if (resolvedSource !== null) {
-      element.setAttribute("src", resolvedSource);
+    if (element instanceof HTMLImageElement) {
+      attachImageLoadFallback(element, source, resolvedResource?.path ?? null);
+    }
+
+    if (resolvedResource !== null) {
+      element.setAttribute("src", resolvedResource.url);
     }
   }
 }
