@@ -277,9 +277,14 @@ async function verifyWorkspaceLoads(
     until.elementLocated(By.css(".file-browser__path")),
     STARTUP_TIMEOUT_MS,
   );
-  const pathText = await pathElement.getText();
+  let pathText = "";
+  await waitUntil(currentDriver, async () => {
+    pathText = await pathElement.getText();
 
-  if (!pathText.includes(expectedWorkspaceRoot)) {
+    return pathText.includes(expectedWorkspaceRoot);
+  });
+
+  if (pathText.length === 0 || !pathText.includes(expectedWorkspaceRoot)) {
     throw new Error(
       `Expected workspace path to include ${expectedWorkspaceRoot}, got ${JSON.stringify(pathText)}`,
     );
