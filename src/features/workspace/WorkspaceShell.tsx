@@ -14,6 +14,7 @@ import { Portal } from "solid-js/web";
 import type {
   DirectoryEntry,
   DirectoryListSort,
+  DiffWorkspaceTarget,
   DocumentPresentationMode,
   DocumentSnapshot,
   EpubNavigationItem,
@@ -30,6 +31,7 @@ import { writeTextToClipboard } from "../../lib/clipboard";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import {
   getStartupContext,
+  detectGitRepository,
   isMarkdownPath,
   listenDocumentRefreshed,
   listDirectory,
@@ -51,6 +53,7 @@ import {
   EPUB_PAGINATION_STEP_EVENT,
 } from "../preview/EpubPreviewPane";
 import { CsvFilePreviewPane } from "../preview/CsvFilePreviewPane";
+import { PrDiffWorkspace } from "../pr-diff/PrDiffWorkspace";
 import { TocPane, type TocItem } from "../toc/TocPane";
 import {
   canReloadMarkdownSnapshotForPresentationRefresh,
@@ -169,6 +172,10 @@ const SHORTCUT_SECTIONS: readonly {
       {
         keys: ["Shift", "L"],
         description: "Toggle file tree",
+      },
+      {
+        keys: ["G"],
+        description: "Toggle local Git diff for the opened repository",
       },
       {
         keys: ["Y"],
@@ -771,6 +778,8 @@ export function WorkspaceShell() {
   let selectionPreviewDebounceTimer: number | undefined;
   const [startupContext, setStartupContext] =
     createSignal<StartupContext | null>(null);
+  const [activeGitDiffTarget, setActiveGitDiffTarget] =
+    createSignal<DiffWorkspaceTarget | null>(null);
   const [directoryState, setDirectoryState] =
     createSignal<LoadedDirectoryState | null>(null);
   const [directorySort, setDirectorySort] = createSignal<DirectoryListSort>(
@@ -1291,7 +1300,16 @@ export function WorkspaceShell() {
 
       const browserRoot = nextStartupContext.browser_root;
 
-      if (browserRoot.kind === "directory") {
+      if (browserRoot.kind === "github_pr") {
+        setActiveGitDiffTarget(null);
+        setFileTreeOpen(true);
+        clearDocumentArea();
+      } else if (browserRoot.kind === "git_diff") {
+        setActiveGitDiffTarget(null);
+        setFileTreeOpen(true);
+        clearDocumentArea();
+      } else if (browserRoot.kind === "directory") {
+        setActiveGitDiffTarget(null);
         setFileTreeOpen(browserRoot.selected_file_path === null);
 
         await loadDirectoryState(
@@ -1303,6 +1321,7 @@ export function WorkspaceShell() {
           await previewSelectedFile(browserRoot.selected_file_path);
         }
       } else {
+        setActiveGitDiffTarget(null);
         setFileTreeOpen(true);
 
         await loadExplicitFileSetState(
@@ -1368,6 +1387,7 @@ export function WorkspaceShell() {
       clearSelectionPreviewDebounce();
       stopWatchingCurrentDocument();
       clearDocumentArea();
+      setActiveGitDiffTarget(null);
       setStartupContext(startupContextForPickedTarget(target));
 
       if (target.kind === "single_file") {
@@ -1398,6 +1418,47 @@ export function WorkspaceShell() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleOpenGitDiff = async () => {
+    const currentDirectory = directoryState();
+    if (
+      currentDirectory === null ||
+      currentDirectory.listingKind !== "directory"
+    ) {
+      setErrorMessage(
+        "Open a Git repository directory before switching to Git diff.",
+      );
+      return;
+    }
+
+    try {
+      const target = await detectGitRepository(
+        currentDirectory.current_directory_path,
+      );
+      if (target === null) {
+        setErrorMessage("This directory is not inside a Git repository.");
+        return;
+      }
+
+      stopWatchingCurrentDocument();
+      clearSelectionPreviewDebounce();
+      clearDocumentArea();
+      setFileTreeOpen(true);
+      setActiveGitDiffTarget({
+        kind: "git",
+        target,
+      });
+      setErrorMessage(null);
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to open Git diff",
+      );
+    }
+  };
+
+  const handleCloseGitDiff = () => {
+    setActiveGitDiffTarget(null);
   };
 
   const handleCopyCurrentPath = async () => {
@@ -1585,6 +1646,29 @@ export function WorkspaceShell() {
     return preview?.kind === "csv" ? preview : null;
   });
   const currentOpenPath = () => md()?.path ?? previewPath(fp());
+  const diffTarget = createMemo<DiffWorkspaceTarget | null>(() => {
+    const activeGit = activeGitDiffTarget();
+    if (activeGit !== null) {
+      return activeGit;
+    }
+
+    const context = startupContext();
+    if (context?.browser_root.kind === "github_pr") {
+      return {
+        kind: "github",
+        target: context.browser_root.target,
+      };
+    }
+
+    if (context?.browser_root.kind === "git_diff") {
+      return {
+        kind: "git",
+        target: context.browser_root.target,
+      };
+    }
+
+    return null;
+  });
   const hasOpenDocument = () => md() !== null || fp() !== null;
   const hasTocDocument = createMemo(
     () => md() !== null || fp()?.kind === "epub",
@@ -1666,6 +1750,10 @@ export function WorkspaceShell() {
   };
 
   const viewerGridClassName = createMemo(() => {
+    if (diffTarget() !== null) {
+      return "workspace__body workspace__body--pr-diff";
+    }
+
     const toc = isTocOpen() && hasTocDocument();
     const tree = isFileTreeOpen();
     let className = "workspace__body workspace__body--viewer";
@@ -1798,6 +1886,21 @@ export function WorkspaceShell() {
         event.preventDefault();
         setFileTreeOpen((value) => !value);
         return;
+      }
+
+      if (matchesShortcut(event, "g")) {
+        const gitTarget = activeGitDiffTarget();
+        if (gitTarget !== null) {
+          event.preventDefault();
+          handleCloseGitDiff();
+          return;
+        }
+
+        if (diffTarget() === null) {
+          event.preventDefault();
+          void handleOpenGitDiff();
+          return;
+        }
       }
 
       if (!isFileTreeOpen()) {
@@ -2041,6 +2144,40 @@ export function WorkspaceShell() {
               }}
             </Show>
 
+            <Show
+              when={activeGitDiffTarget() !== null}
+              fallback={
+                <Show
+                  when={
+                    diffTarget() === null &&
+                    directoryState()?.listingKind === "directory"
+                  }
+                >
+                  <button
+                    class="button button--ghost"
+                    type="button"
+                    aria-label="Open Git diff mode"
+                    title="Open Git diff mode"
+                    onClick={() => {
+                      void handleOpenGitDiff();
+                    }}
+                  >
+                    Git diff
+                  </button>
+                </Show>
+              }
+            >
+              <button
+                class="button button--ghost"
+                type="button"
+                aria-label="Return to file view"
+                title="Return to file view"
+                onClick={handleCloseGitDiff}
+              >
+                File view
+              </button>
+            </Show>
+
             <button
               class="button"
               type="button"
@@ -2176,206 +2313,215 @@ export function WorkspaceShell() {
         </Show>
 
         <div class={viewerGridClassName()}>
-          <Show when={isFileTreeOpen()}>
-            <FileBrowserPane
-              active={true}
-              listingKind={directoryState()?.listingKind ?? "directory"}
-              directory={directoryState()}
-              sort={directorySort()}
-              query={directoryQuery()}
-              selectedPath={selectedBrowserPath()}
-              canLoadMore={canLoadMoreDirectoryEntries()}
-              isLoadingMore={isLoadingMoreDirectoryEntries()}
-              onConfirmEntry={(entry, options) =>
-                void handleConfirmEntry(entry, options)
-              }
-              onChangeSort={(nextSort) => {
-                void handleChangeDirectorySort(nextSort);
-              }}
-              onChangeQuery={(nextQuery) => {
-                void handleChangeDirectoryQuery(nextQuery);
-              }}
-              onLoadMore={() => {
-                const state = directoryState();
-                if (state?.listingKind === "explicit_file_set") {
-                  void loadMoreExplicitFileSetEntries();
-                } else {
-                  void loadMoreDirectoryEntries();
-                }
-              }}
-              onNavigateToParent={() => void handleNavigateToParent()}
-              onSelectEntry={handleSelectEntry}
-            />
+          <Show when={diffTarget()}>
+            {(target) => <PrDiffWorkspace target={target()} />}
           </Show>
+          <Show when={diffTarget() === null}>
+            <>
+              <Show when={isFileTreeOpen()}>
+                <FileBrowserPane
+                  active={true}
+                  listingKind={directoryState()?.listingKind ?? "directory"}
+                  directory={directoryState()}
+                  sort={directorySort()}
+                  query={directoryQuery()}
+                  selectedPath={selectedBrowserPath()}
+                  canLoadMore={canLoadMoreDirectoryEntries()}
+                  isLoadingMore={isLoadingMoreDirectoryEntries()}
+                  onConfirmEntry={(entry, options) =>
+                    void handleConfirmEntry(entry, options)
+                  }
+                  onChangeSort={(nextSort) => {
+                    void handleChangeDirectorySort(nextSort);
+                  }}
+                  onChangeQuery={(nextQuery) => {
+                    void handleChangeDirectoryQuery(nextQuery);
+                  }}
+                  onLoadMore={() => {
+                    const state = directoryState();
+                    if (state?.listingKind === "explicit_file_set") {
+                      void loadMoreExplicitFileSetEntries();
+                    } else {
+                      void loadMoreDirectoryEntries();
+                    }
+                  }}
+                  onNavigateToParent={() => void handleNavigateToParent()}
+                  onSelectEntry={handleSelectEntry}
+                />
+              </Show>
 
-          <Show when={isTocOpen() && hasTocDocument()}>
-            <TocPane
-              activeAnchorId={selection().anchorId}
-              emptyLabel={tocEmptyLabel()}
-              items={tocItems()}
-              summaryLabel={tocSummaryLabel()}
-              visible={true}
-              onSelectItem={handleTocItemSelect}
-            />
-          </Show>
+              <Show when={isTocOpen() && hasTocDocument()}>
+                <TocPane
+                  activeAnchorId={selection().anchorId}
+                  emptyLabel={tocEmptyLabel()}
+                  items={tocItems()}
+                  summaryLabel={tocSummaryLabel()}
+                  visible={true}
+                  onSelectItem={handleTocItemSelect}
+                />
+              </Show>
 
-          <div class="workspace__document-column">
-            <Show when={md() !== null && markdownPane() === "raw"}>
-              <section class="pane workspace__markdown-raw-pane">
-                <header class="pane__header">
-                  <span class="pane__title">Markdown</span>
-                  <span>Source (editable)</span>
-                </header>
-                <div class="pane__body markdown-raw-body">
-                  <textarea
-                    class="markdown-source-editor"
-                    spellcheck={false}
-                    value={markdownEditorBuffer()}
-                    onInput={(event) =>
-                      setMarkdownEditorBuffer(event.currentTarget.value)
+              <div class="workspace__document-column">
+                <Show when={md() !== null && markdownPane() === "raw"}>
+                  <section class="pane workspace__markdown-raw-pane">
+                    <header class="pane__header">
+                      <span class="pane__title">Markdown</span>
+                      <span>Source (editable)</span>
+                    </header>
+                    <div class="pane__body markdown-raw-body">
+                      <textarea
+                        class="markdown-source-editor"
+                        spellcheck={false}
+                        value={markdownEditorBuffer()}
+                        onInput={(event) =>
+                          setMarkdownEditorBuffer(event.currentTarget.value)
+                        }
+                      />
+                    </div>
+                  </section>
+                </Show>
+
+                <Show when={md() !== null && markdownPane() === "preview"}>
+                  <PreviewPane
+                    colorScheme={colorScheme()}
+                    documentPath={md()?.path ?? null}
+                    html={md()?.html ?? ""}
+                    selectedAnchorId={selection().anchorId}
+                    {...(markdownIsDirty()
+                      ? {
+                          subtitle:
+                            "Unsaved changes; preview shows last saved content.",
+                        }
+                      : {})}
+                    visible={true}
+                  />
+                </Show>
+
+                <Show
+                  when={md() === null && fp() !== null && fp()?.kind === "epub"}
+                >
+                  <EpubPreviewPane
+                    colorScheme={colorScheme()}
+                    documentPath={previewPath(fp())}
+                    html={previewHtml(fp())}
+                    onRelocate={(anchorId) => {
+                      setSelection({
+                        anchorId,
+                        lineStart: null,
+                      });
+                    }}
+                    selectedAnchorId={selection().anchorId}
+                    subtitle={previewSubtitle(fp())}
+                    toc={epubPreview()?.toc ?? []}
+                    visible={true}
+                  />
+                </Show>
+
+                <Show when={csvPreview()}>
+                  {(getCsv) => (
+                    <CsvFilePreviewPane
+                      colorScheme={colorScheme()}
+                      presentationMode={csvPaneMode()}
+                      preview={getCsv()}
+                      subtitle={previewSubtitle(fp())}
+                    />
+                  )}
+                </Show>
+
+                <Show
+                  when={
+                    md() === null &&
+                    fp() !== null &&
+                    inferPreviewKind(fp()) === "default" &&
+                    fp()?.kind !== "epub" &&
+                    fp()?.kind !== "csv"
+                  }
+                >
+                  <PreviewPane
+                    colorScheme={colorScheme()}
+                    documentPath={previewPath(fp())}
+                    html={previewHtml(fp())}
+                    selectedAnchorId={null}
+                    subtitle={previewSubtitle(fp())}
+                    visible={true}
+                  />
+                </Show>
+
+                <Show when={md() === null && inferPreviewKind(fp()) === "pdf"}>
+                  <PdfFilePreviewPane
+                    path={fp()!.path}
+                    fileName={fp()!.file_name}
+                  />
+                </Show>
+
+                <Show when={md() === null && isMediaFilePreview(fp())}>
+                  <MediaFilePreviewPane
+                    kind={mediaPreviewKind(fp())!}
+                    path={fp()!.path}
+                    streamUrl={mediaStreamUrl(fp())}
+                    fileName={fp()!.file_name}
+                    autoplayRequestId={
+                      mediaPreviewKind(fp()) === "video"
+                        ? videoAutoplayRequestId()
+                        : 0
                     }
                   />
-                </div>
-              </section>
-            </Show>
+                </Show>
 
-            <Show when={md() !== null && markdownPane() === "preview"}>
-              <PreviewPane
-                colorScheme={colorScheme()}
-                documentPath={md()?.path ?? null}
-                html={md()?.html ?? ""}
-                selectedAnchorId={selection().anchorId}
-                {...(markdownIsDirty()
-                  ? {
-                      subtitle:
-                        "Unsaved changes; preview shows last saved content.",
-                    }
-                  : {})}
-                visible={true}
-              />
-            </Show>
-
-            <Show
-              when={md() === null && fp() !== null && fp()?.kind === "epub"}
-            >
-              <EpubPreviewPane
-                colorScheme={colorScheme()}
-                documentPath={previewPath(fp())}
-                html={previewHtml(fp())}
-                onRelocate={(anchorId) => {
-                  setSelection({
-                    anchorId,
-                    lineStart: null,
-                  });
-                }}
-                selectedAnchorId={selection().anchorId}
-                subtitle={previewSubtitle(fp())}
-                toc={epubPreview()?.toc ?? []}
-                visible={true}
-              />
-            </Show>
-
-            <Show when={csvPreview()}>
-              {(getCsv) => (
-                <CsvFilePreviewPane
-                  colorScheme={colorScheme()}
-                  presentationMode={csvPaneMode()}
-                  preview={getCsv()}
-                  subtitle={previewSubtitle(fp())}
-                />
-              )}
-            </Show>
-
-            <Show
-              when={
-                md() === null &&
-                fp() !== null &&
-                inferPreviewKind(fp()) === "default" &&
-                fp()?.kind !== "epub" &&
-                fp()?.kind !== "csv"
-              }
-            >
-              <PreviewPane
-                colorScheme={colorScheme()}
-                documentPath={previewPath(fp())}
-                html={previewHtml(fp())}
-                selectedAnchorId={null}
-                subtitle={previewSubtitle(fp())}
-                visible={true}
-              />
-            </Show>
-
-            <Show when={md() === null && inferPreviewKind(fp()) === "pdf"}>
-              <PdfFilePreviewPane
-                path={fp()!.path}
-                fileName={fp()!.file_name}
-              />
-            </Show>
-
-            <Show when={md() === null && isMediaFilePreview(fp())}>
-              <MediaFilePreviewPane
-                kind={mediaPreviewKind(fp())!}
-                path={fp()!.path}
-                streamUrl={mediaStreamUrl(fp())}
-                fileName={fp()!.file_name}
-                autoplayRequestId={
-                  mediaPreviewKind(fp()) === "video"
-                    ? videoAutoplayRequestId()
-                    : 0
-                }
-              />
-            </Show>
-
-            <Show when={!hasOpenDocument()}>
-              <section class="pane workspace__document-empty">
-                <header class="pane__header">
-                  <span class="pane__title">Viewer</span>
-                  <span>No file open</span>
-                </header>
-                <div class="pane__body preview">
-                  <div class="preview__content">
-                    <section class="file-preview-empty">
-                      <p class="file-preview-empty__app-name">chilla</p>
-                      <p class="file-preview-empty__app-tagline">file viewer</p>
-                      <img
-                        class="file-preview-empty__image"
-                        src={EMPTY_STATE_IMAGE_PATH}
-                        alt="Pixel-art cat peeking in from the side"
-                      />
-                      <p class="file-preview-empty__title">
-                        Please select a file.
-                      </p>
-                      <div class="file-preview-empty__shortcuts">
-                        <For each={SHORTCUT_SECTIONS}>
-                          {(section) => (
-                            <section class="shortcuts-help__section">
-                              <h3 class="shortcuts-help__heading">
-                                {section.title}
-                              </h3>
-                              <ul class="shortcuts-help__list">
-                                <For each={section.shortcuts}>
-                                  {(shortcut) => (
-                                    <li class="shortcuts-help__row">
-                                      <span class="shortcuts-help__keys">
-                                        {renderShortcutKeys(shortcut.keys)}
-                                      </span>
-                                      <span class="shortcuts-help__desc">
-                                        {shortcut.description}
-                                      </span>
-                                    </li>
-                                  )}
-                                </For>
-                              </ul>
-                            </section>
-                          )}
-                        </For>
+                <Show when={!hasOpenDocument()}>
+                  <section class="pane workspace__document-empty">
+                    <header class="pane__header">
+                      <span class="pane__title">Viewer</span>
+                      <span>No file open</span>
+                    </header>
+                    <div class="pane__body preview">
+                      <div class="preview__content">
+                        <section class="file-preview-empty">
+                          <p class="file-preview-empty__app-name">chilla</p>
+                          <p class="file-preview-empty__app-tagline">
+                            file viewer
+                          </p>
+                          <img
+                            class="file-preview-empty__image"
+                            src={EMPTY_STATE_IMAGE_PATH}
+                            alt="Pixel-art cat peeking in from the side"
+                          />
+                          <p class="file-preview-empty__title">
+                            Please select a file.
+                          </p>
+                          <div class="file-preview-empty__shortcuts">
+                            <For each={SHORTCUT_SECTIONS}>
+                              {(section) => (
+                                <section class="shortcuts-help__section">
+                                  <h3 class="shortcuts-help__heading">
+                                    {section.title}
+                                  </h3>
+                                  <ul class="shortcuts-help__list">
+                                    <For each={section.shortcuts}>
+                                      {(shortcut) => (
+                                        <li class="shortcuts-help__row">
+                                          <span class="shortcuts-help__keys">
+                                            {renderShortcutKeys(shortcut.keys)}
+                                          </span>
+                                          <span class="shortcuts-help__desc">
+                                            {shortcut.description}
+                                          </span>
+                                        </li>
+                                      )}
+                                    </For>
+                                  </ul>
+                                </section>
+                              )}
+                            </For>
+                          </div>
+                        </section>
                       </div>
-                    </section>
-                  </div>
-                </div>
-              </section>
-            </Show>
-          </div>
+                    </div>
+                  </section>
+                </Show>
+              </div>
+            </>
+          </Show>
         </div>
 
         <Show when={isLoading()}>
@@ -2387,11 +2533,21 @@ export function WorkspaceShell() {
                   return "Loading workspace...";
                 }
 
-                return context.browser_root.kind === "explicit_file_set"
-                  ? "Opening the requested files..."
-                  : context.browser_root.selected_file_path !== null
-                    ? "Opening the requested file..."
-                    : "Loading workspace...";
+                if (context.browser_root.kind === "github_pr") {
+                  return "Opening the requested GitHub diff...";
+                }
+
+                if (context.browser_root.kind === "git_diff") {
+                  return "Opening the requested Git diff...";
+                }
+
+                if (context.browser_root.kind === "explicit_file_set") {
+                  return "Opening the requested files...";
+                }
+
+                return context.browser_root.selected_file_path !== null
+                  ? "Opening the requested file..."
+                  : "Loading workspace...";
               })()}
             </div>
           </div>

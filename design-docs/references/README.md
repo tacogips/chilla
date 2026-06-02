@@ -18,7 +18,17 @@ This directory contains reference materials for system design and implementation
 | SolidJS Documentation | https://docs.solidjs.com/ | Official Solid.js framework documentation |
 | Mermaid Documentation | https://mermaid.js.org/ | Official Mermaid syntax and rendering documentation |
 | Bun Documentation | https://bun.sh/docs | Official Bun runtime and package manager documentation |
+| GitHub REST API commits | https://docs.github.com/rest/commits/commits | Official GitHub REST API reference for commit and compare retrieval |
+| GitHub REST API pulls | https://docs.github.com/rest/pulls/pulls | Official GitHub REST API reference for pull request metadata and changed files |
 | Task Documentation | https://taskfile.dev/ | Official go-task documentation |
+| qraftbox DiffView.svelte | sibling qraftbox checkout: `client-legacy/components/DiffView.svelte` | Local behavioral reference for PR diff mode controls, file diff rendering, and navigation buttons |
+| qraftbox diff types | sibling qraftbox checkout: `client-legacy/src/types/diff.ts` | Local reference for diff file, hunk/chunk, change-line, and view-mode shape |
+| qraftbox GitHub PR service | sibling qraftbox checkout: `src/server/github/pr-service.ts` | Local reference for GitHub PR metadata service boundaries |
+| qraftbox GitHub URL parser | sibling qraftbox checkout: `src/server/github/url-parser.ts` | Local reference for GitHub URL source parsing boundaries |
+| qraftbox diff routes | sibling qraftbox checkout: `src/server/routes/diff.ts` | Local reference for diff retrieval request/response shape |
+| qraftbox side-by-side diff image | sibling qraftbox checkout: `usage/resource/diff_side_by_side.png` | Visual reference for side-by-side diff mode |
+| qraftbox current diff image | sibling qraftbox checkout: `usage/resource/diff_current.png` | Visual reference for current-state diff mode |
+| qraftbox stack diff image | sibling qraftbox checkout: `usage/resource/diff_stack.png` | Visual reference for stack/inline diff mode |
 
 ## Reference Documents
 

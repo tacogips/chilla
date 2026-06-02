@@ -151,6 +151,18 @@ impl ViewerService {
                     },
                 })
             }
+            StartupTarget::GitHubPr(target) => Ok(StartupContext {
+                initial_mode: WorkspaceMode::PrDiff,
+                browser_root: BrowserRoot::GitHubPr {
+                    target: target.clone(),
+                },
+            }),
+            StartupTarget::GitDiff(target) => Ok(StartupContext {
+                initial_mode: WorkspaceMode::PrDiff,
+                browser_root: BrowserRoot::GitDiff {
+                    target: target.clone(),
+                },
+            }),
         }
     }
 
@@ -1146,7 +1158,9 @@ mod tests {
                     )
                 );
             }
-            BrowserRoot::ExplicitFileSet { .. } => panic!("expected directory startup root"),
+            BrowserRoot::ExplicitFileSet { .. }
+            | BrowserRoot::GitHubPr { .. }
+            | BrowserRoot::GitDiff { .. } => panic!("expected directory startup root"),
         }
     }
 
@@ -1181,7 +1195,9 @@ mod tests {
                 ];
                 assert_eq!(source_order_paths.as_slice(), expected.as_slice());
             }
-            BrowserRoot::Directory { .. } => panic!("expected explicit file-set root"),
+            BrowserRoot::Directory { .. }
+            | BrowserRoot::GitHubPr { .. }
+            | BrowserRoot::GitDiff { .. } => panic!("expected explicit file-set root"),
         }
     }
 
