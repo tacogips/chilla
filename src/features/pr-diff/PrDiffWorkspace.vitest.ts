@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "solid-js/web";
 import type {
+  GitHubDiffSource,
   GitHubPrTarget,
   PrDiffFile,
   PrDiffSnapshot,
@@ -54,7 +55,10 @@ function diffFile(
 const target: GitHubPrTarget = {
   owner: "tacogips",
   repo: "chilla",
-  number: 12,
+  source: {
+    kind: "pull_request",
+    number: 12,
+  },
   url: "https://github.com/tacogips/chilla/pull/12",
   use_cache: true,
 };
@@ -115,10 +119,17 @@ function binaryDiffFile(path: string): PrDiffFile {
   };
 }
 
-function snapshot(files: readonly PrDiffFile[]): PrDiffSnapshot {
+function snapshot(
+  files: readonly PrDiffFile[],
+  source: GitHubDiffSource = target.source,
+  url = target.url,
+): PrDiffSnapshot {
   return {
     identity: {
-      ...target,
+      owner: target.owner,
+      repo: target.repo,
+      source,
+      url,
       title: "Example PR",
       state: "open",
       merged: false,
@@ -184,7 +195,10 @@ describe("PrDiffWorkspace", () => {
     if (root === null) {
       throw new Error("missing test root");
     }
-    dispose = render(() => PrDiffWorkspace({ target }), root);
+    dispose = render(
+      () => PrDiffWorkspace({ target: { kind: "github", target } }),
+      root,
+    );
   }
 
   it("retries after an error and renders the resolved diff", async () => {
@@ -216,15 +230,13 @@ describe("PrDiffWorkspace", () => {
     });
   });
 
-  it("shows loading indicators while the PR diff is loading", () => {
+  it("shows loading indicators while the GitHub diff is loading", () => {
     loadPrDiffMock.mockReturnValue(new Promise(() => undefined));
 
     renderWorkspace();
 
     expect(document.body.textContent).toContain("Loading files...");
-    expect(document.body.textContent).toContain(
-      "Loading PR diff from GitHub...",
-    );
+    expect(document.body.textContent).toContain("Loading diff...");
     expect(document.querySelectorAll(".pr-diff-loading__spinner")).toHaveLength(
       2,
     );
@@ -252,7 +264,7 @@ describe("PrDiffWorkspace", () => {
     });
   });
 
-  it("opens the canonical GitHub PR URL from the header jump button", async () => {
+  it("opens the canonical GitHub source URL from the header jump button", async () => {
     loadPrDiffMock.mockResolvedValue(snapshot([textDiffFile("README.md")]));
 
     renderWorkspace();
@@ -261,11 +273,103 @@ describe("PrDiffWorkspace", () => {
       expect(document.body.textContent).toContain("Example PR");
     });
 
-    click('[aria-label="Open PR in GitHub"]');
+    click('[aria-label="Open source in GitHub"]');
 
     expect(openUrlMock).toHaveBeenCalledWith(
       "https://github.com/tacogips/chilla/pull/12",
     );
+  });
+
+  it("renders commit source labels and jump action", async () => {
+    const commitTarget: GitHubPrTarget = {
+      owner: "tacogips",
+      repo: "chilla",
+      source: {
+        kind: "commit",
+        sha: "abcdef1234567890",
+      },
+      url: "https://github.com/tacogips/chilla/commit/abcdef1234567890",
+      use_cache: true,
+    };
+    loadPrDiffMock.mockResolvedValue(
+      snapshot(
+        [textDiffFile("README.md")],
+        commitTarget.source,
+        commitTarget.url,
+      ),
+    );
+
+    const root = document.getElementById("root");
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+    dispose = render(
+      () =>
+        PrDiffWorkspace({ target: { kind: "github", target: commitTarget } }),
+      root,
+    );
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("chilla @abcdef123456");
+      expect(document.body.textContent).toContain("Commit: Example PR");
+      expect(document.body.textContent).toContain("Commit");
+    });
+
+    click('[aria-label="Open source in GitHub"]');
+
+    expect(openUrlMock).toHaveBeenCalledWith(commitTarget.url);
+  });
+
+  it("renders compare source labels and jump action", async () => {
+    const compareTarget: GitHubPrTarget = {
+      owner: "tacogips",
+      repo: "chilla",
+      source: {
+        kind: "compare",
+        base: "main",
+        head: "feature/pr-diff",
+      },
+      url: "https://github.com/tacogips/chilla/compare/main...feature/pr-diff",
+      use_cache: false,
+    };
+    loadPrDiffMock.mockResolvedValue({
+      ...snapshot(
+        [textDiffFile("README.md")],
+        compareTarget.source,
+        compareTarget.url,
+      ),
+      identity: {
+        ...snapshot([], compareTarget.source, compareTarget.url).identity,
+        title: "Compare main...feature/pr-diff",
+        state: "ahead",
+        base_branch: "main",
+        head_branch: "feature/pr-diff",
+      },
+    });
+
+    const root = document.getElementById("root");
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+    dispose = render(
+      () =>
+        PrDiffWorkspace({ target: { kind: "github", target: compareTarget } }),
+      root,
+    );
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain(
+        "chilla main...feature/pr-diff",
+      );
+      expect(document.body.textContent).toContain(
+        "Compare: Compare main...feature/pr-diff",
+      );
+      expect(document.body.textContent).toContain("ahead");
+    });
+
+    click('[aria-label="Open source in GitHub"]');
+
+    expect(openUrlMock).toHaveBeenCalledWith(compareTarget.url);
   });
 
   it("starts at the top-level diff browser without opening a diff", async () => {
@@ -279,7 +383,7 @@ describe("PrDiffWorkspace", () => {
     renderWorkspace();
 
     await waitFor(() => {
-      expect(document.body.textContent).toContain("PR Files");
+      expect(document.body.textContent).toContain("Changed Files");
       expect(document.querySelector('[data-path=".agents"]')).not.toBeNull();
       expect(document.querySelector('[data-path="src"]')).not.toBeNull();
       expect(document.body.textContent).toContain("No file selected.");
@@ -486,7 +590,7 @@ describe("PrDiffWorkspace", () => {
     });
     expect(loadPrDiffFileTextMock).not.toHaveBeenCalled();
 
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "2" }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "3" }));
 
     await waitFor(() => {
       expect(loadPrDiffFileTextMock).toHaveBeenCalledWith(
@@ -561,14 +665,14 @@ describe("PrDiffWorkspace", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
     await waitFor(() => {
       expect(
-        document.querySelector('[aria-label="Full file diff"]'),
+        document.querySelector('[aria-label="Stack diff"]'),
       ).not.toBeNull();
     });
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
     await waitFor(() => {
       expect(
-        document.querySelector('[aria-label="Stack diff"]'),
+        document.querySelector('[aria-label="Full file diff"]'),
       ).not.toBeNull();
     });
 
@@ -582,14 +686,14 @@ describe("PrDiffWorkspace", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "2" }));
     await waitFor(() => {
       expect(
-        document.querySelector('[aria-label="Full file diff"]'),
+        document.querySelector('[aria-label="Stack diff"]'),
       ).not.toBeNull();
     });
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "3" }));
     await waitFor(() => {
       expect(
-        document.querySelector('[aria-label="Stack diff"]'),
+        document.querySelector('[aria-label="Full file diff"]'),
       ).not.toBeNull();
     });
 
@@ -783,6 +887,102 @@ describe("FullFileDiff", () => {
     expect(document.querySelector(".pr-syntax--string")?.textContent).toBe(
       '"hello"',
     );
+
+    dispose();
+    document.body.innerHTML = "";
+  });
+
+  it("highlights latest full-file changes and shows deletion markers", () => {
+    document.body.innerHTML = '<div id="root"></div>';
+    const root = document.getElementById("root");
+
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+
+    const file: PrDiffFile = {
+      path: "src/app.ts",
+      old_path: null,
+      status: PrFileStatus.Modified,
+      additions: 2,
+      deletions: 2,
+      is_binary: false,
+      raw_url:
+        "https://raw.githubusercontent.com/tacogips/chilla/main/src/app.ts",
+      chunks: [
+        {
+          old_start: 1,
+          old_lines: 5,
+          new_start: 1,
+          new_lines: 5,
+          header: "@@ -1,5 +1,5 @@",
+          changes: [
+            {
+              change_type: "context",
+              old_line: 1,
+              new_line: 1,
+              content: "same",
+            },
+            {
+              change_type: "delete",
+              old_line: 2,
+              new_line: null,
+              content: "old",
+            },
+            {
+              change_type: "add",
+              old_line: null,
+              new_line: 2,
+              content: "new",
+            },
+            {
+              change_type: "context",
+              old_line: 3,
+              new_line: 3,
+              content: "middle",
+            },
+            {
+              change_type: "add",
+              old_line: null,
+              new_line: 4,
+              content: "inserted",
+            },
+            {
+              change_type: "delete",
+              old_line: 4,
+              new_line: null,
+              content: "removed",
+            },
+            {
+              change_type: "context",
+              old_line: 5,
+              new_line: 5,
+              content: "after",
+            },
+          ],
+        },
+      ],
+      full_text: ["same", "new", "middle", "inserted", "after"].join("\n"),
+      full_text_truncated: false,
+    };
+
+    const dispose = render(() => FullFileDiff({ file }), root);
+
+    expect(document.querySelectorAll(".pr-diff-line--modify")).toHaveLength(1);
+    expect(
+      document.querySelector(".pr-diff-line--modify")?.textContent,
+    ).toContain("new");
+    expect(document.querySelectorAll(".pr-diff-line--add")).toHaveLength(1);
+    expect(document.querySelector(".pr-diff-line--add")?.textContent).toContain(
+      "inserted",
+    );
+    expect(
+      document.querySelectorAll(".pr-diff-line--delete-marker"),
+    ).toHaveLength(2);
+    expect(document.body.textContent).not.toContain("-1");
+    expect(document.body.textContent).not.toContain("deleted 1 line");
+    expect(document.body.textContent).not.toContain("old");
+    expect(document.body.textContent).not.toContain("removed");
 
     dispose();
     document.body.innerHTML = "";

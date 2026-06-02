@@ -248,38 +248,46 @@ See `design-docs/specs/design-epub-navigation.md` for EPUB TOC extraction, reade
 
 ---
 
-## GitHub PR Diff Viewer Architecture
+## GitHub Diff Viewer Architecture
 
-This section defines the design target for opening a GitHub pull request URL in chilla and browsing the pull request diff.
+This section defines the design target for opening a GitHub pull request, commit, or compare URL in chilla and browsing the resulting changed files.
 
 ### Product Scope
 
-- A GitHub pull request URL is a first-class startup target alongside local files and directories.
-- The user can pass a URL such as `https://github.com/<owner>/<repo>/pull/<number>` and open a read-only PR diff workspace.
-- The PR diff workspace uses qraftbox as a behavioral reference for diff rendering modes:
-  - side-by-side diff
-  - current-state diff view
-  - stack/inline diff view
+- A GitHub diff URL is a first-class startup target alongside local files and directories.
+- The user can pass any supported URL shape and open one read-only GitHub diff workspace:
+  - `https://github.com/<owner>/<repo>/pull/<number>`
+  - `https://github.com/<owner>/<repo>/pull/<number>/files`
+  - `https://github.com/<owner>/<repo>/commit/<sha>`
+  - `https://github.com/<owner>/<repo>/compare/<base>...<head>`
+- The diff workspace uses qraftbox as a behavioral reference for changed-file review while exposing chilla's requested modes:
+  - left/right diff
+  - stack/inline diff
+  - full-file diff
 - The left pane presents changed files as a yazi-style current-directory-only browser, not an expanded tree.
 - File navigation should feel like local file browsing: directory entry, parent navigation, sibling movement, keyboard selection, and pointer selection.
-- The first slice is a PR diff viewer, not a GitHub review/comment authoring tool.
+- The feature is a read-only GitHub diff viewer, not a GitHub review/comment authoring tool.
 
 ### Responsibility Split
 
 | Component | Stack | Responsibility |
 |-----------|-------|----------------|
-| Startup target parsing | Rust | Classify positional input as filesystem path or GitHub PR URL before app bootstrap |
-| GitHub PR diff service | Rust | Validate URL parts, retrieve PR metadata and diff file payloads, normalize errors |
-| Diff payload contract | Rust + TypeScript | Keep `PrDiff`, `DiffFile`, `DiffChunk`, and `DiffChange` serde/TypeScript shapes aligned |
-| PR diff workspace | Solid.js | Own selected file, selected directory, mode selection, keyboard navigation, and loading/error states |
+| Startup target parsing | Rust | Classify positional input as filesystem path or supported GitHub diff URL before app bootstrap |
+| GitHub diff target model | Rust + TypeScript | Represent source identity as pull request number, commit SHA, or compare base/head while preserving the existing Tauri payload envelope |
+| GitHub diff service | Rust | Validate URL parts, retrieve source metadata and diff file payloads, normalize errors, and own cache keys |
+| Diff payload contract | Rust + TypeScript | Keep `PrDiff`, `DiffFile`, `DiffChunk`, `DiffChange`, source identity, and full-file text payloads aligned |
+| GitHub diff workspace | Solid.js | Own selected file, selected directory, mode selection, keyboard navigation, source-aware labels, and loading/error states |
 | Changed-file browser | Solid.js | Project flat changed-file paths into a current-directory-only listing |
-| Diff renderer | Solid.js | Render side-by-side, current-state, and stack/inline modes from typed diff data |
+| Diff renderer | Solid.js | Render left/right, stack/inline, and full-file modes from typed diff data |
 
 ### Data Model
 
-The backend returns a typed PR diff snapshot rather than HTML. The snapshot should include:
+The backend returns a typed diff snapshot rather than HTML. The snapshot should include:
 
-- PR identity: owner, repository, number, canonical URL, title, state, base branch, and head branch.
+- Source identity: owner, repository, canonical URL, source kind, and source-specific details:
+  - pull request number, title, state, merged metadata, base branch, and head branch
+  - commit SHA, commit title/message summary, and authored/updated metadata
+  - compare base ref, head ref, status, ahead/behind metadata when available, and branch labels
 - Aggregate stats: file count, additions, deletions.
 - Changed files:
   - path
@@ -293,35 +301,52 @@ The backend returns a typed PR diff snapshot rather than HTML. The snapshot shou
   - truncated or omitted file markers when a platform limit is reached
   - user-actionable warning list when some files cannot be rendered
 
-This contract intentionally mirrors the qraftbox `DiffFile`, `DiffChunk`, `DiffChange`, and `ViewMode` concepts while remaining native to chilla's Rust/Tauri boundary.
+This contract intentionally mirrors the qraftbox `DiffFile`, `DiffChunk`, `DiffChange`, and view-mode concepts while remaining native to chilla's Rust/Tauri boundary. Existing `PrDiff*` type names may be retained internally during the transition, but product-facing labels and new design language should use "GitHub diff" rather than "PR diff" when behavior applies to all source kinds.
 
-### PR URL Validation
+### GitHub Diff URL Validation
 
-Accepted first-slice URLs:
+Accepted URLs:
 
 - `https://github.com/<owner>/<repo>/pull/<number>`
-- Same URL with query string or fragment, which should be ignored after validation.
+- `https://github.com/<owner>/<repo>/pull/<number>/files`
+- `https://github.com/<owner>/<repo>/commit/<sha>`
+- `https://github.com/<owner>/<repo>/compare/<base>...<head>`
+- The same URL shapes with query string or fragment, which should be ignored after validation.
 
-Rejected first-slice inputs:
+Validation rules:
 
 - Non-GitHub hosts.
 - Missing owner, repo, or pull request number.
 - Pull request numbers that are not positive integers.
+- Commit URLs with an empty SHA segment.
+- Compare URLs that do not contain exactly one non-empty base ref and one non-empty head ref around `...`.
 - Git remote URLs such as `git@github.com:owner/repo.git`; these are repository references, not PR targets.
 
-Validation errors should be returned as typed startup errors or workspace errors with clear messages. The UI should not guess repository context from the current local directory in this feature slice.
+Compare refs may contain slash-separated path segments, so parsing must preserve everything after `/compare/` before splitting on `...`. Query strings and fragments are removed before source parsing. Validation errors should be returned as typed startup errors or workspace errors with clear messages. The UI should not guess repository context from the current local directory in this feature slice.
 
 ### Diff Retrieval Boundary
 
 The backend owns network access and any GitHub credential usage. The frontend never calls GitHub directly.
 
-Initial implementation planning should choose one retrieval adapter behind a service boundary:
+Retrieval remains behind one Rust service boundary:
 
-- GitHub API adapter using pull request file metadata and patch content when authenticated or unauthenticated access is sufficient.
-- Raw `.diff` adapter using GitHub's diff endpoint for public repositories.
+- GitHub pull requests use the pull request metadata endpoint and pull request files endpoint.
+- GitHub commits use the commit endpoint and its file payloads.
+- GitHub compares use the compare endpoint and its file payloads.
+- Raw `.diff` retrieval remains available as a future fallback adapter for source shapes whose REST file payload is insufficient.
 - Future local-git adapter for users who want to fetch PR refs into an existing clone.
 
 The architecture should keep these options hidden behind one Rust service contract so later credential or private-repository support does not change the frontend.
+
+### Cache And Reload Policy
+
+Cache identity must include source kind and source-specific identity fields so pull request, commit, and compare URLs from the same repository cannot collide.
+
+- Pull request cache keys include owner, repo, and pull request number.
+- Commit cache keys include owner, repo, and commit SHA.
+- Compare cache keys include owner, repo, base ref, and head ref.
+- Canonical URL and API metadata update markers should be stored with the cache record to reject stale or mismatched records.
+- The no-cache option bypasses reads and writes for all source kinds.
 
 ### File Browser Projection
 
@@ -341,27 +366,37 @@ This projection is intentionally different from tree diff browsers. It preserves
 
 ### Diff Modes
 
-Chilla should expose three user-facing diff modes for PR viewing:
+Chilla should expose three user-facing diff modes for all GitHub diff source kinds:
 
 | Chilla mode | qraftbox reference | Behavior |
 |-------------|--------------------|----------|
-| Side by side | `side-by-side`, `diff_side_by_side.png` | Old and new columns are aligned with line-number gutters and changed rows highlighted |
-| Current | `current-state`, `diff_current.png` | Shows the resulting file state with additions/context emphasized and deleted-only lines omitted or represented as non-current metadata |
+| Left/right | `side-by-side`, `diff_side_by_side.png` | Old and new columns are aligned with line-number gutters and changed rows highlighted |
 | Stack | `inline`, `diff_stack.png` | Shows old/new changes in one vertical flow suitable for narrow widths and sequential review |
+| Full-file | qraftbox `full-file` behavior, adapted to chilla | Shows latest file content when available, highlights changed regions, and marks deleted locations without rendering deleted content as current file text |
 
-qraftbox also has a `full-file` view mode. That mode is not part of the user's requested three-mode scope and should not block the first design/implementation plan unless a later requirement explicitly adds it.
+Full-file mode may require lazy full-text retrieval from a GitHub raw URL. Missing raw URLs, binary files, deleted files, or too-large files should show explicit placeholders instead of failing the whole diff workspace.
 
 ### UI State Model
 
 | State | Owner | Notes |
 |-------|-------|-------|
-| PR URL and parsed identity | Rust + frontend mirror | Rust validates and canonicalizes |
-| Loaded PR diff snapshot | Rust-authored data | Frontend treats as immutable until reload |
+| GitHub URL and parsed source identity | Rust + frontend mirror | Rust validates and canonicalizes |
+| Loaded GitHub diff snapshot | Rust-authored data | Frontend treats as immutable until reload |
 | Current diff directory | Frontend | Defaults to root |
 | Selected changed file | Frontend | Defaults to first file in stable path order |
-| Diff mode | Frontend | Defaults to side-by-side on desktop and stack on narrow layouts if needed |
+| Diff mode | Frontend | Defaults to left/right on desktop and stack on narrow layouts if needed |
 | Loading/error state | Frontend | Derived from command lifecycle and typed backend errors |
 | GitHub credentials | Rust/process environment | Never serialized to the frontend |
+
+### Source-Aware UI Labels And Actions
+
+Labels, loading text, errors, header status, and the GitHub jump action must reflect the current source kind:
+
+- Pull request sources may show PR number, state, merge status, base branch, and head branch.
+- Commit sources should show commit SHA/title metadata and use "commit" wording.
+- Compare sources should show base/head refs and use "compare" wording.
+- The jump action opens the source canonical URL, not a PR-specific fallback.
+- Shared components should avoid hard-coded "PR" labels unless they are rendering pull-request-only metadata.
 
 ### Adapter And Reference Mapping
 
@@ -370,14 +405,71 @@ The qraftbox files in the sibling qraftbox checkout are behavioral references on
 - Reuse the concepts of `DiffFile`, chunks, change rows, and view modes.
 - Do not copy qraftbox Svelte component code into the Solid frontend.
 - Keep any GitHub retrieval adapter behind chilla-local Rust modules rather than importing qraftbox server code.
-- qraftbox comment-selection behavior is out of scope for this first PR viewer slice.
+- qraftbox comment-selection behavior is out of scope for this GitHub diff viewer slice.
+- No Cursor CLI or codex-agent runtime behavior is part of this design unless later workflow input supplies concrete reference files; any future reference-specific behavior must stay isolated behind adapter modules.
+
+### Local Git Diff Extension
+
+The same changed-file browser and diff renderer should also support local Git repositories. Local Git diff mode is a source adapter that feeds the existing diff workspace with local repository data; it is not a separate editor mode and must not replace the current GitHub PR, commit, and compare behavior.
+
+Local Git source kinds:
+
+- `working_tree`: uncommitted changes for a detected repository, including staged tracked changes, unstaged tracked changes, and untracked non-ignored files.
+- `commit`: one local commit compared with its first parent; a root commit is compared with Git's empty tree.
+- `range`: two endpoints compared as a commit range. Two-dot ranges compare the left and right revisions directly; three-dot ranges compare the merge base with the right revision.
+
+The existing internal `pr_diff` route and `PrDiff*` names may remain as a compatibility bridge while implementation is localized. Product copy, design language, and future public types should move toward source-neutral "Git diff" or "diff viewer" wording when behavior applies to both GitHub and local Git sources.
+
+### Local Git Repository Boundary
+
+Rust must own repository discovery and containment.
+
+- When a local directory is opened, Rust determines whether it is inside a Git repository with Git itself, then records the repository root and current working directory in startup or workspace state.
+- Switching into local Git diff mode is available only when a repository root is detected.
+- While local Git diff mode is active, changed-file browsing is rooted at the repository root. Parent navigation above that root is invalid, even if the originally opened directory was nested inside the repository.
+- Every local diff file read, full-file load, and directory projection request must validate that the requested path or repository-relative path remains under the repository root after canonicalization or Git path normalization.
+- Containment is enforced in Rust commands, not only in frontend state.
+
+The frontend may mirror `repositoryRoot`, `currentDirectory`, and `sourceKind` for labels and navigation, but it must treat Rust as authoritative for file access and diff snapshots.
+
+### Local Git Data Flow
+
+Local Git diff snapshots are backend-authored and source-aware:
+
+1. The frontend requests a local diff for a repository root and source kind.
+2. Rust validates the repository root, resolves commit or range arguments with `git rev-parse`, and rejects ambiguous or invalid revisions before diff retrieval.
+3. Rust invokes Git with structured arguments and a fixed working directory; it does not build shell command strings.
+4. Rust parses unified diff output into the same changed-file, chunk, and line-change model used by GitHub diffs.
+5. Rust returns source metadata, aggregate stats, warnings, and changed files to the existing diff workspace.
+6. Full-file mode loads content from the working tree for `working_tree`, from the selected commit for `commit`, and from the right-side revision for `range`.
+
+Local Git snapshots should not use the existing GitHub network cache. Working-tree snapshots are mutable and should be reloaded on request or when a future file-watch integration explicitly invalidates them. Commit and range snapshots may be cached later only with keys that include repository identity, resolved revisions, source kind, and repository path.
+
+### Local Git Diff Edge Cases
+
+- Deleted files render hunks and deletion markers; full-file mode shows an explicit deleted-file placeholder.
+- Binary files, submodules, and too-large full-file payloads produce explicit non-rendered entries instead of failing the whole workspace.
+- Renames preserve both old and new paths and remain discoverable through the projected changed-file browser.
+- Untracked files have no old side and are represented as added files with untracked source metadata.
+- Empty local diffs should render an empty-state message scoped to the selected source kind.
+
+### Source-Aware Diff Workspace
+
+The diff workspace must distinguish source kind without duplicating rendering logic.
+
+- GitHub sources keep the GitHub jump action and GitHub-specific metadata.
+- Local Git sources show repository-relative labels, commit or range labels, and no GitHub jump action.
+- Shared controls for left/right, stack, and full-file modes remain available for every source kind when the file payload supports them.
+- Loading and error copy should name the source: pull request, GitHub commit, GitHub compare, local changes, local commit, or local range.
+- Any adapter-specific behavior stays behind Rust and TypeScript source adapters; Cursor CLI or codex-agent execution behavior is not part of this product surface.
 
 ### Rollout Constraints
 
 - This is mixed-stack Tauri work; implementation must update Rust and TypeScript command contracts together.
 - Tauri permissions must be updated if a new invoke command is added.
 - Large diffs need explicit first-slice limits or lazy rendering before broad release.
-- Errors for network failure, rate limits, missing PRs, private repository access, and malformed URLs must be actionable.
+- Errors for network failure, rate limits, missing pull requests/commits/compares, private repository access, and malformed URLs must be actionable.
+- Errors for missing Git, non-repository directories, invalid revisions, unsafe paths, and repositories with no changes must be actionable.
 - Verification should cover Bun typecheck/tests and Cargo checks/tests with quiet Cargo output.
 
 ---

@@ -14,6 +14,7 @@ import { Portal } from "solid-js/web";
 import type {
   DirectoryEntry,
   DirectoryListSort,
+  DiffWorkspaceTarget,
   DocumentPresentationMode,
   DocumentSnapshot,
   EpubNavigationItem,
@@ -30,6 +31,7 @@ import { writeTextToClipboard } from "../../lib/clipboard";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import {
   getStartupContext,
+  detectGitRepository,
   isMarkdownPath,
   listenDocumentRefreshed,
   listDirectory,
@@ -170,6 +172,10 @@ const SHORTCUT_SECTIONS: readonly {
       {
         keys: ["Shift", "L"],
         description: "Toggle file tree",
+      },
+      {
+        keys: ["G"],
+        description: "Toggle local Git diff for the opened repository",
       },
       {
         keys: ["Y"],
@@ -772,6 +778,8 @@ export function WorkspaceShell() {
   let selectionPreviewDebounceTimer: number | undefined;
   const [startupContext, setStartupContext] =
     createSignal<StartupContext | null>(null);
+  const [activeGitDiffTarget, setActiveGitDiffTarget] =
+    createSignal<DiffWorkspaceTarget | null>(null);
   const [directoryState, setDirectoryState] =
     createSignal<LoadedDirectoryState | null>(null);
   const [directorySort, setDirectorySort] = createSignal<DirectoryListSort>(
@@ -1293,9 +1301,15 @@ export function WorkspaceShell() {
       const browserRoot = nextStartupContext.browser_root;
 
       if (browserRoot.kind === "github_pr") {
+        setActiveGitDiffTarget(null);
+        setFileTreeOpen(true);
+        clearDocumentArea();
+      } else if (browserRoot.kind === "git_diff") {
+        setActiveGitDiffTarget(null);
         setFileTreeOpen(true);
         clearDocumentArea();
       } else if (browserRoot.kind === "directory") {
+        setActiveGitDiffTarget(null);
         setFileTreeOpen(browserRoot.selected_file_path === null);
 
         await loadDirectoryState(
@@ -1307,6 +1321,7 @@ export function WorkspaceShell() {
           await previewSelectedFile(browserRoot.selected_file_path);
         }
       } else {
+        setActiveGitDiffTarget(null);
         setFileTreeOpen(true);
 
         await loadExplicitFileSetState(
@@ -1372,6 +1387,7 @@ export function WorkspaceShell() {
       clearSelectionPreviewDebounce();
       stopWatchingCurrentDocument();
       clearDocumentArea();
+      setActiveGitDiffTarget(null);
       setStartupContext(startupContextForPickedTarget(target));
 
       if (target.kind === "single_file") {
@@ -1402,6 +1418,47 @@ export function WorkspaceShell() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleOpenGitDiff = async () => {
+    const currentDirectory = directoryState();
+    if (
+      currentDirectory === null ||
+      currentDirectory.listingKind !== "directory"
+    ) {
+      setErrorMessage(
+        "Open a Git repository directory before switching to Git diff.",
+      );
+      return;
+    }
+
+    try {
+      const target = await detectGitRepository(
+        currentDirectory.current_directory_path,
+      );
+      if (target === null) {
+        setErrorMessage("This directory is not inside a Git repository.");
+        return;
+      }
+
+      stopWatchingCurrentDocument();
+      clearSelectionPreviewDebounce();
+      clearDocumentArea();
+      setFileTreeOpen(true);
+      setActiveGitDiffTarget({
+        kind: "git",
+        target,
+      });
+      setErrorMessage(null);
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to open Git diff",
+      );
+    }
+  };
+
+  const handleCloseGitDiff = () => {
+    setActiveGitDiffTarget(null);
   };
 
   const handleCopyCurrentPath = async () => {
@@ -1589,11 +1646,28 @@ export function WorkspaceShell() {
     return preview?.kind === "csv" ? preview : null;
   });
   const currentOpenPath = () => md()?.path ?? previewPath(fp());
-  const prTarget = createMemo(() => {
+  const diffTarget = createMemo<DiffWorkspaceTarget | null>(() => {
+    const activeGit = activeGitDiffTarget();
+    if (activeGit !== null) {
+      return activeGit;
+    }
+
     const context = startupContext();
-    return context?.browser_root.kind === "github_pr"
-      ? context.browser_root.target
-      : null;
+    if (context?.browser_root.kind === "github_pr") {
+      return {
+        kind: "github",
+        target: context.browser_root.target,
+      };
+    }
+
+    if (context?.browser_root.kind === "git_diff") {
+      return {
+        kind: "git",
+        target: context.browser_root.target,
+      };
+    }
+
+    return null;
   });
   const hasOpenDocument = () => md() !== null || fp() !== null;
   const hasTocDocument = createMemo(
@@ -1676,7 +1750,7 @@ export function WorkspaceShell() {
   };
 
   const viewerGridClassName = createMemo(() => {
-    if (prTarget() !== null) {
+    if (diffTarget() !== null) {
       return "workspace__body workspace__body--pr-diff";
     }
 
@@ -1812,6 +1886,21 @@ export function WorkspaceShell() {
         event.preventDefault();
         setFileTreeOpen((value) => !value);
         return;
+      }
+
+      if (matchesShortcut(event, "g")) {
+        const gitTarget = activeGitDiffTarget();
+        if (gitTarget !== null) {
+          event.preventDefault();
+          handleCloseGitDiff();
+          return;
+        }
+
+        if (diffTarget() === null) {
+          event.preventDefault();
+          void handleOpenGitDiff();
+          return;
+        }
       }
 
       if (!isFileTreeOpen()) {
@@ -2055,6 +2144,40 @@ export function WorkspaceShell() {
               }}
             </Show>
 
+            <Show
+              when={activeGitDiffTarget() !== null}
+              fallback={
+                <Show
+                  when={
+                    diffTarget() === null &&
+                    directoryState()?.listingKind === "directory"
+                  }
+                >
+                  <button
+                    class="button button--ghost"
+                    type="button"
+                    aria-label="Open Git diff mode"
+                    title="Open Git diff mode"
+                    onClick={() => {
+                      void handleOpenGitDiff();
+                    }}
+                  >
+                    Git diff
+                  </button>
+                </Show>
+              }
+            >
+              <button
+                class="button button--ghost"
+                type="button"
+                aria-label="Return to file view"
+                title="Return to file view"
+                onClick={handleCloseGitDiff}
+              >
+                File view
+              </button>
+            </Show>
+
             <button
               class="button"
               type="button"
@@ -2190,10 +2313,10 @@ export function WorkspaceShell() {
         </Show>
 
         <div class={viewerGridClassName()}>
-          <Show when={prTarget()}>
+          <Show when={diffTarget()}>
             {(target) => <PrDiffWorkspace target={target()} />}
           </Show>
-          <Show when={prTarget() === null}>
+          <Show when={diffTarget() === null}>
             <>
               <Show when={isFileTreeOpen()}>
                 <FileBrowserPane
@@ -2411,7 +2534,11 @@ export function WorkspaceShell() {
                 }
 
                 if (context.browser_root.kind === "github_pr") {
-                  return "Opening the requested pull request...";
+                  return "Opening the requested GitHub diff...";
+                }
+
+                if (context.browser_root.kind === "git_diff") {
+                  return "Opening the requested Git diff...";
                 }
 
                 if (context.browser_root.kind === "explicit_file_set") {

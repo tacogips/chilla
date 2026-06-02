@@ -184,7 +184,10 @@ describe("normalizeStartupContextPayload", () => {
           target: {
             owner: "tacogips",
             repo: "chilla",
-            number: 12,
+            source: {
+              kind: "pull_request",
+              number: 12,
+            },
             url: "https://github.com/tacogips/chilla/pull/12",
             use_cache: false,
           },
@@ -197,7 +200,10 @@ describe("normalizeStartupContextPayload", () => {
         target: {
           owner: "tacogips",
           repo: "chilla",
-          number: 12,
+          source: {
+            kind: "pull_request",
+            number: 12,
+          },
           url: "https://github.com/tacogips/chilla/pull/12",
           use_cache: false,
         },
@@ -205,7 +211,7 @@ describe("normalizeStartupContextPayload", () => {
     });
   });
 
-  it("defaults GitHub PR startup payloads to cache-enabled", () => {
+  it("accepts legacy GitHub PR startup payload numbers and defaults cache-enabled", () => {
     const context = normalizeStartupContextPayload({
       initial_mode: "pr_diff",
       browser_root: {
@@ -224,22 +230,135 @@ describe("normalizeStartupContextPayload", () => {
       target: {
         owner: "tacogips",
         repo: "rielflow",
-        number: 44,
+        source: {
+          kind: "pull_request",
+          number: 44,
+        },
         url: "https://github.com/tacogips/rielflow/pull/44",
         use_cache: true,
+      },
+    });
+  });
+
+  it("accepts GitHub commit startup payloads", () => {
+    expect(
+      normalizeStartupContextPayload({
+        initial_mode: "pr_diff",
+        browser_root: {
+          kind: "github_pr",
+          target: {
+            owner: "tacogips",
+            repo: "chilla",
+            source: {
+              kind: "commit",
+              sha: "abcdef123456",
+            },
+            url: "https://github.com/tacogips/chilla/commit/abcdef123456",
+          },
+        },
+      }),
+    ).toEqual({
+      initial_mode: "pr_diff",
+      browser_root: {
+        kind: "github_pr",
+        target: {
+          owner: "tacogips",
+          repo: "chilla",
+          source: {
+            kind: "commit",
+            sha: "abcdef123456",
+          },
+          url: "https://github.com/tacogips/chilla/commit/abcdef123456",
+          use_cache: true,
+        },
+      },
+    });
+  });
+
+  it("accepts GitHub compare startup payloads", () => {
+    expect(
+      normalizeStartupContextPayload({
+        initial_mode: "pr_diff",
+        browser_root: {
+          kind: "github_pr",
+          target: {
+            owner: "tacogips",
+            repo: "chilla",
+            source: {
+              kind: "compare",
+              base: "main",
+              head: "feature/pr-diff",
+            },
+            url: "https://github.com/tacogips/chilla/compare/main...feature/pr-diff",
+            useCache: false,
+          },
+        },
+      }),
+    ).toEqual({
+      initial_mode: "pr_diff",
+      browser_root: {
+        kind: "github_pr",
+        target: {
+          owner: "tacogips",
+          repo: "chilla",
+          source: {
+            kind: "compare",
+            base: "main",
+            head: "feature/pr-diff",
+          },
+          url: "https://github.com/tacogips/chilla/compare/main...feature/pr-diff",
+          use_cache: false,
+        },
+      },
+    });
+  });
+
+  it("accepts local Git diff startup payloads", () => {
+    expect(
+      normalizeStartupContextPayload({
+        initial_mode: "pr_diff",
+        browser_root: {
+          kind: "git_diff",
+          target: {
+            repo_path: "/workspace/repo",
+            source: {
+              kind: "range",
+              base: "main",
+              head: "feature/local-git",
+              merge_base: true,
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      initial_mode: "pr_diff",
+      browser_root: {
+        kind: "git_diff",
+        target: {
+          repo_path: "/workspace/repo",
+          source: {
+            kind: "range",
+            base: "main",
+            head: "feature/local-git",
+            merge_base: true,
+          },
+        },
       },
     });
   });
 });
 
 describe("normalizePrDiffSnapshotPayload", () => {
-  it("accepts complete PR diff payloads", () => {
+  it("accepts complete GitHub diff payloads", () => {
     expect(
       normalizePrDiffSnapshotPayload({
         identity: {
           owner: "tacogips",
           repo: "chilla",
-          number: 12,
+          source: {
+            kind: "pull_request",
+            number: 12,
+          },
           url: "https://github.com/tacogips/chilla/pull/12",
           title: "Example",
           state: "open",
@@ -294,7 +413,10 @@ describe("normalizePrDiffSnapshotPayload", () => {
       identity: {
         owner: "tacogips",
         repo: "chilla",
-        number: 12,
+        source: {
+          kind: "pull_request",
+          number: 12,
+        },
         url: "https://github.com/tacogips/chilla/pull/12",
         title: "Example",
         state: "open",
@@ -347,13 +469,16 @@ describe("normalizePrDiffSnapshotPayload", () => {
     });
   });
 
-  it("rejects malformed PR diff files", () => {
+  it("rejects malformed GitHub diff files", () => {
     expect(() =>
       normalizePrDiffSnapshotPayload({
         identity: {
           owner: "tacogips",
           repo: "chilla",
-          number: 12,
+          source: {
+            kind: "pull_request",
+            number: 12,
+          },
           url: "https://github.com/tacogips/chilla/pull/12",
           title: "Example",
           state: null,
@@ -381,6 +506,6 @@ describe("normalizePrDiffSnapshotPayload", () => {
         deletions: 1,
         warnings: [],
       }),
-    ).toThrow("PR diff file payload is missing required fields");
+    ).toThrow("GitHub diff file payload is missing required fields");
   });
 });

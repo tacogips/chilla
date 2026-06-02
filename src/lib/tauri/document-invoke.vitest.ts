@@ -10,7 +10,13 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(),
 }));
 
-import { listDirectory, loadPrDiff, loadPrDiffFileText } from "./document";
+import {
+  detectGitRepository,
+  listDirectory,
+  loadGitDiff,
+  loadPrDiff,
+  loadPrDiffFileText,
+} from "./document";
 import type { DirectoryPage, DirectoryListSort } from "./document";
 
 describe("listDirectory", () => {
@@ -69,11 +75,14 @@ describe("loadPrDiff", () => {
     invokeMock.mockReset();
   });
 
-  it("sends the GitHub PR target through the Tauri command", async () => {
+  it("sends source-aware GitHub diff targets through the Tauri command", async () => {
     const target = {
       owner: "tacogips",
       repo: "chilla",
-      number: 12,
+      source: {
+        kind: "pull_request" as const,
+        number: 12,
+      },
       url: "https://github.com/tacogips/chilla/pull/12",
       use_cache: false,
     };
@@ -81,7 +90,7 @@ describe("loadPrDiff", () => {
       identity: {
         owner: target.owner,
         repo: target.repo,
-        number: target.number,
+        source: target.source,
         url: target.url,
         title: "Example",
         state: "open",
@@ -102,6 +111,128 @@ describe("loadPrDiff", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("load_pr_diff", {
       target,
+    });
+  });
+
+  it("sends commit and compare targets without rewriting source identity", async () => {
+    const commitTarget = {
+      owner: "tacogips",
+      repo: "chilla",
+      source: {
+        kind: "commit" as const,
+        sha: "abcdef123456",
+      },
+      url: "https://github.com/tacogips/chilla/commit/abcdef123456",
+      use_cache: true,
+    };
+    const compareTarget = {
+      owner: "tacogips",
+      repo: "chilla",
+      source: {
+        kind: "compare" as const,
+        base: "main",
+        head: "feature/pr-diff",
+      },
+      url: "https://github.com/tacogips/chilla/compare/main...feature/pr-diff",
+      use_cache: false,
+    };
+    const response = {
+      identity: {
+        owner: "tacogips",
+        repo: "chilla",
+        source: commitTarget.source,
+        url: commitTarget.url,
+        title: "Example",
+        state: null,
+        merged: false,
+        merged_at: null,
+        updated_at: null,
+        base_branch: null,
+        head_branch: null,
+      },
+      files: [],
+      additions: 0,
+      deletions: 0,
+      warnings: [],
+    };
+    invokeMock.mockResolvedValue(response);
+
+    await loadPrDiff(commitTarget);
+    await loadPrDiff(compareTarget);
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "load_pr_diff", {
+      target: commitTarget,
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "load_pr_diff", {
+      target: compareTarget,
+    });
+  });
+});
+
+describe("loadGitDiff", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("sends local Git diff targets through the Tauri command", async () => {
+    const target = {
+      repo_path: "/workspace/repo",
+      source: {
+        kind: "worktree" as const,
+      },
+    };
+    const response = {
+      identity: {
+        owner: "local",
+        repo: "repo",
+        source: {
+          kind: "git_worktree",
+          repo_path: "/workspace/repo",
+        },
+        url: "/workspace/repo",
+        title: "Uncommitted changes in /workspace/repo",
+        state: "uncommitted",
+        merged: false,
+        merged_at: null,
+        updated_at: null,
+        base_branch: null,
+        head_branch: null,
+      },
+      files: [],
+      additions: 0,
+      deletions: 0,
+      warnings: [],
+    };
+    invokeMock.mockResolvedValue(response);
+
+    await expect(loadGitDiff(target)).resolves.toEqual(response);
+
+    expect(invokeMock).toHaveBeenCalledWith("load_git_diff", {
+      target,
+    });
+  });
+});
+
+describe("detectGitRepository", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("normalizes detected local Git worktree targets", async () => {
+    const response = {
+      repo_path: "/workspace/repo",
+      source: {
+        kind: "worktree",
+      },
+    };
+    invokeMock.mockResolvedValue(response);
+
+    await expect(detectGitRepository("/workspace/repo/src")).resolves.toEqual(
+      response,
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith("detect_git_repository", {
+      path: "/workspace/repo/src",
     });
   });
 });

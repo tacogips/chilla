@@ -44,6 +44,8 @@ At the moment, Markdown source is viewable in a raw pane, but this app does not 
 - Mermaid hydration on the frontend after preview render
 - Local Markdown image resolution with HEIC / HEIF image fallback and open-in-default-app affordance when the WebView cannot render an image
 - Direct image-file previews for common raster formats and HEIC / HEIF files that the platform WebView can decode
+- GitHub diff URL viewer for pull requests, commits, and compares with changed-file browsing, GitHub jump action, cached diff loading, and diff modes for left/right, stack, and full-file review
+- Local Git diff viewer for uncommitted repository changes and commit/range startup diffs using the same diff modes
 - Automatic refresh of opened Markdown documents when the file changes on disk
 - Theme toggle with frontend CSS variables and backend syntax-theme synchronization
 - Custom undecorated desktop window chrome
@@ -60,6 +62,7 @@ Global shortcuts:
 - `J` or `ArrowDown`: scroll the active file view down one line when the file tree is hidden
 - `K` or `ArrowUp`: scroll the active file view up one line when the file tree is hidden
 - `Shift+L`: toggle file tree
+- `G`: toggle local Git diff for the opened repository
 - `Y`: copy the selected file or directory absolute path
 - `R`: reload the current file
 - `Shift+T`: toggle table of contents for Markdown
@@ -95,6 +98,26 @@ Image preview:
 - Markdown image links resolve local image paths relative to the Markdown document, including `.heic`, `.heif`, `.heics`, and `.heifs` files.
 - Direct file previews classify HEIC / HEIF files as images instead of generic binary files.
 - HEIC / HEIF display depends on the platform WebView decoder; when an image cannot render, chilla shows a fallback with an option to open the file in the default app.
+
+Diff viewer:
+
+- Pass a GitHub diff URL to open read-only GitHub diff mode:
+  - `https://github.com/<owner>/<repo>/pull/<number>`
+  - `https://github.com/<owner>/<repo>/pull/<number>/files`
+  - `https://github.com/<owner>/<repo>/commit/<sha>`
+  - `https://github.com/<owner>/<repo>/compare/<base>...<head>`
+- Add `--no-github-diff-cache` before the URL to bypass the temp-directory cache. The older `--no-pr-diff-cache` flag remains available as a compatibility alias.
+- Open a directory inside a Git repository and use `Git diff` to switch to uncommitted-change diff mode.
+- Start commit/range diff mode with:
+  - `chilla <git-dir> <commit>`
+  - `chilla <git-dir> <base>..<head>`
+  - `chilla <git-dir> <base>...<head>`
+- `1`: left/right diff
+- `2`: stack diff
+- `3`: full-file view
+- `Tab`: cycle diff modes in the same order
+- `O`: open the pull request, commit, or compare source in GitHub when reviewing a GitHub diff
+- Full-file view shows the latest file content, highlights added and modified lines, and marks deleted locations with a thin red line without rendering deleted content.
 
 ## Architecture
 

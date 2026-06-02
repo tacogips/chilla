@@ -25,10 +25,84 @@ const USER_AGENT_VALUE: &str = concat!("chilla/", env!("CARGO_PKG_VERSION"));
 pub struct GitHubPrTarget {
     pub owner: String,
     pub repo: String,
-    pub number: u64,
+    pub source: GitHubDiffSource,
     pub url: String,
     #[serde(default = "default_use_cache")]
     pub use_cache: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum GitHubDiffSource {
+    PullRequest {
+        number: u64,
+    },
+    Commit {
+        sha: String,
+    },
+    Compare {
+        base: String,
+        head: String,
+    },
+    GitWorktree {
+        repo_path: String,
+    },
+    GitCommit {
+        repo_path: String,
+        commit: String,
+    },
+    GitRange {
+        repo_path: String,
+        base: String,
+        head: String,
+        merge_base: bool,
+    },
+}
+
+impl GitHubDiffSource {
+    #[must_use]
+    pub fn pull_request_number(&self) -> Option<u64> {
+        match self {
+            Self::PullRequest { number } => Some(*number),
+            Self::Commit { .. }
+            | Self::Compare { .. }
+            | Self::GitWorktree { .. }
+            | Self::GitCommit { .. }
+            | Self::GitRange { .. } => None,
+        }
+    }
+
+    #[must_use]
+    fn request_context(&self) -> &'static str {
+        match self {
+            Self::PullRequest { .. } => "pull request",
+            Self::Commit { .. } => "commit",
+            Self::Compare { .. } => "compare",
+            Self::GitWorktree { .. } => "local git worktree",
+            Self::GitCommit { .. } => "local git commit",
+            Self::GitRange { .. } => "local git range",
+        }
+    }
+
+    #[must_use]
+    fn fallback_title(&self) -> String {
+        match self {
+            Self::PullRequest { number } => format!("Pull request #{number}"),
+            Self::Commit { sha } => format!("Commit {}", short_sha(sha)),
+            Self::Compare { base, head } => format!("Compare {base}...{head}"),
+            Self::GitWorktree { repo_path } => format!("Uncommitted changes in {repo_path}"),
+            Self::GitCommit { commit, .. } => format!("Commit {}", short_sha(commit)),
+            Self::GitRange {
+                base,
+                head,
+                merge_base,
+                ..
+            } => {
+                let separator = if *merge_base { "..." } else { ".." };
+                format!("Git diff {base}{separator}{head}")
+            }
+        }
+    }
 }
 
 impl GitHubPrTarget {
@@ -40,7 +114,7 @@ impl GitHubPrTarget {
             .map_or(without_fragment, |(head, _)| head);
         let Some(rest) = without_query.strip_prefix("https://") else {
             return Err(AppError::cli_usage(
-                "GitHub pull request URLs must start with https://github.com/",
+                "GitHub diff URLs must start with https://github.com/",
                 2,
             ));
         };
@@ -52,7 +126,7 @@ impl GitHubPrTarget {
             }
         }) else {
             return Err(AppError::cli_usage(
-                "Only github.com pull request URLs are supported",
+                "Only github.com diff URLs are supported",
                 2,
             ));
         };
@@ -62,32 +136,85 @@ impl GitHubPrTarget {
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>();
         if parts.len() < 4 || parts[2] != "pull" {
-            return Err(AppError::cli_usage(
-                "Expected GitHub pull request URL shape: https://github.com/<owner>/<repo>/pull/<number> or https://github.com/<owner>/<repo>/pull/<number>/files",
-                2,
-            ));
+            return Self::parse_non_pr_url(&parts);
         }
 
-        let number = parts[3].parse::<u64>().map_err(|_| {
-            AppError::cli_usage("GitHub pull request number must be a positive integer", 2)
-        })?;
-        if number == 0 {
-            return Err(AppError::cli_usage(
-                "GitHub pull request number must be greater than zero",
-                2,
-            ));
+        if parts.len() > 5 || parts.get(4).is_some_and(|part| *part != "files") {
+            return Err(github_url_shape_error());
         }
 
         let owner = parts[0].to_string();
         let repo = parts[1].to_string();
+        let number = parse_pull_request_number(parts[3])?;
 
         Ok(Self {
             url: format!("https://github.com/{owner}/{repo}/pull/{number}"),
             owner,
             repo,
-            number,
+            source: GitHubDiffSource::PullRequest { number },
             use_cache: true,
         })
+    }
+
+    fn parse_non_pr_url(parts: &[&str]) -> AppResult<Self> {
+        if parts.len() < 4 {
+            return Err(github_url_shape_error());
+        }
+
+        let owner = parts[0].to_string();
+        let repo = parts[1].to_string();
+
+        match parts[2] {
+            "commit" => {
+                if parts.len() != 4 {
+                    return Err(github_url_shape_error());
+                }
+                let sha = parts[3].trim();
+                if sha.is_empty() {
+                    return Err(AppError::cli_usage(
+                        "GitHub commit URL is missing a commit SHA",
+                        2,
+                    ));
+                }
+
+                Ok(Self {
+                    url: format!("https://github.com/{owner}/{repo}/commit/{sha}"),
+                    owner,
+                    repo,
+                    source: GitHubDiffSource::Commit {
+                        sha: sha.to_string(),
+                    },
+                    use_cache: true,
+                })
+            }
+            "compare" => {
+                let comparison = parts[3..].join("/");
+                let Some((base, head)) = comparison.split_once("...") else {
+                    return Err(AppError::cli_usage(
+                        "GitHub compare URLs must use /compare/<base>...<head>",
+                        2,
+                    ));
+                };
+                if base.is_empty() || head.is_empty() || head.contains("...") {
+                    return Err(AppError::cli_usage(
+                        "GitHub compare URLs require both base and head refs",
+                        2,
+                    ));
+                }
+
+                Ok(Self {
+                    url: format!("https://github.com/{owner}/{repo}/compare/{base}...{head}"),
+                    owner,
+                    repo,
+                    source: GitHubDiffSource::Compare {
+                        base: base.to_string(),
+                        head: head.to_string(),
+                    },
+                    use_cache: true,
+                })
+            }
+            _ => Err(github_url_shape_error()),
+        }
     }
 
     #[must_use]
@@ -97,16 +224,59 @@ impl GitHubPrTarget {
 
     #[must_use]
     pub fn api_url(&self) -> String {
-        format!(
-            "{GITHUB_API_HOST}/repos/{}/{}/pulls/{}",
-            self.owner, self.repo, self.number
-        )
+        match &self.source {
+            GitHubDiffSource::PullRequest { number } => format!(
+                "{GITHUB_API_HOST}/repos/{}/{}/pulls/{}",
+                self.owner, self.repo, number
+            ),
+            GitHubDiffSource::Commit { sha } => format!(
+                "{GITHUB_API_HOST}/repos/{}/{}/commits/{}",
+                self.owner, self.repo, sha
+            ),
+            GitHubDiffSource::Compare { base, head } => format!(
+                "{GITHUB_API_HOST}/repos/{}/{}/compare/{}...{}",
+                self.owner, self.repo, base, head
+            ),
+            GitHubDiffSource::GitWorktree { .. }
+            | GitHubDiffSource::GitCommit { .. }
+            | GitHubDiffSource::GitRange { .. } => String::new(),
+        }
     }
 
     #[must_use]
     pub fn files_api_url(&self) -> String {
         format!("{}/files", self.api_url())
     }
+
+    #[must_use]
+    fn api_context(&self) -> &'static str {
+        self.source.request_context()
+    }
+}
+
+fn short_sha(sha: &str) -> &str {
+    sha.get(..sha.len().min(12)).unwrap_or(sha)
+}
+
+fn github_url_shape_error() -> AppError {
+    AppError::cli_usage(
+        "Expected GitHub diff URL shape: https://github.com/<owner>/<repo>/pull/<number>, /pull/<number>/files, /commit/<sha>, or /compare/<base>...<head>",
+        2,
+    )
+}
+
+fn parse_pull_request_number(value: &str) -> AppResult<u64> {
+    let number = value.parse::<u64>().map_err(|_| {
+        AppError::cli_usage("GitHub pull request number must be a positive integer", 2)
+    })?;
+    if number == 0 {
+        return Err(AppError::cli_usage(
+            "GitHub pull request number must be greater than zero",
+            2,
+        ));
+    }
+
+    Ok(number)
 }
 
 fn default_use_cache() -> bool {
@@ -173,7 +343,7 @@ pub struct PrDiffFileText {
 pub struct PrDiffIdentity {
     pub owner: String,
     pub repo: String,
-    pub number: u64,
+    pub source: GitHubDiffSource,
     pub url: String,
     pub title: String,
     pub state: Option<String>,
@@ -193,6 +363,23 @@ pub struct PrDiffSnapshot {
     pub warnings: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GitHubDiffMetadata {
+    title: Option<String>,
+    state: Option<String>,
+    merged: Option<bool>,
+    merged_at: Option<String>,
+    updated_at: Option<String>,
+    base_branch: Option<String>,
+    head_branch: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct PrDiffCacheRecord {
+    updated_at: String,
+    snapshot: PrDiffSnapshot,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct GitHubPullResponse {
     title: Option<String>,
@@ -204,10 +391,38 @@ pub(crate) struct GitHubPullResponse {
     head: Option<GitHubBranchRef>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct PrDiffCacheRecord {
-    updated_at: String,
-    snapshot: PrDiffSnapshot,
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct GitHubCommitResponse {
+    sha: Option<String>,
+    commit: Option<GitHubCommitDetails>,
+    #[serde(default)]
+    files: Vec<GitHubPullFileResponse>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GitHubCommitDetails {
+    message: Option<String>,
+    author: Option<GitHubCommitPerson>,
+    committer: Option<GitHubCommitPerson>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GitHubCommitPerson {
+    date: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct GitHubCompareResponse {
+    status: Option<String>,
+    #[serde(default)]
+    ahead_by: Option<u32>,
+    #[serde(default)]
+    behind_by: Option<u32>,
+    base_commit: Option<GitHubCommitResponse>,
+    #[serde(default)]
+    commits: Vec<GitHubCommitResponse>,
+    #[serde(default)]
+    files: Vec<GitHubPullFileResponse>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -231,8 +446,131 @@ struct GitHubBranchRef {
     branch_ref: Option<String>,
 }
 
+fn metadata_from_pull_response(response: GitHubPullResponse) -> GitHubDiffMetadata {
+    GitHubDiffMetadata {
+        title: response.title,
+        state: response.state,
+        merged: response.merged,
+        merged_at: response.merged_at,
+        updated_at: response.updated_at,
+        base_branch: response
+            .base
+            .as_ref()
+            .and_then(|value| value.branch_ref.clone()),
+        head_branch: response
+            .head
+            .as_ref()
+            .and_then(|value| value.branch_ref.clone()),
+    }
+}
+
+fn metadata_from_commit_response(
+    source: &GitHubDiffSource,
+    response: GitHubCommitResponse,
+) -> GitHubDiffMetadata {
+    let title = response
+        .commit
+        .as_ref()
+        .and_then(|commit| commit.message.as_deref())
+        .and_then(|message| message.lines().next())
+        .filter(|line| !line.trim().is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            response
+                .sha
+                .as_deref()
+                .map(short_sha)
+                .map(|sha| format!("Commit {sha}"))
+        })
+        .or_else(|| Some(source.fallback_title()));
+    let updated_at = response.commit.and_then(|commit| {
+        commit
+            .committer
+            .and_then(|person| person.date)
+            .or_else(|| commit.author.and_then(|person| person.date))
+    });
+
+    GitHubDiffMetadata {
+        title,
+        state: None,
+        merged: None,
+        merged_at: None,
+        updated_at,
+        base_branch: None,
+        head_branch: None,
+    }
+}
+
+fn metadata_from_compare_response(
+    source: &GitHubDiffSource,
+    response: GitHubCompareResponse,
+) -> GitHubDiffMetadata {
+    let updated_at = response
+        .commits
+        .last()
+        .and_then(|commit| {
+            commit.commit.as_ref().and_then(|details| {
+                details
+                    .committer
+                    .as_ref()
+                    .and_then(|person| person.date.clone())
+                    .or_else(|| {
+                        details
+                            .author
+                            .as_ref()
+                            .and_then(|person| person.date.clone())
+                    })
+            })
+        })
+        .or_else(|| {
+            response.base_commit.and_then(|commit| {
+                commit.commit.and_then(|details| {
+                    details
+                        .committer
+                        .and_then(|person| person.date)
+                        .or_else(|| details.author.and_then(|person| person.date))
+                })
+            })
+        });
+    let status = response.status;
+    let counts = match (response.ahead_by, response.behind_by) {
+        (Some(ahead), Some(behind)) => Some(format!("{ahead} ahead, {behind} behind")),
+        (Some(ahead), None) => Some(format!("{ahead} ahead")),
+        (None, Some(behind)) => Some(format!("{behind} behind")),
+        (None, None) => None,
+    };
+    let title = counts.map_or_else(
+        || source.fallback_title(),
+        |counts| format!("{} ({counts})", source.fallback_title()),
+    );
+
+    GitHubDiffMetadata {
+        title: Some(title),
+        state: status,
+        merged: None,
+        merged_at: None,
+        updated_at,
+        base_branch: match source {
+            GitHubDiffSource::Compare { base, .. } => Some(base.clone()),
+            GitHubDiffSource::PullRequest { .. }
+            | GitHubDiffSource::Commit { .. }
+            | GitHubDiffSource::GitWorktree { .. }
+            | GitHubDiffSource::GitCommit { .. }
+            | GitHubDiffSource::GitRange { .. } => None,
+        },
+        head_branch: match source {
+            GitHubDiffSource::Compare { head, .. } => Some(head.clone()),
+            GitHubDiffSource::PullRequest { .. }
+            | GitHubDiffSource::Commit { .. }
+            | GitHubDiffSource::GitWorktree { .. }
+            | GitHubDiffSource::GitCommit { .. }
+            | GitHubDiffSource::GitRange { .. } => None,
+        },
+    }
+}
+
 pub(crate) trait GitHubPrApi {
-    fn fetch_metadata(&self, target: &GitHubPrTarget) -> AppResult<GitHubPullResponse>;
+    fn fetch_metadata(&self, target: &GitHubPrTarget) -> AppResult<GitHubDiffMetadata>;
 
     fn fetch_files_page(
         &self,
@@ -265,23 +603,35 @@ impl ReqwestGitHubPrApi {
 }
 
 impl GitHubPrApi for ReqwestGitHubPrApi {
-    fn fetch_metadata(&self, target: &GitHubPrTarget) -> AppResult<GitHubPullResponse> {
-        let request = self
-            .client
-            .get(target.api_url())
-            .header(ACCEPT, "application/vnd.github+json");
-        let request = apply_github_token(request);
-        let response = request
-            .send()
-            .map_err(|source| github_network_error("PR metadata", source))?;
-
-        if !response.status().is_success() {
-            return Err(github_http_error("PR metadata", response.status()));
+    fn fetch_metadata(&self, target: &GitHubPrTarget) -> AppResult<GitHubDiffMetadata> {
+        match &target.source {
+            GitHubDiffSource::PullRequest { .. } => {
+                let response = self.fetch_json::<GitHubPullResponse>(
+                    target.api_url(),
+                    &format!("{} metadata", target.api_context()),
+                )?;
+                Ok(metadata_from_pull_response(response))
+            }
+            GitHubDiffSource::Commit { .. } => {
+                let response = self.fetch_json::<GitHubCommitResponse>(
+                    target.api_url(),
+                    &format!("{} metadata", target.api_context()),
+                )?;
+                Ok(metadata_from_commit_response(&target.source, response))
+            }
+            GitHubDiffSource::Compare { .. } => {
+                let response = self.fetch_json::<GitHubCompareResponse>(
+                    target.api_url(),
+                    &format!("{} metadata", target.api_context()),
+                )?;
+                Ok(metadata_from_compare_response(&target.source, response))
+            }
+            GitHubDiffSource::GitWorktree { .. }
+            | GitHubDiffSource::GitCommit { .. }
+            | GitHubDiffSource::GitRange { .. } => Err(AppError::State(
+                "local Git sources are not loaded through the GitHub API".to_string(),
+            )),
         }
-
-        response
-            .json::<GitHubPullResponse>()
-            .map_err(|source| AppError::State(format!("failed to parse PR metadata: {source}")))
     }
 
     fn fetch_files_page(
@@ -289,23 +639,34 @@ impl GitHubPrApi for ReqwestGitHubPrApi {
         target: &GitHubPrTarget,
         page: u16,
     ) -> AppResult<Vec<GitHubPullFileResponse>> {
-        let request = self
-            .client
-            .get(target.files_api_url())
-            .header(ACCEPT, "application/vnd.github+json")
-            .query(&[("per_page", FILES_PAGE_SIZE), ("page", page)]);
-        let request = apply_github_token(request);
-        let response = request
-            .send()
-            .map_err(|source| github_network_error("PR files", source))?;
-
-        if !response.status().is_success() {
-            return Err(github_http_error("PR files", response.status()));
+        match &target.source {
+            GitHubDiffSource::PullRequest { .. } => self.fetch_pull_files_page(target, page),
+            GitHubDiffSource::Commit { .. } => {
+                if page > 1 {
+                    return Ok(Vec::new());
+                }
+                let response = self.fetch_json::<GitHubCommitResponse>(
+                    target.api_url(),
+                    &format!("{} files", target.api_context()),
+                )?;
+                Ok(response.files)
+            }
+            GitHubDiffSource::Compare { .. } => {
+                if page > 1 {
+                    return Ok(Vec::new());
+                }
+                let response = self.fetch_json::<GitHubCompareResponse>(
+                    target.api_url(),
+                    &format!("{} files", target.api_context()),
+                )?;
+                Ok(response.files)
+            }
+            GitHubDiffSource::GitWorktree { .. }
+            | GitHubDiffSource::GitCommit { .. }
+            | GitHubDiffSource::GitRange { .. } => Err(AppError::State(
+                "local Git sources are not loaded through the GitHub API".to_string(),
+            )),
         }
-
-        response
-            .json::<Vec<GitHubPullFileResponse>>()
-            .map_err(|source| AppError::State(format!("failed to parse PR files: {source}")))
     }
 
     fn fetch_full_text(&self, raw_url: &str) -> Result<(String, bool), String> {
@@ -333,6 +694,53 @@ impl GitHubPrApi for ReqwestGitHubPrApi {
             String::from_utf8_lossy(visible_bytes).to_string(),
             truncated,
         ))
+    }
+}
+
+impl ReqwestGitHubPrApi {
+    fn fetch_json<T: for<'de> Deserialize<'de>>(&self, url: String, context: &str) -> AppResult<T> {
+        let request = self
+            .client
+            .get(url)
+            .header(ACCEPT, "application/vnd.github+json");
+        let request = apply_github_token(request);
+        let response = request
+            .send()
+            .map_err(|source| github_network_error(context, source))?;
+
+        if !response.status().is_success() {
+            return Err(github_http_error(context, response.status()));
+        }
+
+        response.json::<T>().map_err(|source| {
+            AppError::State(format!("failed to parse GitHub {context}: {source}"))
+        })
+    }
+
+    fn fetch_pull_files_page(
+        &self,
+        target: &GitHubPrTarget,
+        page: u16,
+    ) -> AppResult<Vec<GitHubPullFileResponse>> {
+        let request = self
+            .client
+            .get(target.files_api_url())
+            .header(ACCEPT, "application/vnd.github+json")
+            .query(&[("per_page", FILES_PAGE_SIZE), ("page", page)]);
+        let request = apply_github_token(request);
+        let response = request
+            .send()
+            .map_err(|source| github_network_error("pull request files", source))?;
+
+        if !response.status().is_success() {
+            return Err(github_http_error("pull request files", response.status()));
+        }
+
+        response
+            .json::<Vec<GitHubPullFileResponse>>()
+            .map_err(|source| {
+                AppError::State(format!("failed to parse pull request files: {source}"))
+            })
     }
 }
 
@@ -370,23 +778,17 @@ impl<Api: GitHubPrApi> GitHubPrDiffService<Api> {
             identity: PrDiffIdentity {
                 owner: target.owner.clone(),
                 repo: target.repo.clone(),
-                number: target.number,
+                source: target.source.clone(),
                 url: target.url.clone(),
                 title: metadata
                     .title
-                    .unwrap_or_else(|| format!("Pull request #{}", target.number)),
+                    .unwrap_or_else(|| target.source.fallback_title()),
                 state: metadata.state,
                 merged: metadata.merged.unwrap_or(false),
                 merged_at: metadata.merged_at,
                 updated_at: metadata.updated_at,
-                base_branch: metadata
-                    .base
-                    .as_ref()
-                    .and_then(|value| value.branch_ref.clone()),
-                head_branch: metadata
-                    .head
-                    .as_ref()
-                    .and_then(|value| value.branch_ref.clone()),
+                base_branch: metadata.base_branch,
+                head_branch: metadata.head_branch,
             },
             files,
             additions,
@@ -398,7 +800,7 @@ impl<Api: GitHubPrApi> GitHubPrDiffService<Api> {
             if let Some(updated_at) = snapshot.identity.updated_at.as_deref() {
                 if let Err(source) = write_cached_snapshot(target, updated_at, &snapshot) {
                     snapshot.warnings.push(format!(
-                        "Failed to update PR diff cache; continuing with fresh data: {source}"
+                        "Failed to update GitHub diff cache; continuing with fresh data: {source}"
                     ));
                 }
             }
@@ -442,7 +844,7 @@ impl<Api: GitHubPrApi> GitHubPrDiffService<Api> {
         validate_github_raw_url(raw_url)?;
         let (full_text, full_text_truncated) =
             self.api.fetch_full_text(raw_url).map_err(|message| {
-                AppError::State(format!("failed to load PR file content: {message}"))
+                AppError::State(format!("failed to load GitHub file content: {message}"))
             })?;
 
         Ok(PrDiffFileText {
@@ -475,7 +877,7 @@ fn github_http_error(context: &str, status: StatusCode) -> AppError {
                 .to_string()
         }
         StatusCode::NOT_FOUND => {
-            "GitHub could not find this pull request, or the repository is private and credentials are missing."
+            "GitHub could not find this diff source, or the repository is private and credentials are missing."
                 .to_string()
         }
         StatusCode::TOO_MANY_REQUESTS => {
@@ -563,13 +965,13 @@ fn cache_file_path(target: &GitHubPrTarget) -> PathBuf {
     let mut hasher = DefaultHasher::new();
     target.owner.hash(&mut hasher);
     target.repo.hash(&mut hasher);
-    target.number.hash(&mut hasher);
+    target.source.hash(&mut hasher);
     let key = hasher.finish();
 
     std::env::temp_dir()
         .join("chilla")
-        .join("github-pr-diff-cache")
-        .join(format!("pr-{key:016x}.json"))
+        .join("github-diff-cache")
+        .join(format!("source-{key:016x}.json"))
 }
 
 pub fn parse_unified_diff(input: &str) -> Vec<PrDiffFile> {
@@ -768,7 +1170,7 @@ fn normalize_file_status(status: &str) -> AppResult<PrFileStatus> {
         "renamed" => Ok(PrFileStatus::Renamed),
         "copied" => Ok(PrFileStatus::Copied),
         other => Err(AppError::State(format!(
-            "unsupported GitHub PR file status `{other}`"
+            "unsupported GitHub diff file status `{other}`"
         ))),
     }
 }
@@ -889,9 +1291,10 @@ mod tests {
 
     use super::{
         apply_file_cap, cache_file_path, normalize_pull_files, parse_unified_diff,
-        read_cached_snapshot, write_cached_snapshot, GitHubBranchRef, GitHubPrApi,
-        GitHubPrDiffService, GitHubPrTarget, GitHubPullFileResponse, GitHubPullResponse,
-        PrDiffChangeType, PrDiffIdentity, PrDiffSnapshot, PrFileStatus, FILES_PAGE_SIZE,
+        read_cached_snapshot, write_cached_snapshot, GitHubBranchRef, GitHubDiffMetadata,
+        GitHubDiffSource, GitHubPrApi, GitHubPrDiffService, GitHubPrTarget, GitHubPullFileResponse,
+        GitHubPullResponse, PrDiffChangeType, PrDiffIdentity, PrDiffSnapshot, PrFileStatus,
+        FILES_PAGE_SIZE,
     };
 
     #[test]
@@ -903,7 +1306,7 @@ mod tests {
 
         assert_eq!(target.owner, "tacogips");
         assert_eq!(target.repo, "rielflow");
-        assert_eq!(target.number, 44);
+        assert_eq!(target.source, GitHubDiffSource::PullRequest { number: 44 });
         assert_eq!(target.url, "https://github.com/tacogips/rielflow/pull/44");
         assert!(target.use_cache);
     }
@@ -915,14 +1318,73 @@ mod tests {
 
         assert_eq!(target.owner, "tacogips");
         assert_eq!(target.repo, "rielflow");
-        assert_eq!(target.number, 44);
+        assert_eq!(target.source, GitHubDiffSource::PullRequest { number: 44 });
         assert_eq!(target.url, "https://github.com/tacogips/rielflow/pull/44");
         assert!(target.use_cache);
     }
 
     #[test]
-    fn rejects_non_pr_github_url() {
+    fn parses_github_commit_url_with_query_and_fragment() {
+        let target = GitHubPrTarget::parse(
+            "https://github.com/tacogips/chilla/commit/abcdef123456?diff=split#file",
+        )
+        .expect("valid commit URL");
+
+        assert_eq!(target.owner, "tacogips");
+        assert_eq!(target.repo, "chilla");
+        assert_eq!(
+            target.source,
+            GitHubDiffSource::Commit {
+                sha: "abcdef123456".to_string()
+            }
+        );
+        assert_eq!(
+            target.url,
+            "https://github.com/tacogips/chilla/commit/abcdef123456"
+        );
+        assert!(target.use_cache);
+    }
+
+    #[test]
+    fn parses_github_compare_url_with_slash_refs() {
+        let target = GitHubPrTarget::parse(
+            "https://github.com/tacogips/chilla/compare/release/v1...feature/pr-diff",
+        )
+        .expect("valid compare URL");
+
+        assert_eq!(target.owner, "tacogips");
+        assert_eq!(target.repo, "chilla");
+        assert_eq!(
+            target.source,
+            GitHubDiffSource::Compare {
+                base: "release/v1".to_string(),
+                head: "feature/pr-diff".to_string()
+            }
+        );
+        assert_eq!(
+            target.url,
+            "https://github.com/tacogips/chilla/compare/release/v1...feature/pr-diff"
+        );
+        assert!(target.use_cache);
+    }
+
+    #[test]
+    fn rejects_unsupported_github_diff_url() {
         assert!(GitHubPrTarget::parse("https://github.com/tacogips/chilla").is_err());
+        assert!(GitHubPrTarget::parse("https://github.com/tacogips/chilla/pull/0").is_err());
+        assert!(
+            GitHubPrTarget::parse("https://github.com/tacogips/chilla/pull/44/commits").is_err()
+        );
+        assert!(
+            GitHubPrTarget::parse("https://github.com/tacogips/chilla/commit/abc/extra").is_err()
+        );
+        assert!(
+            GitHubPrTarget::parse("https://github.com/tacogips/chilla/compare/main...").is_err()
+        );
+        assert!(
+            GitHubPrTarget::parse("https://github.com/tacogips/chilla/compare/main...a...b")
+                .is_err()
+        );
     }
 
     #[test]
@@ -1133,7 +1595,7 @@ index 1111111..2222222 100644
                 "PR files",
                 reqwest::StatusCode::NOT_FOUND
             )),
-            "GitHub could not find this pull request, or the repository is private and credentials are missing."
+            "GitHub could not find this diff source, or the repository is private and credentials are missing."
         );
         assert_eq!(
             message(super::github_http_error(
@@ -1181,6 +1643,92 @@ index 1111111..2222222 100644
         assert_eq!(snapshot.deletions, 1);
         assert!(snapshot.warnings.is_empty());
         assert!(service.api.requested_raw_urls.borrow().is_empty());
+    }
+
+    #[test]
+    fn loads_commit_snapshot_from_mock_github_api() {
+        let mut target =
+            GitHubPrTarget::parse("https://github.com/tacogips/chilla/commit/abcdef1234567890")
+                .expect("target");
+        target.use_cache = false;
+        let service = GitHubPrDiffService::with_api(MockGitHubPrApi::new(
+            GitHubDiffMetadata {
+                title: Some("Tighten diff rendering".to_string()),
+                state: None,
+                merged: None,
+                merged_at: None,
+                updated_at: Some("2026-06-02T04:00:00Z".to_string()),
+                base_branch: None,
+                head_branch: None,
+            },
+            vec![vec![mock_file(
+                "src/app.rs",
+                "modified",
+                Some("@@ -1 +1 @@\n-old\n+new"),
+                None,
+            )]],
+            Vec::new(),
+        ));
+
+        let snapshot = service.load(&target).expect("load snapshot");
+
+        assert_eq!(
+            snapshot.identity.source,
+            GitHubDiffSource::Commit {
+                sha: "abcdef1234567890".to_string()
+            }
+        );
+        assert_eq!(snapshot.identity.title, "Tighten diff rendering");
+        assert_eq!(
+            snapshot.identity.updated_at.as_deref(),
+            Some("2026-06-02T04:00:00Z")
+        );
+        assert_eq!(snapshot.files.len(), 1);
+        assert_eq!(snapshot.files[0].path, "src/app.rs");
+    }
+
+    #[test]
+    fn loads_compare_snapshot_from_mock_github_api() {
+        let mut target = GitHubPrTarget::parse(
+            "https://github.com/tacogips/chilla/compare/main...feature/pr-diff",
+        )
+        .expect("target");
+        target.use_cache = false;
+        let service = GitHubPrDiffService::with_api(MockGitHubPrApi::new(
+            GitHubDiffMetadata {
+                title: Some("Compare main...feature/pr-diff".to_string()),
+                state: Some("ahead".to_string()),
+                merged: None,
+                merged_at: None,
+                updated_at: Some("2026-06-02T05:00:00Z".to_string()),
+                base_branch: Some("main".to_string()),
+                head_branch: Some("feature/pr-diff".to_string()),
+            },
+            vec![vec![mock_file(
+                "README.md",
+                "modified",
+                Some("@@ -1 +1 @@\n-old\n+new"),
+                None,
+            )]],
+            Vec::new(),
+        ));
+
+        let snapshot = service.load(&target).expect("load snapshot");
+
+        assert_eq!(
+            snapshot.identity.source,
+            GitHubDiffSource::Compare {
+                base: "main".to_string(),
+                head: "feature/pr-diff".to_string()
+            }
+        );
+        assert_eq!(snapshot.identity.state.as_deref(), Some("ahead"));
+        assert_eq!(snapshot.identity.base_branch.as_deref(), Some("main"));
+        assert_eq!(
+            snapshot.identity.head_branch.as_deref(),
+            Some("feature/pr-diff")
+        );
+        assert_eq!(snapshot.files[0].path, "README.md");
     }
 
     #[test]
@@ -1251,12 +1799,64 @@ index 1111111..2222222 100644
         let _ = std::fs::remove_file(cache_path);
     }
 
+    #[test]
+    fn cache_paths_are_source_specific() {
+        let pr =
+            GitHubPrTarget::parse("https://github.com/tacogips/chilla/pull/12").expect("PR target");
+        let commit =
+            GitHubPrTarget::parse("https://github.com/tacogips/chilla/commit/12").expect("commit");
+        let compare = GitHubPrTarget::parse("https://github.com/tacogips/chilla/compare/main...12")
+            .expect("compare");
+
+        assert_ne!(cache_file_path(&pr), cache_file_path(&commit));
+        assert_ne!(cache_file_path(&pr), cache_file_path(&compare));
+        assert_ne!(cache_file_path(&commit), cache_file_path(&compare));
+    }
+
+    #[test]
+    fn no_cache_bypasses_cache_reads_and_writes() {
+        let mut target =
+            GitHubPrTarget::parse("https://github.com/tacogips/rielflow/pull/47").expect("target");
+        let cache_path = cache_file_path(&target);
+        let _ = std::fs::remove_file(&cache_path);
+        let cached_snapshot = test_snapshot(&target, "2026-06-02T00:00:00Z");
+        write_cached_snapshot(&target, "2026-06-02T00:00:00Z", &cached_snapshot)
+            .expect("write cache");
+        target.use_cache = false;
+
+        let service = GitHubPrDiffService::with_api(MockGitHubPrApi::new(
+            GitHubDiffMetadata {
+                updated_at: Some("2026-06-02T00:00:00Z".to_string()),
+                ..mock_metadata("2026-06-02T00:00:00Z")
+            },
+            vec![vec![mock_file(
+                "src/fresh.rs",
+                "modified",
+                Some("@@ -1 +1 @@\n-old\n+new"),
+                None,
+            )]],
+            Vec::new(),
+        ));
+
+        let snapshot = service.load(&target).expect("load fresh snapshot");
+
+        assert_eq!(snapshot.files.len(), 1);
+        assert_eq!(snapshot.files[0].path, "src/fresh.rs");
+        assert_eq!(service.api.requested_pages.borrow().as_slice(), [1]);
+
+        let cached = read_cached_snapshot(&target, Some("2026-06-02T00:00:00Z"))
+            .expect("old cache remains present");
+        assert!(cached.files.is_empty());
+
+        let _ = std::fs::remove_file(cache_path);
+    }
+
     fn test_snapshot(target: &GitHubPrTarget, updated_at: &str) -> PrDiffSnapshot {
         PrDiffSnapshot {
             identity: PrDiffIdentity {
                 owner: target.owner.clone(),
                 repo: target.repo.clone(),
-                number: target.number,
+                source: target.source.clone(),
                 url: target.url.clone(),
                 title: "Example".to_string(),
                 state: Some("open".to_string()),
@@ -1273,8 +1873,8 @@ index 1111111..2222222 100644
         }
     }
 
-    fn mock_metadata(updated_at: &str) -> GitHubPullResponse {
-        GitHubPullResponse {
+    fn mock_metadata(updated_at: &str) -> GitHubDiffMetadata {
+        super::metadata_from_pull_response(GitHubPullResponse {
             title: Some("Add PR diff viewer".to_string()),
             state: Some("open".to_string()),
             merged: Some(false),
@@ -1286,7 +1886,7 @@ index 1111111..2222222 100644
             head: Some(GitHubBranchRef {
                 branch_ref: Some("feature/pr-diff".to_string()),
             }),
-        }
+        })
     }
 
     fn mock_file(
@@ -1312,7 +1912,7 @@ index 1111111..2222222 100644
     type MockFullTextResponses = Vec<(String, MockFullTextResponse)>;
 
     struct MockGitHubPrApi {
-        metadata: GitHubPullResponse,
+        metadata: GitHubDiffMetadata,
         pages: Vec<Vec<GitHubPullFileResponse>>,
         full_text_responses: MockFullTextResponses,
         requested_pages: RefCell<Vec<u16>>,
@@ -1321,7 +1921,7 @@ index 1111111..2222222 100644
 
     impl MockGitHubPrApi {
         fn new(
-            metadata: GitHubPullResponse,
+            metadata: GitHubDiffMetadata,
             pages: Vec<Vec<GitHubPullFileResponse>>,
             full_text_responses: MockFullTextResponses,
         ) -> Self {
@@ -1339,7 +1939,7 @@ index 1111111..2222222 100644
         fn fetch_metadata(
             &self,
             _target: &GitHubPrTarget,
-        ) -> crate::error::AppResult<GitHubPullResponse> {
+        ) -> crate::error::AppResult<GitHubDiffMetadata> {
             Ok(self.metadata.clone())
         }
 

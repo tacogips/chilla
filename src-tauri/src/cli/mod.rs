@@ -7,6 +7,7 @@ use std::{
 
 use crate::{
     error::{AppError, AppResult},
+    git_diff::GitDiffTarget,
     github_pr_diff::GitHubPrTarget,
     viewer::service::resolve_startup_target,
 };
@@ -18,6 +19,7 @@ pub enum StartupTarget {
     File(PathBuf),
     FileSet(Vec<PathBuf>),
     GitHubPr(GitHubPrTarget),
+    GitDiff(GitDiffTarget),
 }
 
 pub enum CliParseOutcome {
@@ -66,9 +68,9 @@ where
         return match argument.as_str() {
             "--help" | "-h" => Ok(CliParseOutcome::Help(help_text(&binary_name))),
             "--version" | "-V" => Ok(CliParseOutcome::Version(version_text())),
-            "--no-pr-diff-cache" => Err(AppError::cli_usage(
+            flag if is_no_github_diff_cache_flag(flag) => Err(AppError::cli_usage(
                 format!(
-                    "--no-pr-diff-cache requires a GitHub pull request URL.\n\n{}",
+                    "{flag} requires a GitHub diff URL.\n\n{}",
                     help_text(&binary_name)
                 ),
                 2,
@@ -97,19 +99,21 @@ where
             })
             .collect::<AppResult<Vec<_>>>()?;
 
-        if values.iter().any(|value| value == "--no-pr-diff-cache") {
-            values.retain(|value| value != "--no-pr-diff-cache");
+        if values
+            .iter()
+            .any(|value| is_no_github_diff_cache_flag(value))
+        {
+            values.retain(|value| !is_no_github_diff_cache_flag(value));
             let Some(target) = values.into_iter().next() else {
                 return Err(AppError::cli_usage(
-                    "--no-pr-diff-cache requires a GitHub pull request URL".to_string(),
+                    "--no-github-diff-cache requires a GitHub diff URL".to_string(),
                     2,
                 ));
             };
 
             if !target.starts_with("https://") {
                 return Err(AppError::cli_usage(
-                    "--no-pr-diff-cache can only be used with a GitHub pull request URL"
-                        .to_string(),
+                    "--no-github-diff-cache can only be used with a GitHub diff URL".to_string(),
                     2,
                 ));
             }
@@ -117,6 +121,10 @@ where
             let mut target = GitHubPrTarget::parse(&target)?;
             target.use_cache = false;
             return Ok(CliParseOutcome::Run(StartupTarget::GitHubPr(target)));
+        }
+
+        if let Some(target) = parse_git_diff_startup_pair(&values)? {
+            return Ok(CliParseOutcome::Run(StartupTarget::GitDiff(target)));
         }
     }
 
@@ -139,7 +147,7 @@ where
 
         if raw.starts_with("https://") {
             return Err(AppError::cli_usage(
-                "GitHub pull request URLs cannot be combined with other startup paths".to_string(),
+                "GitHub diff URLs cannot be combined with other startup paths".to_string(),
                 2,
             ));
         }
@@ -152,6 +160,34 @@ where
 
 fn validate_cli_path(path: &Path) -> AppResult<StartupTarget> {
     resolve_startup_target(path)
+}
+
+fn parse_git_diff_startup_pair(values: &[String]) -> AppResult<Option<GitDiffTarget>> {
+    let [repo_path, spec] = values else {
+        return Ok(None);
+    };
+
+    if spec.starts_with('-') || spec.starts_with("https://") {
+        return Ok(None);
+    }
+
+    let repo_candidate = Path::new(repo_path);
+    if !repo_candidate.exists() {
+        return Ok(None);
+    }
+
+    let spec_candidate = Path::new(spec);
+    if spec_candidate.exists() {
+        return Ok(None);
+    }
+
+    match GitDiffTarget::from_repo_and_spec(repo_candidate, spec) {
+        Ok(target) => Ok(Some(target)),
+        Err(AppError::State(_)) | Err(AppError::NotADirectory(_)) | Err(AppError::Io { .. }) => {
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn resolve_explicit_file_startup(paths: &[PathBuf]) -> AppResult<StartupTarget> {
@@ -197,9 +233,13 @@ fn resolve_explicit_file_startup(paths: &[PathBuf]) -> AppResult<StartupTarget> 
     }
 }
 
+fn is_no_github_diff_cache_flag(value: &str) -> bool {
+    value == "--no-github-diff-cache" || value == "--no-pr-diff-cache"
+}
+
 fn help_text(binary_name: &str) -> String {
     format!(
-        "Usage:\n  {binary_name} [path ...]\n  {binary_name} <github-pr-url>\n  {binary_name} --no-pr-diff-cache <github-pr-url>\n  {binary_name} --help\n  {binary_name} --version\n\nIf no paths are provided, chilla opens the current working directory in file view mode.\nIf a GitHub pull request URL is provided, including a /files tab URL, chilla opens that PR diff in read-only mode.\nPR diffs are cached under the system temp directory and refreshed when GitHub reports a newer PR updated_at value.\nIf two or more file paths are provided, chilla opens file view mode with the left pane limited to those files.",
+        "Usage:\n  {binary_name} [path ...]\n  {binary_name} <github-diff-url>\n  {binary_name} --no-github-diff-cache <github-diff-url>\n  {binary_name} --no-pr-diff-cache <github-diff-url>\n  {binary_name} <git-dir> <commit-or-range>\n  {binary_name} --help\n  {binary_name} --version\n\nIf no paths are provided, chilla opens the current working directory in file view mode.\nIf a GitHub pull request, commit, or compare URL is provided, chilla opens that GitHub diff in read-only mode.\nIf a Git directory plus commit or range is provided, chilla opens that local Git diff in read-only mode.\nGitHub diffs are cached under the system temp directory and refreshed when GitHub reports a newer updated marker.\n--no-pr-diff-cache remains supported as a compatibility alias for --no-github-diff-cache.\nIf two or more file paths are provided, chilla opens file view mode with the left pane limited to those files.",
     )
 }
 
@@ -212,14 +252,18 @@ mod tests {
     use std::{
         fs,
         path::{Path, PathBuf},
+        sync::atomic::{AtomicU64, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
 
     use super::{parse_cli, CliParseOutcome, StartupTarget};
+    use crate::{git_diff::GitDiffSource as LocalGitDiffSource, github_pr_diff::GitHubDiffSource};
 
     struct TestDir {
         path: PathBuf,
     }
+
+    static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     impl TestDir {
         fn new() -> Self {
@@ -227,7 +271,11 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos();
-            let path = std::env::temp_dir().join(format!("chilla-cli-tests-{unique}"));
+            let counter = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "chilla-cli-tests-{}-{unique}-{counter}",
+                std::process::id()
+            ));
             fs::create_dir_all(&path).expect("create temp test directory");
             Self { path }
         }
@@ -304,7 +352,7 @@ mod tests {
             CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
                 assert_eq!(target.owner, "tacogips");
                 assert_eq!(target.repo, "rielflow");
-                assert_eq!(target.number, 44);
+                assert_eq!(target.source, GitHubDiffSource::PullRequest { number: 44 });
                 assert_eq!(target.url, "https://github.com/tacogips/rielflow/pull/44");
                 assert!(target.use_cache);
             }
@@ -321,7 +369,7 @@ mod tests {
             CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
                 assert_eq!(target.owner, "tacogips");
                 assert_eq!(target.repo, "rielflow");
-                assert_eq!(target.number, 44);
+                assert_eq!(target.source, GitHubDiffSource::PullRequest { number: 44 });
                 assert_eq!(target.url, "https://github.com/tacogips/rielflow/pull/44");
                 assert!(target.use_cache);
             }
@@ -342,9 +390,129 @@ mod tests {
             CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
                 assert_eq!(target.owner, "tacogips");
                 assert_eq!(target.repo, "rielflow");
-                assert_eq!(target.number, 44);
+                assert_eq!(target.source, GitHubDiffSource::PullRequest { number: 44 });
                 assert_eq!(target.url, "https://github.com/tacogips/rielflow/pull/44");
                 assert!(!target.use_cache);
+            }
+            _ => panic!("unexpected parse outcome"),
+        }
+    }
+
+    #[test]
+    fn parses_github_commit_startup_target() {
+        let outcome = parse_cli([
+            "chilla",
+            "https://github.com/tacogips/chilla/commit/abcdef1234567890",
+        ])
+        .expect("parse GitHub commit URL");
+
+        match outcome {
+            CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
+                assert_eq!(target.owner, "tacogips");
+                assert_eq!(target.repo, "chilla");
+                assert_eq!(
+                    target.source,
+                    GitHubDiffSource::Commit {
+                        sha: "abcdef1234567890".to_string()
+                    }
+                );
+                assert_eq!(
+                    target.url,
+                    "https://github.com/tacogips/chilla/commit/abcdef1234567890"
+                );
+                assert!(target.use_cache);
+            }
+            _ => panic!("unexpected parse outcome"),
+        }
+    }
+
+    #[test]
+    fn parses_github_compare_startup_target_with_slash_refs() {
+        let outcome = parse_cli([
+            "chilla",
+            "--no-github-diff-cache",
+            "https://github.com/tacogips/chilla/compare/release/v1...feature/pr-diff",
+        ])
+        .expect("parse GitHub compare URL");
+
+        match outcome {
+            CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
+                assert_eq!(target.owner, "tacogips");
+                assert_eq!(target.repo, "chilla");
+                assert_eq!(
+                    target.source,
+                    GitHubDiffSource::Compare {
+                        base: "release/v1".to_string(),
+                        head: "feature/pr-diff".to_string()
+                    }
+                );
+                assert_eq!(
+                    target.url,
+                    "https://github.com/tacogips/chilla/compare/release/v1...feature/pr-diff"
+                );
+                assert!(!target.use_cache);
+            }
+            _ => panic!("unexpected parse outcome"),
+        }
+    }
+
+    #[test]
+    fn parses_git_commit_startup_pair() {
+        let test_dir = TestDir::new();
+        run_git(test_dir.path(), &["init"]);
+        run_git(
+            test_dir.path(),
+            &["config", "user.email", "test@example.invalid"],
+        );
+        run_git(test_dir.path(), &["config", "user.name", "Test User"]);
+        fs::write(test_dir.path().join("README.md"), "hello\n").expect("write file");
+        run_git(test_dir.path(), &["add", "."]);
+        run_git(test_dir.path(), &["commit", "-m", "initial"]);
+        let commit = git_output(test_dir.path(), &["rev-parse", "HEAD"])
+            .trim()
+            .to_string();
+
+        let outcome = parse_cli(["chilla", test_dir.path().to_str().expect("path"), &commit])
+            .expect("parse Git commit startup");
+
+        match outcome {
+            CliParseOutcome::Run(StartupTarget::GitDiff(target)) => {
+                assert_eq!(target.source, LocalGitDiffSource::Commit { commit });
+            }
+            _ => panic!("unexpected parse outcome"),
+        }
+    }
+
+    #[test]
+    fn parses_git_range_startup_pair() {
+        let test_dir = TestDir::new();
+        run_git(test_dir.path(), &["init"]);
+        run_git(
+            test_dir.path(),
+            &["config", "user.email", "test@example.invalid"],
+        );
+        run_git(test_dir.path(), &["config", "user.name", "Test User"]);
+        fs::write(test_dir.path().join("README.md"), "hello\n").expect("write file");
+        run_git(test_dir.path(), &["add", "."]);
+        run_git(test_dir.path(), &["commit", "-m", "initial"]);
+
+        let outcome = parse_cli([
+            "chilla",
+            test_dir.path().to_str().expect("path"),
+            "HEAD~1..HEAD",
+        ])
+        .expect("parse Git range startup");
+
+        match outcome {
+            CliParseOutcome::Run(StartupTarget::GitDiff(target)) => {
+                assert_eq!(
+                    target.source,
+                    LocalGitDiffSource::Range {
+                        base: "HEAD~1".to_string(),
+                        head: "HEAD".to_string(),
+                        merge_base: false,
+                    }
+                );
             }
             _ => panic!("unexpected parse outcome"),
         }
@@ -408,5 +576,26 @@ mod tests {
             file_path.to_str().unwrap(),
         ])
         .is_err());
+    }
+
+    fn run_git(repo: &Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(args)
+            .status()
+            .expect("run git");
+        assert!(status.success(), "git command failed: {args:?}");
+    }
+
+    fn git_output(repo: &Path, args: &[&str]) -> String {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(args)
+            .output()
+            .expect("run git");
+        assert!(output.status.success(), "git command failed: {args:?}");
+        String::from_utf8_lossy(&output.stdout).to_string()
     }
 }

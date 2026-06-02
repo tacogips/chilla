@@ -10,7 +10,8 @@ import {
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import type {
-  GitHubPrTarget,
+  DiffWorkspaceTarget,
+  GitHubDiffSource,
   PrDiffChange,
   PrDiffChunk,
   PrDiffFile,
@@ -18,6 +19,7 @@ import type {
   PrDiffSnapshot,
 } from "../../lib/tauri/document";
 import {
+  loadGitDiff,
   loadPrDiff,
   loadPrDiffFileText,
   PrFileStatus,
@@ -62,7 +64,7 @@ type BrowserEntry =
     };
 
 interface PrDiffWorkspaceProps {
-  readonly target: GitHubPrTarget;
+  readonly target: DiffWorkspaceTarget;
 }
 
 interface LazyFileTextState {
@@ -70,6 +72,20 @@ interface LazyFileTextState {
   readonly text: PrDiffFileText | null;
   readonly error: string | null;
 }
+
+type FullFileLineKind = "context" | "add" | "modify";
+type FullFileRow =
+  | {
+      readonly kind: "line";
+      readonly lineKind: FullFileLineKind;
+      readonly lineNumber: number;
+      readonly content: string;
+    }
+  | {
+      readonly kind: "deletion-marker";
+      readonly position: number;
+      readonly deletedCount: number;
+    };
 
 function dirname(path: string): string {
   const index = path.lastIndexOf("/");
@@ -441,16 +457,68 @@ function PrDiffLoading(props: { readonly compact?: boolean }) {
     >
       <span class="pr-diff-loading__spinner" aria-hidden="true" />
       <span class="pr-diff-loading__text">
-        {props.compact ? "Loading files..." : "Loading PR diff from GitHub..."}
+        {props.compact ? "Loading files..." : "Loading diff..."}
       </span>
     </div>
   );
 }
 
-function pullRequestStatusLabel(snapshot: PrDiffSnapshot | null): string {
+function sourceDisplayLabel(source: GitHubDiffSource): string {
+  switch (source.kind) {
+    case "pull_request":
+      return `#${source.number}`;
+    case "commit":
+      return `@${source.sha.slice(0, 12)}`;
+    case "compare":
+      return `${source.base}...${source.head}`;
+    case "git_worktree":
+      return "worktree";
+    case "git_commit":
+      return `@${source.commit.slice(0, 12)}`;
+    case "git_range": {
+      const separator = source.merge_base ? "..." : "..";
+      return `${source.base}${separator}${source.head}`;
+    }
+  }
+}
+
+function sourceKindLabel(source: GitHubDiffSource): string {
+  switch (source.kind) {
+    case "pull_request":
+      return "Pull request";
+    case "commit":
+      return "Commit";
+    case "compare":
+      return "Compare";
+    case "git_worktree":
+      return "Git worktree";
+    case "git_commit":
+      return "Git commit";
+    case "git_range":
+      return "Git range";
+  }
+}
+
+function sourceStatusLabel(snapshot: PrDiffSnapshot | null): string {
   const identity = snapshot?.identity;
   if (identity === undefined) {
     return "Loading";
+  }
+
+  if (identity.source.kind === "commit") {
+    return "Commit";
+  }
+
+  if (identity.source.kind === "compare") {
+    return identity.state ?? "Compare";
+  }
+
+  if (
+    identity.source.kind === "git_worktree" ||
+    identity.source.kind === "git_commit" ||
+    identity.source.kind === "git_range"
+  ) {
+    return identity.state ?? sourceKindLabel(identity.source);
   }
 
   if (identity.merged) {
@@ -460,21 +528,74 @@ function pullRequestStatusLabel(snapshot: PrDiffSnapshot | null): string {
   return identity.state ?? "Unknown";
 }
 
-function pullRequestStatusClass(snapshot: PrDiffSnapshot | null): string {
+function sourceStatusClass(snapshot: PrDiffSnapshot | null): string {
   const identity = snapshot?.identity;
-  if (identity?.merged === true) {
+  if (identity?.source.kind !== "pull_request") {
+    return "";
+  }
+
+  if (identity.merged) {
     return "pr-diff-header__state--merged";
   }
 
-  if (identity?.state === "open") {
+  if (identity.state === "open") {
     return "pr-diff-header__state--open";
   }
 
-  if (identity?.state === "closed") {
+  if (identity.state === "closed") {
     return "pr-diff-header__state--closed";
   }
 
   return "";
+}
+
+function fallbackSourceForTarget(
+  target: DiffWorkspaceTarget,
+): GitHubDiffSource {
+  if (target.kind === "github") {
+    return target.target.source;
+  }
+
+  const repoPath = target.target.repo_path;
+  switch (target.target.source.kind) {
+    case "worktree":
+      return {
+        kind: "git_worktree",
+        repo_path: repoPath,
+      };
+    case "commit":
+      return {
+        kind: "git_commit",
+        repo_path: repoPath,
+        commit: target.target.source.commit,
+      };
+    case "range":
+      return {
+        kind: "git_range",
+        repo_path: repoPath,
+        base: target.target.source.base,
+        head: target.target.source.head,
+        merge_base: target.target.source.merge_base,
+      };
+  }
+}
+
+function fallbackTargetTitle(target: DiffWorkspaceTarget): string {
+  return target.kind === "github" ? target.target.url : target.target.repo_path;
+}
+
+function fallbackOwner(target: DiffWorkspaceTarget): string {
+  return target.kind === "github" ? target.target.owner : "local";
+}
+
+function fallbackRepo(target: DiffWorkspaceTarget): string {
+  if (target.kind === "github") {
+    return target.target.repo;
+  }
+
+  const parts = target.target.repo_path.split(/[\\/]/).filter(Boolean);
+  const name = parts[parts.length - 1];
+  return name ?? target.target.repo_path;
 }
 
 export function buildDirectoryEntries(
@@ -630,15 +751,137 @@ function DiffLineContent(props: {
   );
 }
 
-function fullTextLines(file: PrDiffFile): readonly PrDiffChange[] {
-  return file.full_text === null
-    ? []
-    : file.full_text.split("\n").map((content, index) => ({
-        change_type: "context",
-        old_line: null,
-        new_line: index + 1,
-        content,
-      }));
+function FullFileLineContent(props: {
+  readonly content: string;
+  readonly syntaxKind: SyntaxKind;
+}) {
+  return (
+    <code class="pr-diff-line__content pr-diff-line__content--full-file">
+      <For each={highlightSyntaxSegments(props.content, props.syntaxKind)}>
+        {(segment) => (
+          <span class={`pr-syntax pr-syntax--${segment.kind}`}>
+            {segment.text}
+          </span>
+        )}
+      </For>
+    </code>
+  );
+}
+
+function flushChangeBlock(
+  lineKinds: Map<number, FullFileLineKind>,
+  deletionMarkers: Map<number, number>,
+  deletedCount: number,
+  addedLines: readonly number[],
+  nextNewLine: number | null,
+  lastNewLine: number,
+): void {
+  if (deletedCount > 0) {
+    const markerPosition = addedLines[0] ?? nextNewLine ?? lastNewLine + 1;
+    deletionMarkers.set(
+      markerPosition,
+      (deletionMarkers.get(markerPosition) ?? 0) + deletedCount,
+    );
+  }
+
+  const lineKind: FullFileLineKind = deletedCount > 0 ? "modify" : "add";
+  for (const lineNumber of addedLines) {
+    lineKinds.set(lineNumber, lineKind);
+  }
+}
+
+function buildFullFileAnnotations(file: PrDiffFile): {
+  readonly lineKinds: ReadonlyMap<number, FullFileLineKind>;
+  readonly deletionMarkers: ReadonlyMap<number, number>;
+} {
+  const lineKinds = new Map<number, FullFileLineKind>();
+  const deletionMarkers = new Map<number, number>();
+
+  for (const chunk of file.chunks) {
+    let deletedCount = 0;
+    let addedLines: number[] = [];
+    let lastNewLine = chunk.new_start - 1;
+
+    const flush = (nextNewLine: number | null) => {
+      flushChangeBlock(
+        lineKinds,
+        deletionMarkers,
+        deletedCount,
+        addedLines,
+        nextNewLine,
+        lastNewLine,
+      );
+      deletedCount = 0;
+      addedLines = [];
+    };
+
+    for (const change of chunk.changes) {
+      if (change.change_type === "context") {
+        flush(change.new_line);
+        if (change.new_line !== null) {
+          lastNewLine = change.new_line;
+        }
+        continue;
+      }
+
+      if (change.change_type === "delete") {
+        if (deletedCount === 0 && addedLines.length > 0) {
+          flush(null);
+        }
+        deletedCount += 1;
+        continue;
+      }
+
+      if (change.new_line !== null) {
+        addedLines.push(change.new_line);
+        lastNewLine = change.new_line;
+      }
+    }
+
+    flush(null);
+  }
+
+  return { lineKinds, deletionMarkers };
+}
+
+function fullTextRows(file: PrDiffFile): readonly FullFileRow[] {
+  if (file.full_text === null) {
+    return [];
+  }
+
+  const { lineKinds, deletionMarkers } = buildFullFileAnnotations(file);
+  const rows: FullFileRow[] = [];
+
+  file.full_text.split("\n").forEach((content, index) => {
+    const lineNumber = index + 1;
+    const deletedCount = deletionMarkers.get(lineNumber);
+    if (deletedCount !== undefined) {
+      rows.push({
+        kind: "deletion-marker",
+        position: lineNumber,
+        deletedCount,
+      });
+    }
+
+    rows.push({
+      kind: "line",
+      lineKind: lineKinds.get(lineNumber) ?? "context",
+      lineNumber,
+      content,
+    });
+  });
+
+  const trailingMarkerPosition = file.full_text.split("\n").length + 1;
+  const trailingDeletedCount = deletionMarkers.get(trailingMarkerPosition);
+  if (trailingDeletedCount !== undefined) {
+    rows.push({
+      kind: "deletion-marker",
+      position: trailingMarkerPosition,
+      deletedCount: trailingDeletedCount,
+    });
+  }
+
+  return rows;
 }
 
 function StackDiff(props: { readonly file: PrDiffFile }) {
@@ -734,17 +977,37 @@ export function FullFileDiff(props: {
             <span>Full file content is truncated.</span>
           </div>
         </Show>
-        <For each={fullTextLines(props.file)}>
-          {(change) => (
-            <div
-              class="pr-diff-line pr-diff-line--full-file pr-diff-line--context"
-              role="row"
-            >
-              <span class="pr-diff-line__number" aria-hidden="true" />
-              <span class="pr-diff-line__number">{change.new_line ?? ""}</span>
-              <DiffLineContent change={change} syntaxKind={syntaxKind()} />
-            </div>
-          )}
+        <For each={fullTextRows(props.file)}>
+          {(row) =>
+            row.kind === "line" ? (
+              <div
+                class={`pr-diff-line pr-diff-line--full-file pr-diff-line--${row.lineKind}`}
+                role="row"
+              >
+                <span class="pr-diff-line__number" aria-hidden="true" />
+                <span class="pr-diff-line__number">{row.lineNumber}</span>
+                <FullFileLineContent
+                  content={row.content}
+                  syntaxKind={syntaxKind()}
+                />
+              </div>
+            ) : (
+              <div
+                class="pr-diff-line pr-diff-line--full-file pr-diff-line--delete-marker"
+                role="row"
+                aria-label={`Deleted ${row.deletedCount} line${
+                  row.deletedCount === 1 ? "" : "s"
+                } before line ${row.position}`}
+              >
+                <span class="pr-diff-line__number" aria-hidden="true" />
+                <span class="pr-diff-line__number" aria-hidden="true" />
+                <span
+                  class="pr-diff-line__content pr-diff-line__content--delete-marker"
+                  aria-hidden="true"
+                />
+              </div>
+            )
+          }
         </For>
       </Show>
     </div>
@@ -1001,12 +1264,30 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
     const file = selectedFile();
     return file === null ? null : (lazyFileText()[file.path] ?? null);
   });
+  const headerSourceLabel = createMemo(() =>
+    sourceDisplayLabel(
+      snapshot()?.identity.source ?? fallbackSourceForTarget(props.target),
+    ),
+  );
+  const headerSummary = createMemo(() => {
+    const currentSnapshot = snapshot();
+    if (currentSnapshot === null) {
+      return fallbackTargetTitle(props.target);
+    }
+
+    return `${sourceKindLabel(currentSnapshot.identity.source)}: ${
+      currentSnapshot.identity.title
+    }`;
+  });
 
   const load = async () => {
     setLoading(true);
     setErrorMessage(null);
     try {
-      const nextSnapshot = await loadPrDiff(props.target);
+      const nextSnapshot =
+        props.target.kind === "github"
+          ? await loadPrDiff(props.target.target)
+          : await loadGitDiff(props.target.target);
       setSnapshot(nextSnapshot);
       const nextFiles = [...nextSnapshot.files].sort((left, right) =>
         left.path.localeCompare(right.path),
@@ -1019,7 +1300,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
       setLazyFileText({});
     } catch (error: unknown) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Failed to load PR diff",
+        error instanceof Error ? error.message : "Failed to load diff",
       );
     } finally {
       setLoading(false);
@@ -1188,9 +1469,9 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
         event.preventDefault();
         setMode((value) =>
           value === "left_right"
-            ? "full_file"
-            : value === "full_file"
-              ? "stack"
+            ? "stack"
+            : value === "stack"
+              ? "full_file"
               : "left_right",
         );
         return;
@@ -1204,19 +1485,22 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
 
       if (event.key === "2") {
         event.preventDefault();
-        setMode("full_file");
+        setMode("stack");
         return;
       }
 
       if (event.key === "3") {
         event.preventDefault();
-        setMode("stack");
+        setMode("full_file");
         return;
       }
 
       if (key === "o") {
+        if (props.target.kind !== "github") {
+          return;
+        }
         event.preventDefault();
-        void openUrl(snapshot()?.identity.url ?? props.target.url);
+        void openUrl(snapshot()?.identity.url ?? props.target.target.url);
       }
     };
 
@@ -1228,7 +1512,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
     <div class="pr-workspace">
       <aside class="pane pr-browser">
         <header class="pane__header">
-          <span class="pane__title">PR Files</span>
+          <span class="pane__title">Changed Files</span>
           <span>{files().length} files</span>
         </header>
         <div class="pane__body pr-browser__body">
@@ -1359,15 +1643,13 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
         <header class="pane__header pr-diff-header">
           <div class="pr-diff-header__title">
             <span class="pane__title">
-              {snapshot()?.identity.owner ?? props.target.owner}/
-              {snapshot()?.identity.repo ?? props.target.repo}#
-              {snapshot()?.identity.number ?? props.target.number}
+              {snapshot()?.identity.owner ?? fallbackOwner(props.target)}/
+              {snapshot()?.identity.repo ?? fallbackRepo(props.target)}{" "}
+              {headerSourceLabel()}
             </span>
-            <span class="pr-diff-header__summary">
-              {snapshot()?.identity.title ?? props.target.url}
-            </span>
+            <span class="pr-diff-header__summary">{headerSummary()}</span>
             <span
-              class={`pr-diff-header__state ${pullRequestStatusClass(
+              class={`pr-diff-header__state ${sourceStatusClass(
                 snapshot() ?? null,
               )}`}
               title={
@@ -1377,31 +1659,37 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
                   : `Merged at ${snapshot()?.identity.merged_at}`
               }
             >
-              {pullRequestStatusLabel(snapshot() ?? null)}
+              {sourceStatusLabel(snapshot() ?? null)}
             </span>
           </div>
           <div
             class="pr-diff-header__actions"
             role="group"
-            aria-label="PR actions and diff mode"
+            aria-label="Diff actions and diff mode"
           >
-            <button
-              type="button"
-              class="workspace__mode"
-              title="Open PR in GitHub"
-              aria-label="Open PR in GitHub"
-              onClick={() => {
-                void openUrl(snapshot()?.identity.url ?? props.target.url);
-              }}
-            >
-              <JumpIcon />
-            </button>
+            <Show when={props.target.kind === "github"}>
+              <button
+                type="button"
+                class="workspace__mode"
+                title="Open source in GitHub"
+                aria-label="Open source in GitHub"
+                onClick={() => {
+                  if (props.target.kind === "github") {
+                    void openUrl(
+                      snapshot()?.identity.url ?? props.target.target.url,
+                    );
+                  }
+                }}
+              >
+                <JumpIcon />
+              </button>
+            </Show>
             <For
               each={
                 [
                   ["left_right", "Left/right diff"],
-                  ["full_file", "Full file"],
                   ["stack", "Stack"],
+                  ["full_file", "Full file"],
                 ] as const
               }
             >

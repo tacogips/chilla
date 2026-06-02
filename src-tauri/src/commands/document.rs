@@ -5,6 +5,7 @@ use tauri::State;
 use crate::{
     app_state::AppState,
     document::types::{DocumentSnapshot, HeadingNode},
+    git_diff::{GitDiffService, GitDiffTarget},
     github_pr_diff::{GitHubPrDiffService, GitHubPrTarget, PrDiffFileText, PrDiffSnapshot},
     markdown::render_markdown,
     syntax_highlight::SyntaxUiTheme,
@@ -118,6 +119,28 @@ pub async fn load_pr_diff(target: GitHubPrTarget) -> Result<PrDiffSnapshot, Stri
     tauri::async_runtime::spawn_blocking(move || {
         GitHubPrDiffService::new()
             .and_then(|service| service.load(&target))
+            .map_err(format_command_error)
+    })
+    .await
+    .map_err(format_command_error)?
+}
+
+#[tauri::command]
+pub async fn load_git_diff(target: GitDiffTarget) -> Result<PrDiffSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        GitDiffService::new()
+            .load(&target)
+            .map_err(format_command_error)
+    })
+    .await
+    .map_err(format_command_error)?
+}
+
+#[tauri::command]
+pub async fn detect_git_repository(path: String) -> Result<Option<GitDiffTarget>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        GitDiffService::new()
+            .detect_repository(Path::new(&path))
             .map_err(format_command_error)
     })
     .await

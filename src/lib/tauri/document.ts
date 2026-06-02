@@ -30,13 +30,74 @@ export interface StartupContext {
   readonly browser_root: BrowserRoot;
 }
 
+export type GitHubDiffSource =
+  | {
+      readonly kind: "pull_request";
+      readonly number: number;
+    }
+  | {
+      readonly kind: "commit";
+      readonly sha: string;
+    }
+  | {
+      readonly kind: "compare";
+      readonly base: string;
+      readonly head: string;
+    }
+  | {
+      readonly kind: "git_worktree";
+      readonly repo_path: string;
+    }
+  | {
+      readonly kind: "git_commit";
+      readonly repo_path: string;
+      readonly commit: string;
+    }
+  | {
+      readonly kind: "git_range";
+      readonly repo_path: string;
+      readonly base: string;
+      readonly head: string;
+      readonly merge_base: boolean;
+    };
+
 export interface GitHubPrTarget {
   readonly owner: string;
   readonly repo: string;
-  readonly number: number;
+  readonly source: GitHubDiffSource;
   readonly url: string;
   readonly use_cache: boolean;
 }
+
+export type GitDiffSource =
+  | {
+      readonly kind: "worktree";
+    }
+  | {
+      readonly kind: "commit";
+      readonly commit: string;
+    }
+  | {
+      readonly kind: "range";
+      readonly base: string;
+      readonly head: string;
+      readonly merge_base: boolean;
+    };
+
+export interface GitDiffTarget {
+  readonly repo_path: string;
+  readonly source: GitDiffSource;
+}
+
+export type DiffWorkspaceTarget =
+  | {
+      readonly kind: "github";
+      readonly target: GitHubPrTarget;
+    }
+  | {
+      readonly kind: "git";
+      readonly target: GitDiffTarget;
+    };
 
 export type BrowserRoot =
   | {
@@ -53,6 +114,10 @@ export type BrowserRoot =
   | {
       readonly kind: "github_pr";
       readonly target: GitHubPrTarget;
+    }
+  | {
+      readonly kind: "git_diff";
+      readonly target: GitDiffTarget;
     };
 
 export interface DirectoryEntry {
@@ -222,7 +287,7 @@ export interface PrDiffFileText {
 export interface PrDiffIdentity {
   readonly owner: string;
   readonly repo: string;
-  readonly number: number;
+  readonly source: GitHubDiffSource;
   readonly url: string;
   readonly title: string;
   readonly state: string | null;
@@ -362,6 +427,170 @@ function readBooleanProperty(
   }
 
   return null;
+}
+
+function normalizeGitHubDiffSourcePayload(
+  payload: unknown,
+  context: string,
+): GitHubDiffSource {
+  const root = readStringRecord(payload);
+  if (root === null) {
+    throw new Error(`${context} is missing source identity`);
+  }
+
+  const kind = readStringProperty(root, "kind");
+  if (kind === "pull_request" || kind === "pullRequest") {
+    const number = readNumberProperty(root, "number");
+    if (number === null || number <= 0) {
+      throw new Error(`${context} is missing pull request number`);
+    }
+
+    return {
+      kind: "pull_request",
+      number,
+    };
+  }
+
+  if (kind === "commit") {
+    const sha = readStringProperty(root, "sha");
+    if (sha === null || sha.trim().length === 0) {
+      throw new Error(`${context} is missing commit sha`);
+    }
+
+    return {
+      kind: "commit",
+      sha,
+    };
+  }
+
+  if (kind === "compare") {
+    const base = readStringProperty(root, "base");
+    const head = readStringProperty(root, "head");
+    if (
+      base === null ||
+      head === null ||
+      base.trim().length === 0 ||
+      head.trim().length === 0
+    ) {
+      throw new Error(`${context} is missing compare refs`);
+    }
+
+    return {
+      kind: "compare",
+      base,
+      head,
+    };
+  }
+
+  if (kind === "git_worktree" || kind === "gitWorktree") {
+    const repoPath = readStringProperty(root, "repo_path", "repoPath");
+    if (repoPath === null || repoPath.trim().length === 0) {
+      throw new Error(`${context} is missing git repository path`);
+    }
+
+    return {
+      kind: "git_worktree",
+      repo_path: repoPath,
+    };
+  }
+
+  if (kind === "git_commit" || kind === "gitCommit") {
+    const repoPath = readStringProperty(root, "repo_path", "repoPath");
+    const commit = readStringProperty(root, "commit");
+    if (
+      repoPath === null ||
+      commit === null ||
+      repoPath.trim().length === 0 ||
+      commit.trim().length === 0
+    ) {
+      throw new Error(`${context} is missing git commit identity`);
+    }
+
+    return {
+      kind: "git_commit",
+      repo_path: repoPath,
+      commit,
+    };
+  }
+
+  if (kind === "git_range" || kind === "gitRange") {
+    const repoPath = readStringProperty(root, "repo_path", "repoPath");
+    const base = readStringProperty(root, "base");
+    const head = readStringProperty(root, "head");
+    const mergeBase = readBooleanProperty(root, "merge_base", "mergeBase");
+    if (
+      repoPath === null ||
+      base === null ||
+      head === null ||
+      mergeBase === null ||
+      repoPath.trim().length === 0 ||
+      base.trim().length === 0 ||
+      head.trim().length === 0
+    ) {
+      throw new Error(`${context} is missing git range identity`);
+    }
+
+    return {
+      kind: "git_range",
+      repo_path: repoPath,
+      base,
+      head,
+      merge_base: mergeBase,
+    };
+  }
+
+  throw new Error(`${context} contains an unknown source identity`);
+}
+
+function normalizeGitDiffSourcePayload(
+  payload: unknown,
+  context: string,
+): GitDiffSource {
+  const root = readStringRecord(payload);
+  if (root === null) {
+    throw new Error(`${context} is missing source identity`);
+  }
+
+  const kind = readStringProperty(root, "kind");
+  if (kind === "worktree") {
+    return { kind: "worktree" };
+  }
+
+  if (kind === "commit") {
+    const commit = readStringProperty(root, "commit");
+    if (commit === null || commit.trim().length === 0) {
+      throw new Error(`${context} is missing git commit`);
+    }
+
+    return {
+      kind: "commit",
+      commit,
+    };
+  }
+
+  if (kind === "range") {
+    const base = readStringProperty(root, "base");
+    const head = readStringProperty(root, "head");
+    const mergeBase = readBooleanProperty(root, "merge_base", "mergeBase");
+    if (
+      base === null ||
+      head === null ||
+      mergeBase === null ||
+      base.trim().length === 0 ||
+      head.trim().length === 0
+    ) {
+      throw new Error(`${context} is missing git range`);
+    }
+
+    return {
+      kind: "range",
+      base,
+      head,
+      merge_base: mergeBase,
+    };
+  }
+
+  throw new Error(`${context} contains an unknown git source identity`);
 }
 
 function readWorkspaceMode(value: unknown): WorkspaceMode | null {
@@ -511,18 +740,29 @@ export function normalizeStartupContextPayload(
   if (kind === "github_pr" || kind === "gitHubPr" || kind === "git_hub_pr") {
     const targetRaw = readStringRecord(browserRootRaw["target"]);
     if (targetRaw === null) {
-      throw new Error("Startup GitHub PR payload is missing target");
+      throw new Error("Startup GitHub diff payload is missing target");
     }
 
     const owner = readStringProperty(targetRaw, "owner");
     const repo = readStringProperty(targetRaw, "repo");
     const url = readStringProperty(targetRaw, "url");
-    const number = readNumberProperty(targetRaw, "number");
+    const sourceRaw =
+      targetRaw["source"] ??
+      (readNumberProperty(targetRaw, "number") === null
+        ? undefined
+        : {
+            kind: "pull_request",
+            number: readNumberProperty(targetRaw, "number"),
+          });
     const useCache = readBooleanProperty(targetRaw, "use_cache", "useCache");
 
-    if (owner === null || repo === null || url === null || number === null) {
-      throw new Error("Startup GitHub PR payload is missing required fields");
+    if (owner === null || repo === null || url === null) {
+      throw new Error("Startup GitHub diff payload is missing required fields");
     }
+    const source = normalizeGitHubDiffSourcePayload(
+      sourceRaw,
+      "Startup GitHub diff payload",
+    );
 
     return {
       initial_mode: initialMode,
@@ -531,9 +771,37 @@ export function normalizeStartupContextPayload(
         target: {
           owner,
           repo,
-          number,
+          source,
           url,
           use_cache: useCache ?? true,
+        },
+      },
+    };
+  }
+
+  if (kind === "git_diff" || kind === "gitDiff") {
+    const targetRaw = readStringRecord(browserRootRaw["target"]);
+    if (targetRaw === null) {
+      throw new Error("Startup Git diff payload is missing target");
+    }
+
+    const repoPath = readStringProperty(targetRaw, "repo_path", "repoPath");
+    const source = normalizeGitDiffSourcePayload(
+      targetRaw["source"],
+      "Startup Git diff payload",
+    );
+
+    if (repoPath === null) {
+      throw new Error("Startup Git diff payload is missing repository path");
+    }
+
+    return {
+      initial_mode: initialMode,
+      browser_root: {
+        kind: "git_diff",
+        target: {
+          repo_path: repoPath,
+          source,
         },
       },
     };
@@ -553,7 +821,7 @@ export function normalizePrDiffSnapshotPayload(
 ): PrDiffSnapshot {
   const root = readStringRecord(payload);
   if (root === null) {
-    throw new Error("Invalid PR diff payload");
+    throw new Error("Invalid GitHub diff payload");
   }
 
   const identityRaw = readStringRecord(root["identity"]);
@@ -569,12 +837,19 @@ export function normalizePrDiffSnapshotPayload(
     deletions === null ||
     warnings === null
   ) {
-    throw new Error("PR diff payload is missing required fields");
+    throw new Error("GitHub diff payload is missing required fields");
   }
 
   const owner = readStringProperty(identityRaw, "owner");
   const repo = readStringProperty(identityRaw, "repo");
-  const number = readNumberProperty(identityRaw, "number");
+  const sourceRaw =
+    identityRaw["source"] ??
+    (readNumberProperty(identityRaw, "number") === null
+      ? undefined
+      : {
+          kind: "pull_request",
+          number: readNumberProperty(identityRaw, "number"),
+        });
   const url = readStringProperty(identityRaw, "url");
   const title = readStringProperty(identityRaw, "title");
   const state = readOptionalStringProperty(identityRaw, "state");
@@ -603,7 +878,6 @@ export function normalizePrDiffSnapshotPayload(
   if (
     owner === null ||
     repo === null ||
-    number === null ||
     url === null ||
     title === null ||
     state === undefined ||
@@ -613,14 +887,18 @@ export function normalizePrDiffSnapshotPayload(
     baseBranch === undefined ||
     headBranch === undefined
   ) {
-    throw new Error("PR diff identity payload is missing required fields");
+    throw new Error("GitHub diff identity payload is missing required fields");
   }
+  const source = normalizeGitHubDiffSourcePayload(
+    sourceRaw,
+    "GitHub diff identity payload",
+  );
 
   return {
     identity: {
       owner,
       repo,
-      number,
+      source,
       url,
       title,
       state,
@@ -640,7 +918,7 @@ export function normalizePrDiffSnapshotPayload(
 function normalizePrDiffFilePayload(payload: unknown): PrDiffFile {
   const root = readStringRecord(payload);
   if (root === null) {
-    throw new Error("Invalid PR diff file payload");
+    throw new Error("Invalid GitHub diff file payload");
   }
 
   const path = readStringProperty(root, "path");
@@ -671,7 +949,7 @@ function normalizePrDiffFilePayload(payload: unknown): PrDiffFile {
     fullText === undefined ||
     fullTextTruncated === null
   ) {
-    throw new Error("PR diff file payload is missing required fields");
+    throw new Error("GitHub diff file payload is missing required fields");
   }
 
   return {
@@ -693,7 +971,7 @@ export function normalizePrDiffFileTextPayload(
 ): PrDiffFileText {
   const root = readStringRecord(payload);
   if (root === null) {
-    throw new Error("Invalid PR diff file text payload");
+    throw new Error("Invalid GitHub diff file text payload");
   }
 
   const fullText = readStringProperty(root, "full_text", "fullText");
@@ -704,7 +982,7 @@ export function normalizePrDiffFileTextPayload(
   );
 
   if (fullText === null || fullTextTruncated === null) {
-    throw new Error("PR diff file text payload is missing required fields");
+    throw new Error("GitHub diff file text payload is missing required fields");
   }
 
   return {
@@ -716,7 +994,7 @@ export function normalizePrDiffFileTextPayload(
 function normalizePrDiffChunkPayload(payload: unknown): PrDiffChunk {
   const root = readStringRecord(payload);
   if (root === null) {
-    throw new Error("Invalid PR diff chunk payload");
+    throw new Error("Invalid GitHub diff chunk payload");
   }
 
   const oldStart = readNumberProperty(root, "old_start", "oldStart");
@@ -734,7 +1012,7 @@ function normalizePrDiffChunkPayload(payload: unknown): PrDiffChunk {
     header === null ||
     !Array.isArray(changesRaw)
   ) {
-    throw new Error("PR diff chunk payload is missing required fields");
+    throw new Error("GitHub diff chunk payload is missing required fields");
   }
 
   return {
@@ -750,7 +1028,7 @@ function normalizePrDiffChunkPayload(payload: unknown): PrDiffChunk {
 function normalizePrDiffChangePayload(payload: unknown): PrDiffChange {
   const root = readStringRecord(payload);
   if (root === null) {
-    throw new Error("Invalid PR diff change payload");
+    throw new Error("Invalid GitHub diff change payload");
   }
 
   const changeTypeRaw = readStringProperty(root, "change_type", "changeType");
@@ -764,7 +1042,7 @@ function normalizePrDiffChangePayload(payload: unknown): PrDiffChange {
     newLine === undefined ||
     content === null
   ) {
-    throw new Error("PR diff change payload is missing required fields");
+    throw new Error("GitHub diff change payload is missing required fields");
   }
 
   return {
@@ -803,6 +1081,49 @@ export async function loadPrDiff(
     return normalizePrDiffSnapshotPayload(
       await invoke<unknown>("load_pr_diff", { target }),
     );
+  } catch (error: unknown) {
+    throw new Error(toErrorMessage(error));
+  }
+}
+
+export async function loadGitDiff(
+  target: GitDiffTarget,
+): Promise<PrDiffSnapshot> {
+  try {
+    return normalizePrDiffSnapshotPayload(
+      await invoke<unknown>("load_git_diff", { target }),
+    );
+  } catch (error: unknown) {
+    throw new Error(toErrorMessage(error));
+  }
+}
+
+export async function detectGitRepository(
+  path: string,
+): Promise<GitDiffTarget | null> {
+  try {
+    const payload = await invoke<unknown>("detect_git_repository", { path });
+    if (payload === null) {
+      return null;
+    }
+
+    const root = readStringRecord(payload);
+    if (root === null) {
+      throw new Error("Git repository detection payload is invalid");
+    }
+
+    const repoPath = readStringProperty(root, "repo_path", "repoPath");
+    if (repoPath === null) {
+      throw new Error("Git repository detection payload is missing path");
+    }
+
+    return {
+      repo_path: repoPath,
+      source: normalizeGitDiffSourcePayload(
+        root["source"],
+        "Git repository detection payload",
+      ),
+    };
   } catch (error: unknown) {
     throw new Error(toErrorMessage(error));
   }

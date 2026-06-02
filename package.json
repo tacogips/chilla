@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tauri-e2e.json",
     "typecheck:tauri:e2e": "tsc --noEmit -p tsconfig.tauri-e2e.json",
-    "test": "bun test",
+    "test": "bun test ./src/features/file-view/sort.test.ts ./src/features/preview/preview-assets.test.ts ./src/features/toc/heading-tree.test.ts ./src/features/workspace/openFiles.test.ts",
     "test:dom": "vitest run --config vitest.config.ts",
     "test:tauri:e2e:linux": "bash scripts/run-tauri-e2e-linux.sh",
     "tauri": "tauri"
