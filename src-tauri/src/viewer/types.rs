@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-use crate::document::types::DocumentSnapshot;
+use crate::{document::types::DocumentSnapshot, github_pr_diff::GitHubPrTarget};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceMode {
     Markdown,
     FileView,
+    PrDiff,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -21,6 +22,8 @@ pub enum BrowserRoot {
         selected_file_path: String,
         source_order_paths: Vec<String>,
     },
+    #[serde(rename = "github_pr")]
+    GitHubPr { target: GitHubPrTarget },
 }
 
 #[derive(Debug, Clone, Serialize)]

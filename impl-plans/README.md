@@ -40,6 +40,7 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan | Created | Design Reference |
 | ---- | ------- | ---------------- |
+| `github-pr-diff-viewer.md` | 2026-06-02 | `design-docs/specs/architecture.md#github-pr-diff-viewer-architecture`; `design-docs/specs/command.md#github-pr-url-contract` |
 | `heic-image-display.md` | 2026-05-27 | `design-docs/specs/architecture.md#heic--heif-image-display-architecture` |
 
 ## Completed Plans

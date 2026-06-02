@@ -17,6 +17,7 @@ Store questions, pending decisions, and items awaiting user approval.
 
 - [qa-example.md](./qa-example.md) - Example: Database Selection (template example)
 - [pending-example.md](./pending-example.md) - Example: CLI Output Format (template example)
+- [qa-github-pr-diff-viewer.md](./qa-github-pr-diff-viewer.md) - GitHub PR diff viewer scope decisions
 
 ## Adding New Items
 

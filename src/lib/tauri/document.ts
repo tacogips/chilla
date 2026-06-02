@@ -2,7 +2,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 
 export type RevisionToken = string;
-export type WorkspaceMode = "markdown" | "file_view";
+export type WorkspaceMode = "markdown" | "file_view" | "pr_diff";
 /** Raw vs formatted/rendered presentation (Markdown and CSV file preview). */
 export type DocumentPresentationMode = "raw" | "formatted";
 
@@ -30,6 +30,14 @@ export interface StartupContext {
   readonly browser_root: BrowserRoot;
 }
 
+export interface GitHubPrTarget {
+  readonly owner: string;
+  readonly repo: string;
+  readonly number: number;
+  readonly url: string;
+  readonly use_cache: boolean;
+}
+
 export type BrowserRoot =
   | {
       readonly kind: "directory";
@@ -41,6 +49,10 @@ export type BrowserRoot =
       readonly file_count: number;
       readonly selected_file_path: string;
       readonly source_order_paths: readonly string[];
+    }
+  | {
+      readonly kind: "github_pr";
+      readonly target: GitHubPrTarget;
     };
 
 export interface DirectoryEntry {
@@ -163,6 +175,72 @@ export type FilePreview =
       readonly message: string;
     };
 
+export enum PrFileStatus {
+  Added = "added",
+  Modified = "modified",
+  Deleted = "deleted",
+  Renamed = "renamed",
+  Copied = "copied",
+}
+
+export type PrDiffChangeType = "add" | "delete" | "context";
+
+export interface PrDiffChange {
+  readonly change_type: PrDiffChangeType;
+  readonly old_line: number | null;
+  readonly new_line: number | null;
+  readonly content: string;
+}
+
+export interface PrDiffChunk {
+  readonly old_start: number;
+  readonly old_lines: number;
+  readonly new_start: number;
+  readonly new_lines: number;
+  readonly header: string;
+  readonly changes: readonly PrDiffChange[];
+}
+
+export interface PrDiffFile {
+  readonly path: string;
+  readonly old_path: string | null;
+  readonly status: PrFileStatus;
+  readonly additions: number;
+  readonly deletions: number;
+  readonly chunks: readonly PrDiffChunk[];
+  readonly is_binary: boolean;
+  readonly raw_url: string | null;
+  readonly full_text: string | null;
+  readonly full_text_truncated: boolean;
+}
+
+export interface PrDiffFileText {
+  readonly full_text: string;
+  readonly full_text_truncated: boolean;
+}
+
+export interface PrDiffIdentity {
+  readonly owner: string;
+  readonly repo: string;
+  readonly number: number;
+  readonly url: string;
+  readonly title: string;
+  readonly state: string | null;
+  readonly merged: boolean;
+  readonly merged_at: string | null;
+  readonly updated_at: string | null;
+  readonly base_branch: string | null;
+  readonly head_branch: string | null;
+}
+
+export interface PrDiffSnapshot {
+  readonly identity: PrDiffIdentity;
+  readonly files: readonly PrDiffFile[];
+  readonly additions: number;
+  readonly deletions: number;
+  readonly warnings: readonly string[];
+}
+
 export const DOCUMENT_REFRESHED_EVENT = "document_refreshed";
 export const DOCUMENT_CONFLICT_EVENT = "document_conflict";
 
@@ -251,8 +329,45 @@ function readNumberProperty(
   return null;
 }
 
+function readNullableNumberProperty(
+  value: Readonly<Record<string, unknown>>,
+  ...keys: readonly string[]
+): number | null | undefined {
+  for (const key of keys) {
+    const candidate = value[key];
+    if (candidate === null) {
+      return null;
+    }
+    if (
+      typeof candidate === "number" &&
+      Number.isInteger(candidate) &&
+      candidate >= 0
+    ) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+function readBooleanProperty(
+  value: Readonly<Record<string, unknown>>,
+  ...keys: readonly string[]
+): boolean | null {
+  for (const key of keys) {
+    const candidate = value[key];
+    if (typeof candidate === "boolean") {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 function readWorkspaceMode(value: unknown): WorkspaceMode | null {
-  return value === "markdown" || value === "file_view" ? value : null;
+  return value === "markdown" || value === "file_view" || value === "pr_diff"
+    ? value
+    : null;
 }
 
 export function inferDirectoryPath(filePath: string): string | null {
@@ -393,7 +508,316 @@ export function normalizeStartupContextPayload(
     };
   }
 
+  if (kind === "github_pr" || kind === "gitHubPr" || kind === "git_hub_pr") {
+    const targetRaw = readStringRecord(browserRootRaw["target"]);
+    if (targetRaw === null) {
+      throw new Error("Startup GitHub PR payload is missing target");
+    }
+
+    const owner = readStringProperty(targetRaw, "owner");
+    const repo = readStringProperty(targetRaw, "repo");
+    const url = readStringProperty(targetRaw, "url");
+    const number = readNumberProperty(targetRaw, "number");
+    const useCache = readBooleanProperty(targetRaw, "use_cache", "useCache");
+
+    if (owner === null || repo === null || url === null || number === null) {
+      throw new Error("Startup GitHub PR payload is missing required fields");
+    }
+
+    return {
+      initial_mode: initialMode,
+      browser_root: {
+        kind: "github_pr",
+        target: {
+          owner,
+          repo,
+          number,
+          url,
+          use_cache: useCache ?? true,
+        },
+      },
+    };
+  }
+
   throw new Error("Startup context contains an unknown browser root");
+}
+
+export async function loadGitHubPrDiff(
+  target: GitHubPrTarget,
+): Promise<PrDiffSnapshot> {
+  return loadPrDiff(target);
+}
+
+export function normalizePrDiffSnapshotPayload(
+  payload: unknown,
+): PrDiffSnapshot {
+  const root = readStringRecord(payload);
+  if (root === null) {
+    throw new Error("Invalid PR diff payload");
+  }
+
+  const identityRaw = readStringRecord(root["identity"]);
+  const filesRaw = root["files"];
+  const additions = readNumberProperty(root, "additions");
+  const deletions = readNumberProperty(root, "deletions");
+  const warnings = readStringArrayProperty(root, "warnings");
+
+  if (
+    identityRaw === null ||
+    !Array.isArray(filesRaw) ||
+    additions === null ||
+    deletions === null ||
+    warnings === null
+  ) {
+    throw new Error("PR diff payload is missing required fields");
+  }
+
+  const owner = readStringProperty(identityRaw, "owner");
+  const repo = readStringProperty(identityRaw, "repo");
+  const number = readNumberProperty(identityRaw, "number");
+  const url = readStringProperty(identityRaw, "url");
+  const title = readStringProperty(identityRaw, "title");
+  const state = readOptionalStringProperty(identityRaw, "state");
+  const merged = readBooleanProperty(identityRaw, "merged");
+  const mergedAt = readOptionalStringProperty(
+    identityRaw,
+    "merged_at",
+    "mergedAt",
+  );
+  const updatedAt = readOptionalStringProperty(
+    identityRaw,
+    "updated_at",
+    "updatedAt",
+  );
+  const baseBranch = readOptionalStringProperty(
+    identityRaw,
+    "base_branch",
+    "baseBranch",
+  );
+  const headBranch = readOptionalStringProperty(
+    identityRaw,
+    "head_branch",
+    "headBranch",
+  );
+
+  if (
+    owner === null ||
+    repo === null ||
+    number === null ||
+    url === null ||
+    title === null ||
+    state === undefined ||
+    merged === null ||
+    mergedAt === undefined ||
+    updatedAt === undefined ||
+    baseBranch === undefined ||
+    headBranch === undefined
+  ) {
+    throw new Error("PR diff identity payload is missing required fields");
+  }
+
+  return {
+    identity: {
+      owner,
+      repo,
+      number,
+      url,
+      title,
+      state,
+      merged,
+      merged_at: mergedAt,
+      updated_at: updatedAt,
+      base_branch: baseBranch,
+      head_branch: headBranch,
+    },
+    files: filesRaw.map(normalizePrDiffFilePayload),
+    additions,
+    deletions,
+    warnings,
+  };
+}
+
+function normalizePrDiffFilePayload(payload: unknown): PrDiffFile {
+  const root = readStringRecord(payload);
+  if (root === null) {
+    throw new Error("Invalid PR diff file payload");
+  }
+
+  const path = readStringProperty(root, "path");
+  const oldPath = readOptionalStringProperty(root, "old_path", "oldPath");
+  const statusRaw = readStringProperty(root, "status");
+  const status = normalizePrFileStatus(statusRaw);
+  const additions = readNumberProperty(root, "additions");
+  const deletions = readNumberProperty(root, "deletions");
+  const chunksRaw = root["chunks"];
+  const isBinary = readBooleanProperty(root, "is_binary", "isBinary");
+  const rawUrl = readOptionalStringProperty(root, "raw_url", "rawUrl");
+  const fullText = readOptionalStringProperty(root, "full_text", "fullText");
+  const fullTextTruncated = readBooleanProperty(
+    root,
+    "full_text_truncated",
+    "fullTextTruncated",
+  );
+
+  if (
+    path === null ||
+    oldPath === undefined ||
+    status === null ||
+    additions === null ||
+    deletions === null ||
+    !Array.isArray(chunksRaw) ||
+    isBinary === null ||
+    rawUrl === undefined ||
+    fullText === undefined ||
+    fullTextTruncated === null
+  ) {
+    throw new Error("PR diff file payload is missing required fields");
+  }
+
+  return {
+    path,
+    old_path: oldPath,
+    status,
+    additions,
+    deletions,
+    chunks: chunksRaw.map(normalizePrDiffChunkPayload),
+    is_binary: isBinary,
+    raw_url: rawUrl,
+    full_text: fullText,
+    full_text_truncated: fullTextTruncated,
+  };
+}
+
+export function normalizePrDiffFileTextPayload(
+  payload: unknown,
+): PrDiffFileText {
+  const root = readStringRecord(payload);
+  if (root === null) {
+    throw new Error("Invalid PR diff file text payload");
+  }
+
+  const fullText = readStringProperty(root, "full_text", "fullText");
+  const fullTextTruncated = readBooleanProperty(
+    root,
+    "full_text_truncated",
+    "fullTextTruncated",
+  );
+
+  if (fullText === null || fullTextTruncated === null) {
+    throw new Error("PR diff file text payload is missing required fields");
+  }
+
+  return {
+    full_text: fullText,
+    full_text_truncated: fullTextTruncated,
+  };
+}
+
+function normalizePrDiffChunkPayload(payload: unknown): PrDiffChunk {
+  const root = readStringRecord(payload);
+  if (root === null) {
+    throw new Error("Invalid PR diff chunk payload");
+  }
+
+  const oldStart = readNumberProperty(root, "old_start", "oldStart");
+  const oldLines = readNumberProperty(root, "old_lines", "oldLines");
+  const newStart = readNumberProperty(root, "new_start", "newStart");
+  const newLines = readNumberProperty(root, "new_lines", "newLines");
+  const header = readStringProperty(root, "header");
+  const changesRaw = root["changes"];
+
+  if (
+    oldStart === null ||
+    oldLines === null ||
+    newStart === null ||
+    newLines === null ||
+    header === null ||
+    !Array.isArray(changesRaw)
+  ) {
+    throw new Error("PR diff chunk payload is missing required fields");
+  }
+
+  return {
+    old_start: oldStart,
+    old_lines: oldLines,
+    new_start: newStart,
+    new_lines: newLines,
+    header,
+    changes: changesRaw.map(normalizePrDiffChangePayload),
+  };
+}
+
+function normalizePrDiffChangePayload(payload: unknown): PrDiffChange {
+  const root = readStringRecord(payload);
+  if (root === null) {
+    throw new Error("Invalid PR diff change payload");
+  }
+
+  const changeTypeRaw = readStringProperty(root, "change_type", "changeType");
+  const oldLine = readNullableNumberProperty(root, "old_line", "oldLine");
+  const newLine = readNullableNumberProperty(root, "new_line", "newLine");
+  const content = readStringProperty(root, "content");
+
+  if (
+    !isPrDiffChangeType(changeTypeRaw) ||
+    oldLine === undefined ||
+    newLine === undefined ||
+    content === null
+  ) {
+    throw new Error("PR diff change payload is missing required fields");
+  }
+
+  return {
+    change_type: changeTypeRaw,
+    old_line: oldLine,
+    new_line: newLine,
+    content,
+  };
+}
+
+function normalizePrFileStatus(value: string | null): PrFileStatus | null {
+  switch (value) {
+    case PrFileStatus.Added:
+      return PrFileStatus.Added;
+    case PrFileStatus.Modified:
+      return PrFileStatus.Modified;
+    case PrFileStatus.Deleted:
+      return PrFileStatus.Deleted;
+    case PrFileStatus.Renamed:
+      return PrFileStatus.Renamed;
+    case PrFileStatus.Copied:
+      return PrFileStatus.Copied;
+    default:
+      return null;
+  }
+}
+
+function isPrDiffChangeType(value: string | null): value is PrDiffChangeType {
+  return value === "add" || value === "delete" || value === "context";
+}
+
+export async function loadPrDiff(
+  target: GitHubPrTarget,
+): Promise<PrDiffSnapshot> {
+  try {
+    return normalizePrDiffSnapshotPayload(
+      await invoke<unknown>("load_pr_diff", { target }),
+    );
+  } catch (error: unknown) {
+    throw new Error(toErrorMessage(error));
+  }
+}
+
+export async function loadPrDiffFileText(
+  rawUrl: string,
+): Promise<PrDiffFileText> {
+  try {
+    return normalizePrDiffFileTextPayload(
+      await invoke<unknown>("load_pr_diff_file_text", { rawUrl }),
+    );
+  } catch (error: unknown) {
+    throw new Error(toErrorMessage(error));
+  }
 }
 
 export async function getStartupContext(): Promise<StartupContext> {

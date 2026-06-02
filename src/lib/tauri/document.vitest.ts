@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { normalizeStartupContextPayload } from "./document";
+import { PrFileStatus } from "./document";
+import {
+  normalizePrDiffSnapshotPayload,
+  normalizeStartupContextPayload,
+} from "./document";
 
 describe("normalizeStartupContextPayload", () => {
   it("accepts snake_case directory startup payloads", () => {
@@ -169,5 +173,214 @@ describe("normalizeStartupContextPayload", () => {
       selected_file_path: "/workspace/a.csv",
       source_order_paths: ["/workspace/a.csv"],
     });
+  });
+
+  it("accepts GitHub PR startup payloads", () => {
+    expect(
+      normalizeStartupContextPayload({
+        initial_mode: "pr_diff",
+        browser_root: {
+          kind: "github_pr",
+          target: {
+            owner: "tacogips",
+            repo: "chilla",
+            number: 12,
+            url: "https://github.com/tacogips/chilla/pull/12",
+            use_cache: false,
+          },
+        },
+      }),
+    ).toEqual({
+      initial_mode: "pr_diff",
+      browser_root: {
+        kind: "github_pr",
+        target: {
+          owner: "tacogips",
+          repo: "chilla",
+          number: 12,
+          url: "https://github.com/tacogips/chilla/pull/12",
+          use_cache: false,
+        },
+      },
+    });
+  });
+
+  it("defaults GitHub PR startup payloads to cache-enabled", () => {
+    const context = normalizeStartupContextPayload({
+      initial_mode: "pr_diff",
+      browser_root: {
+        kind: "github_pr",
+        target: {
+          owner: "tacogips",
+          repo: "rielflow",
+          number: 44,
+          url: "https://github.com/tacogips/rielflow/pull/44",
+        },
+      },
+    });
+
+    expect(context.browser_root).toEqual({
+      kind: "github_pr",
+      target: {
+        owner: "tacogips",
+        repo: "rielflow",
+        number: 44,
+        url: "https://github.com/tacogips/rielflow/pull/44",
+        use_cache: true,
+      },
+    });
+  });
+});
+
+describe("normalizePrDiffSnapshotPayload", () => {
+  it("accepts complete PR diff payloads", () => {
+    expect(
+      normalizePrDiffSnapshotPayload({
+        identity: {
+          owner: "tacogips",
+          repo: "chilla",
+          number: 12,
+          url: "https://github.com/tacogips/chilla/pull/12",
+          title: "Example",
+          state: "open",
+          merged: true,
+          merged_at: "2026-06-02T03:04:05Z",
+          updatedAt: "2026-06-02T03:05:06Z",
+          base_branch: "main",
+          head_branch: "feature",
+        },
+        files: [
+          {
+            path: "src/app.ts",
+            old_path: null,
+            status: "modified",
+            additions: 1,
+            deletions: 1,
+            chunks: [
+              {
+                old_start: 1,
+                old_lines: 1,
+                new_start: 1,
+                new_lines: 1,
+                header: "@@ -1 +1 @@",
+                changes: [
+                  {
+                    change_type: "delete",
+                    old_line: 1,
+                    new_line: null,
+                    content: "old",
+                  },
+                  {
+                    change_type: "add",
+                    old_line: null,
+                    new_line: 1,
+                    content: "new",
+                  },
+                ],
+              },
+            ],
+            is_binary: false,
+            raw_url:
+              "https://raw.githubusercontent.com/tacogips/chilla/main/src/app.ts",
+            full_text: "new",
+            full_text_truncated: false,
+          },
+        ],
+        additions: 1,
+        deletions: 1,
+        warnings: [],
+      }),
+    ).toEqual({
+      identity: {
+        owner: "tacogips",
+        repo: "chilla",
+        number: 12,
+        url: "https://github.com/tacogips/chilla/pull/12",
+        title: "Example",
+        state: "open",
+        merged: true,
+        merged_at: "2026-06-02T03:04:05Z",
+        updated_at: "2026-06-02T03:05:06Z",
+        base_branch: "main",
+        head_branch: "feature",
+      },
+      files: [
+        {
+          path: "src/app.ts",
+          old_path: null,
+          status: PrFileStatus.Modified,
+          additions: 1,
+          deletions: 1,
+          chunks: [
+            {
+              old_start: 1,
+              old_lines: 1,
+              new_start: 1,
+              new_lines: 1,
+              header: "@@ -1 +1 @@",
+              changes: [
+                {
+                  change_type: "delete",
+                  old_line: 1,
+                  new_line: null,
+                  content: "old",
+                },
+                {
+                  change_type: "add",
+                  old_line: null,
+                  new_line: 1,
+                  content: "new",
+                },
+              ],
+            },
+          ],
+          is_binary: false,
+          raw_url:
+            "https://raw.githubusercontent.com/tacogips/chilla/main/src/app.ts",
+          full_text: "new",
+          full_text_truncated: false,
+        },
+      ],
+      additions: 1,
+      deletions: 1,
+      warnings: [],
+    });
+  });
+
+  it("rejects malformed PR diff files", () => {
+    expect(() =>
+      normalizePrDiffSnapshotPayload({
+        identity: {
+          owner: "tacogips",
+          repo: "chilla",
+          number: 12,
+          url: "https://github.com/tacogips/chilla/pull/12",
+          title: "Example",
+          state: null,
+          merged: false,
+          merged_at: null,
+          updated_at: null,
+          base_branch: null,
+          head_branch: null,
+        },
+        files: [
+          {
+            path: "src/app.ts",
+            old_path: null,
+            status: "unsupported",
+            additions: 1,
+            deletions: 1,
+            chunks: [],
+            is_binary: false,
+            raw_url: null,
+            full_text: null,
+            full_text_truncated: false,
+          },
+        ],
+        additions: 1,
+        deletions: 1,
+        warnings: [],
+      }),
+    ).toThrow("PR diff file payload is missing required fields");
   });
 });

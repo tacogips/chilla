@@ -1,0 +1,25 @@
+[
+  {
+    "filename": "src/new_name.ts",
+    "previous_filename": "src/old_name.ts",
+    "status": "renamed",
+    "additions": 1,
+    "deletions": 1,
+    "raw_url": "https://raw.githubusercontent.com/tacogips/chilla/main/src/new_name.ts",
+    "patch": "@@ -1,2 +1,2 @@\n export const value = 1;\n-export const name = \"old\";\n+export const name = \"new\";"
+  },
+  {
+    "filename": "assets/logo.png",
+    "status": "modified",
+    "additions": 0,
+    "deletions": 0,
+    "patch": null
+  },
+  {
+    "filename": "src/remove.ts",
+    "status": "removed",
+    "additions": 0,
+    "deletions": 2,
+    "patch": "@@ -1,2 +0,0 @@\n-export const removed = true;\n-console.log(removed);"
+  }
+]

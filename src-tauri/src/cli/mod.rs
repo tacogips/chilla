@@ -7,6 +7,7 @@ use std::{
 
 use crate::{
     error::{AppError, AppResult},
+    github_pr_diff::GitHubPrTarget,
     viewer::service::resolve_startup_target,
 };
 
@@ -16,6 +17,7 @@ pub enum StartupTarget {
     Directory(PathBuf),
     File(PathBuf),
     FileSet(Vec<PathBuf>),
+    GitHubPr(GitHubPrTarget),
 }
 
 pub enum CliParseOutcome {
@@ -64,14 +66,58 @@ where
         return match argument.as_str() {
             "--help" | "-h" => Ok(CliParseOutcome::Help(help_text(&binary_name))),
             "--version" | "-V" => Ok(CliParseOutcome::Version(version_text())),
+            "--no-pr-diff-cache" => Err(AppError::cli_usage(
+                format!(
+                    "--no-pr-diff-cache requires a GitHub pull request URL.\n\n{}",
+                    help_text(&binary_name)
+                ),
+                2,
+            )),
             flag if flag.starts_with('-') => Err(AppError::cli_usage(
                 format!("unsupported flag `{flag}`\n\n{}", help_text(&binary_name)),
                 2,
+            )),
+            target if target.starts_with("https://") => Ok(CliParseOutcome::Run(
+                StartupTarget::GitHubPr(GitHubPrTarget::parse(target)?),
             )),
             file_name => Ok(CliParseOutcome::Run(validate_cli_path(Path::new(
                 file_name,
             ))?)),
         };
+    }
+
+    if args.len() == 2 {
+        let mut values = args
+            .iter()
+            .cloned()
+            .map(|argument| {
+                argument.into_string().map_err(|_| {
+                    AppError::cli_usage("path arguments must be valid UTF-8".to_string(), 2)
+                })
+            })
+            .collect::<AppResult<Vec<_>>>()?;
+
+        if values.iter().any(|value| value == "--no-pr-diff-cache") {
+            values.retain(|value| value != "--no-pr-diff-cache");
+            let Some(target) = values.into_iter().next() else {
+                return Err(AppError::cli_usage(
+                    "--no-pr-diff-cache requires a GitHub pull request URL".to_string(),
+                    2,
+                ));
+            };
+
+            if !target.starts_with("https://") {
+                return Err(AppError::cli_usage(
+                    "--no-pr-diff-cache can only be used with a GitHub pull request URL"
+                        .to_string(),
+                    2,
+                ));
+            }
+
+            let mut target = GitHubPrTarget::parse(&target)?;
+            target.use_cache = false;
+            return Ok(CliParseOutcome::Run(StartupTarget::GitHubPr(target)));
+        }
     }
 
     let mut paths = Vec::<PathBuf>::new();
@@ -87,6 +133,13 @@ where
                     "multi-path startup does not support flags (`{raw}`).\n\n{}",
                     help_text(&binary_name),
                 ),
+                2,
+            ));
+        }
+
+        if raw.starts_with("https://") {
+            return Err(AppError::cli_usage(
+                "GitHub pull request URLs cannot be combined with other startup paths".to_string(),
                 2,
             ));
         }
@@ -146,7 +199,7 @@ fn resolve_explicit_file_startup(paths: &[PathBuf]) -> AppResult<StartupTarget> 
 
 fn help_text(binary_name: &str) -> String {
     format!(
-        "Usage:\n  {binary_name} [path ...]\n  {binary_name} --help\n  {binary_name} --version\n\nIf no paths are provided, chilla opens the current working directory in file view mode.\nIf two or more file paths are provided, chilla opens file view mode with the left pane limited to those files.",
+        "Usage:\n  {binary_name} [path ...]\n  {binary_name} <github-pr-url>\n  {binary_name} --no-pr-diff-cache <github-pr-url>\n  {binary_name} --help\n  {binary_name} --version\n\nIf no paths are provided, chilla opens the current working directory in file view mode.\nIf a GitHub pull request URL is provided, including a /files tab URL, chilla opens that PR diff in read-only mode.\nPR diffs are cached under the system temp directory and refreshed when GitHub reports a newer PR updated_at value.\nIf two or more file paths are provided, chilla opens file view mode with the left pane limited to those files.",
     )
 }
 
@@ -234,6 +287,64 @@ mod tests {
         match outcome {
             CliParseOutcome::Run(StartupTarget::File(path)) => {
                 assert_eq!(path, file_path.canonicalize().expect("canonical path"));
+            }
+            _ => panic!("unexpected parse outcome"),
+        }
+    }
+
+    #[test]
+    fn parses_github_pr_files_tab_startup_target() {
+        let outcome = parse_cli([
+            "chilla",
+            "https://github.com/tacogips/rielflow/pull/44/files",
+        ])
+        .expect("parse GitHub PR files tab URL");
+
+        match outcome {
+            CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
+                assert_eq!(target.owner, "tacogips");
+                assert_eq!(target.repo, "rielflow");
+                assert_eq!(target.number, 44);
+                assert_eq!(target.url, "https://github.com/tacogips/rielflow/pull/44");
+                assert!(target.use_cache);
+            }
+            _ => panic!("unexpected parse outcome"),
+        }
+    }
+
+    #[test]
+    fn parses_github_pr_trailing_slash_startup_target() {
+        let outcome = parse_cli(["chilla", "https://github.com/tacogips/rielflow/pull/44/"])
+            .expect("parse GitHub PR URL with trailing slash");
+
+        match outcome {
+            CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
+                assert_eq!(target.owner, "tacogips");
+                assert_eq!(target.repo, "rielflow");
+                assert_eq!(target.number, 44);
+                assert_eq!(target.url, "https://github.com/tacogips/rielflow/pull/44");
+                assert!(target.use_cache);
+            }
+            _ => panic!("unexpected parse outcome"),
+        }
+    }
+
+    #[test]
+    fn parses_no_pr_diff_cache_startup_option() {
+        let outcome = parse_cli([
+            "chilla",
+            "--no-pr-diff-cache",
+            "https://github.com/tacogips/rielflow/pull/44/files",
+        ])
+        .expect("parse GitHub PR no-cache startup");
+
+        match outcome {
+            CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
+                assert_eq!(target.owner, "tacogips");
+                assert_eq!(target.repo, "rielflow");
+                assert_eq!(target.number, 44);
+                assert_eq!(target.url, "https://github.com/tacogips/rielflow/pull/44");
+                assert!(!target.use_cache);
             }
             _ => panic!("unexpected parse outcome"),
         }

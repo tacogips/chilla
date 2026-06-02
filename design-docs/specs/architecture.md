@@ -248,6 +248,140 @@ See `design-docs/specs/design-epub-navigation.md` for EPUB TOC extraction, reade
 
 ---
 
+## GitHub PR Diff Viewer Architecture
+
+This section defines the design target for opening a GitHub pull request URL in chilla and browsing the pull request diff.
+
+### Product Scope
+
+- A GitHub pull request URL is a first-class startup target alongside local files and directories.
+- The user can pass a URL such as `https://github.com/<owner>/<repo>/pull/<number>` and open a read-only PR diff workspace.
+- The PR diff workspace uses qraftbox as a behavioral reference for diff rendering modes:
+  - side-by-side diff
+  - current-state diff view
+  - stack/inline diff view
+- The left pane presents changed files as a yazi-style current-directory-only browser, not an expanded tree.
+- File navigation should feel like local file browsing: directory entry, parent navigation, sibling movement, keyboard selection, and pointer selection.
+- The first slice is a PR diff viewer, not a GitHub review/comment authoring tool.
+
+### Responsibility Split
+
+| Component | Stack | Responsibility |
+|-----------|-------|----------------|
+| Startup target parsing | Rust | Classify positional input as filesystem path or GitHub PR URL before app bootstrap |
+| GitHub PR diff service | Rust | Validate URL parts, retrieve PR metadata and diff file payloads, normalize errors |
+| Diff payload contract | Rust + TypeScript | Keep `PrDiff`, `DiffFile`, `DiffChunk`, and `DiffChange` serde/TypeScript shapes aligned |
+| PR diff workspace | Solid.js | Own selected file, selected directory, mode selection, keyboard navigation, and loading/error states |
+| Changed-file browser | Solid.js | Project flat changed-file paths into a current-directory-only listing |
+| Diff renderer | Solid.js | Render side-by-side, current-state, and stack/inline modes from typed diff data |
+
+### Data Model
+
+The backend returns a typed PR diff snapshot rather than HTML. The snapshot should include:
+
+- PR identity: owner, repository, number, canonical URL, title, state, base branch, and head branch.
+- Aggregate stats: file count, additions, deletions.
+- Changed files:
+  - path
+  - optional old path for renames
+  - status: added, modified, deleted, renamed
+  - additions and deletions
+  - hunks/chunks
+  - per-line changes with add, delete, or context type and old/new line numbers when available
+- Retrieval metadata:
+  - source strategy used
+  - truncated or omitted file markers when a platform limit is reached
+  - user-actionable warning list when some files cannot be rendered
+
+This contract intentionally mirrors the qraftbox `DiffFile`, `DiffChunk`, `DiffChange`, and `ViewMode` concepts while remaining native to chilla's Rust/Tauri boundary.
+
+### PR URL Validation
+
+Accepted first-slice URLs:
+
+- `https://github.com/<owner>/<repo>/pull/<number>`
+- Same URL with query string or fragment, which should be ignored after validation.
+
+Rejected first-slice inputs:
+
+- Non-GitHub hosts.
+- Missing owner, repo, or pull request number.
+- Pull request numbers that are not positive integers.
+- Git remote URLs such as `git@github.com:owner/repo.git`; these are repository references, not PR targets.
+
+Validation errors should be returned as typed startup errors or workspace errors with clear messages. The UI should not guess repository context from the current local directory in this feature slice.
+
+### Diff Retrieval Boundary
+
+The backend owns network access and any GitHub credential usage. The frontend never calls GitHub directly.
+
+Initial implementation planning should choose one retrieval adapter behind a service boundary:
+
+- GitHub API adapter using pull request file metadata and patch content when authenticated or unauthenticated access is sufficient.
+- Raw `.diff` adapter using GitHub's diff endpoint for public repositories.
+- Future local-git adapter for users who want to fetch PR refs into an existing clone.
+
+The architecture should keep these options hidden behind one Rust service contract so later credential or private-repository support does not change the frontend.
+
+### File Browser Projection
+
+Changed-file paths are flat diff records, but the left pane displays only one logical directory at a time.
+
+Rules:
+
+- The root directory lists direct changed files and child directories derived from changed-file paths.
+- Entering a directory updates the current directory and replaces the list with only that directory's direct entries.
+- A parent entry is available outside the root.
+- Directory rows show aggregate changed-file count and aggregate additions/deletions for descendants.
+- File rows show status, basename, optional parent path context, additions, and deletions.
+- Selecting a file updates the diff pane without changing the current directory.
+- Rename rows should be discoverable by either new path or current display path, with old path visible in metadata.
+
+This projection is intentionally different from tree diff browsers. It preserves a local file-browser mental model and avoids showing the full repository hierarchy at once.
+
+### Diff Modes
+
+Chilla should expose three user-facing diff modes for PR viewing:
+
+| Chilla mode | qraftbox reference | Behavior |
+|-------------|--------------------|----------|
+| Side by side | `side-by-side`, `diff_side_by_side.png` | Old and new columns are aligned with line-number gutters and changed rows highlighted |
+| Current | `current-state`, `diff_current.png` | Shows the resulting file state with additions/context emphasized and deleted-only lines omitted or represented as non-current metadata |
+| Stack | `inline`, `diff_stack.png` | Shows old/new changes in one vertical flow suitable for narrow widths and sequential review |
+
+qraftbox also has a `full-file` view mode. That mode is not part of the user's requested three-mode scope and should not block the first design/implementation plan unless a later requirement explicitly adds it.
+
+### UI State Model
+
+| State | Owner | Notes |
+|-------|-------|-------|
+| PR URL and parsed identity | Rust + frontend mirror | Rust validates and canonicalizes |
+| Loaded PR diff snapshot | Rust-authored data | Frontend treats as immutable until reload |
+| Current diff directory | Frontend | Defaults to root |
+| Selected changed file | Frontend | Defaults to first file in stable path order |
+| Diff mode | Frontend | Defaults to side-by-side on desktop and stack on narrow layouts if needed |
+| Loading/error state | Frontend | Derived from command lifecycle and typed backend errors |
+| GitHub credentials | Rust/process environment | Never serialized to the frontend |
+
+### Adapter And Reference Mapping
+
+The qraftbox files in the sibling qraftbox checkout are behavioral references only.
+
+- Reuse the concepts of `DiffFile`, chunks, change rows, and view modes.
+- Do not copy qraftbox Svelte component code into the Solid frontend.
+- Keep any GitHub retrieval adapter behind chilla-local Rust modules rather than importing qraftbox server code.
+- qraftbox comment-selection behavior is out of scope for this first PR viewer slice.
+
+### Rollout Constraints
+
+- This is mixed-stack Tauri work; implementation must update Rust and TypeScript command contracts together.
+- Tauri permissions must be updated if a new invoke command is added.
+- Large diffs need explicit first-slice limits or lazy rendering before broad release.
+- Errors for network failure, rate limits, missing PRs, private repository access, and malformed URLs must be actionable.
+- Verification should cover Bun typecheck/tests and Cargo checks/tests with quiet Cargo output.
+
+---
+
 ## HEIC / HEIF Image Display Architecture
 
 This section defines the design target for displaying HEIC and HEIF images in Markdown previews and file-view image previews.

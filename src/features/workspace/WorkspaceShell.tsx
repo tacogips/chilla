@@ -51,6 +51,7 @@ import {
   EPUB_PAGINATION_STEP_EVENT,
 } from "../preview/EpubPreviewPane";
 import { CsvFilePreviewPane } from "../preview/CsvFilePreviewPane";
+import { PrDiffWorkspace } from "../pr-diff/PrDiffWorkspace";
 import { TocPane, type TocItem } from "../toc/TocPane";
 import {
   canReloadMarkdownSnapshotForPresentationRefresh,
@@ -1291,7 +1292,10 @@ export function WorkspaceShell() {
 
       const browserRoot = nextStartupContext.browser_root;
 
-      if (browserRoot.kind === "directory") {
+      if (browserRoot.kind === "github_pr") {
+        setFileTreeOpen(true);
+        clearDocumentArea();
+      } else if (browserRoot.kind === "directory") {
         setFileTreeOpen(browserRoot.selected_file_path === null);
 
         await loadDirectoryState(
@@ -1585,6 +1589,12 @@ export function WorkspaceShell() {
     return preview?.kind === "csv" ? preview : null;
   });
   const currentOpenPath = () => md()?.path ?? previewPath(fp());
+  const prTarget = createMemo(() => {
+    const context = startupContext();
+    return context?.browser_root.kind === "github_pr"
+      ? context.browser_root.target
+      : null;
+  });
   const hasOpenDocument = () => md() !== null || fp() !== null;
   const hasTocDocument = createMemo(
     () => md() !== null || fp()?.kind === "epub",
@@ -1666,6 +1676,10 @@ export function WorkspaceShell() {
   };
 
   const viewerGridClassName = createMemo(() => {
+    if (prTarget() !== null) {
+      return "workspace__body workspace__body--pr-diff";
+    }
+
     const toc = isTocOpen() && hasTocDocument();
     const tree = isFileTreeOpen();
     let className = "workspace__body workspace__body--viewer";
@@ -2176,206 +2190,215 @@ export function WorkspaceShell() {
         </Show>
 
         <div class={viewerGridClassName()}>
-          <Show when={isFileTreeOpen()}>
-            <FileBrowserPane
-              active={true}
-              listingKind={directoryState()?.listingKind ?? "directory"}
-              directory={directoryState()}
-              sort={directorySort()}
-              query={directoryQuery()}
-              selectedPath={selectedBrowserPath()}
-              canLoadMore={canLoadMoreDirectoryEntries()}
-              isLoadingMore={isLoadingMoreDirectoryEntries()}
-              onConfirmEntry={(entry, options) =>
-                void handleConfirmEntry(entry, options)
-              }
-              onChangeSort={(nextSort) => {
-                void handleChangeDirectorySort(nextSort);
-              }}
-              onChangeQuery={(nextQuery) => {
-                void handleChangeDirectoryQuery(nextQuery);
-              }}
-              onLoadMore={() => {
-                const state = directoryState();
-                if (state?.listingKind === "explicit_file_set") {
-                  void loadMoreExplicitFileSetEntries();
-                } else {
-                  void loadMoreDirectoryEntries();
-                }
-              }}
-              onNavigateToParent={() => void handleNavigateToParent()}
-              onSelectEntry={handleSelectEntry}
-            />
+          <Show when={prTarget()}>
+            {(target) => <PrDiffWorkspace target={target()} />}
           </Show>
+          <Show when={prTarget() === null}>
+            <>
+              <Show when={isFileTreeOpen()}>
+                <FileBrowserPane
+                  active={true}
+                  listingKind={directoryState()?.listingKind ?? "directory"}
+                  directory={directoryState()}
+                  sort={directorySort()}
+                  query={directoryQuery()}
+                  selectedPath={selectedBrowserPath()}
+                  canLoadMore={canLoadMoreDirectoryEntries()}
+                  isLoadingMore={isLoadingMoreDirectoryEntries()}
+                  onConfirmEntry={(entry, options) =>
+                    void handleConfirmEntry(entry, options)
+                  }
+                  onChangeSort={(nextSort) => {
+                    void handleChangeDirectorySort(nextSort);
+                  }}
+                  onChangeQuery={(nextQuery) => {
+                    void handleChangeDirectoryQuery(nextQuery);
+                  }}
+                  onLoadMore={() => {
+                    const state = directoryState();
+                    if (state?.listingKind === "explicit_file_set") {
+                      void loadMoreExplicitFileSetEntries();
+                    } else {
+                      void loadMoreDirectoryEntries();
+                    }
+                  }}
+                  onNavigateToParent={() => void handleNavigateToParent()}
+                  onSelectEntry={handleSelectEntry}
+                />
+              </Show>
 
-          <Show when={isTocOpen() && hasTocDocument()}>
-            <TocPane
-              activeAnchorId={selection().anchorId}
-              emptyLabel={tocEmptyLabel()}
-              items={tocItems()}
-              summaryLabel={tocSummaryLabel()}
-              visible={true}
-              onSelectItem={handleTocItemSelect}
-            />
-          </Show>
+              <Show when={isTocOpen() && hasTocDocument()}>
+                <TocPane
+                  activeAnchorId={selection().anchorId}
+                  emptyLabel={tocEmptyLabel()}
+                  items={tocItems()}
+                  summaryLabel={tocSummaryLabel()}
+                  visible={true}
+                  onSelectItem={handleTocItemSelect}
+                />
+              </Show>
 
-          <div class="workspace__document-column">
-            <Show when={md() !== null && markdownPane() === "raw"}>
-              <section class="pane workspace__markdown-raw-pane">
-                <header class="pane__header">
-                  <span class="pane__title">Markdown</span>
-                  <span>Source (editable)</span>
-                </header>
-                <div class="pane__body markdown-raw-body">
-                  <textarea
-                    class="markdown-source-editor"
-                    spellcheck={false}
-                    value={markdownEditorBuffer()}
-                    onInput={(event) =>
-                      setMarkdownEditorBuffer(event.currentTarget.value)
+              <div class="workspace__document-column">
+                <Show when={md() !== null && markdownPane() === "raw"}>
+                  <section class="pane workspace__markdown-raw-pane">
+                    <header class="pane__header">
+                      <span class="pane__title">Markdown</span>
+                      <span>Source (editable)</span>
+                    </header>
+                    <div class="pane__body markdown-raw-body">
+                      <textarea
+                        class="markdown-source-editor"
+                        spellcheck={false}
+                        value={markdownEditorBuffer()}
+                        onInput={(event) =>
+                          setMarkdownEditorBuffer(event.currentTarget.value)
+                        }
+                      />
+                    </div>
+                  </section>
+                </Show>
+
+                <Show when={md() !== null && markdownPane() === "preview"}>
+                  <PreviewPane
+                    colorScheme={colorScheme()}
+                    documentPath={md()?.path ?? null}
+                    html={md()?.html ?? ""}
+                    selectedAnchorId={selection().anchorId}
+                    {...(markdownIsDirty()
+                      ? {
+                          subtitle:
+                            "Unsaved changes; preview shows last saved content.",
+                        }
+                      : {})}
+                    visible={true}
+                  />
+                </Show>
+
+                <Show
+                  when={md() === null && fp() !== null && fp()?.kind === "epub"}
+                >
+                  <EpubPreviewPane
+                    colorScheme={colorScheme()}
+                    documentPath={previewPath(fp())}
+                    html={previewHtml(fp())}
+                    onRelocate={(anchorId) => {
+                      setSelection({
+                        anchorId,
+                        lineStart: null,
+                      });
+                    }}
+                    selectedAnchorId={selection().anchorId}
+                    subtitle={previewSubtitle(fp())}
+                    toc={epubPreview()?.toc ?? []}
+                    visible={true}
+                  />
+                </Show>
+
+                <Show when={csvPreview()}>
+                  {(getCsv) => (
+                    <CsvFilePreviewPane
+                      colorScheme={colorScheme()}
+                      presentationMode={csvPaneMode()}
+                      preview={getCsv()}
+                      subtitle={previewSubtitle(fp())}
+                    />
+                  )}
+                </Show>
+
+                <Show
+                  when={
+                    md() === null &&
+                    fp() !== null &&
+                    inferPreviewKind(fp()) === "default" &&
+                    fp()?.kind !== "epub" &&
+                    fp()?.kind !== "csv"
+                  }
+                >
+                  <PreviewPane
+                    colorScheme={colorScheme()}
+                    documentPath={previewPath(fp())}
+                    html={previewHtml(fp())}
+                    selectedAnchorId={null}
+                    subtitle={previewSubtitle(fp())}
+                    visible={true}
+                  />
+                </Show>
+
+                <Show when={md() === null && inferPreviewKind(fp()) === "pdf"}>
+                  <PdfFilePreviewPane
+                    path={fp()!.path}
+                    fileName={fp()!.file_name}
+                  />
+                </Show>
+
+                <Show when={md() === null && isMediaFilePreview(fp())}>
+                  <MediaFilePreviewPane
+                    kind={mediaPreviewKind(fp())!}
+                    path={fp()!.path}
+                    streamUrl={mediaStreamUrl(fp())}
+                    fileName={fp()!.file_name}
+                    autoplayRequestId={
+                      mediaPreviewKind(fp()) === "video"
+                        ? videoAutoplayRequestId()
+                        : 0
                     }
                   />
-                </div>
-              </section>
-            </Show>
+                </Show>
 
-            <Show when={md() !== null && markdownPane() === "preview"}>
-              <PreviewPane
-                colorScheme={colorScheme()}
-                documentPath={md()?.path ?? null}
-                html={md()?.html ?? ""}
-                selectedAnchorId={selection().anchorId}
-                {...(markdownIsDirty()
-                  ? {
-                      subtitle:
-                        "Unsaved changes; preview shows last saved content.",
-                    }
-                  : {})}
-                visible={true}
-              />
-            </Show>
-
-            <Show
-              when={md() === null && fp() !== null && fp()?.kind === "epub"}
-            >
-              <EpubPreviewPane
-                colorScheme={colorScheme()}
-                documentPath={previewPath(fp())}
-                html={previewHtml(fp())}
-                onRelocate={(anchorId) => {
-                  setSelection({
-                    anchorId,
-                    lineStart: null,
-                  });
-                }}
-                selectedAnchorId={selection().anchorId}
-                subtitle={previewSubtitle(fp())}
-                toc={epubPreview()?.toc ?? []}
-                visible={true}
-              />
-            </Show>
-
-            <Show when={csvPreview()}>
-              {(getCsv) => (
-                <CsvFilePreviewPane
-                  colorScheme={colorScheme()}
-                  presentationMode={csvPaneMode()}
-                  preview={getCsv()}
-                  subtitle={previewSubtitle(fp())}
-                />
-              )}
-            </Show>
-
-            <Show
-              when={
-                md() === null &&
-                fp() !== null &&
-                inferPreviewKind(fp()) === "default" &&
-                fp()?.kind !== "epub" &&
-                fp()?.kind !== "csv"
-              }
-            >
-              <PreviewPane
-                colorScheme={colorScheme()}
-                documentPath={previewPath(fp())}
-                html={previewHtml(fp())}
-                selectedAnchorId={null}
-                subtitle={previewSubtitle(fp())}
-                visible={true}
-              />
-            </Show>
-
-            <Show when={md() === null && inferPreviewKind(fp()) === "pdf"}>
-              <PdfFilePreviewPane
-                path={fp()!.path}
-                fileName={fp()!.file_name}
-              />
-            </Show>
-
-            <Show when={md() === null && isMediaFilePreview(fp())}>
-              <MediaFilePreviewPane
-                kind={mediaPreviewKind(fp())!}
-                path={fp()!.path}
-                streamUrl={mediaStreamUrl(fp())}
-                fileName={fp()!.file_name}
-                autoplayRequestId={
-                  mediaPreviewKind(fp()) === "video"
-                    ? videoAutoplayRequestId()
-                    : 0
-                }
-              />
-            </Show>
-
-            <Show when={!hasOpenDocument()}>
-              <section class="pane workspace__document-empty">
-                <header class="pane__header">
-                  <span class="pane__title">Viewer</span>
-                  <span>No file open</span>
-                </header>
-                <div class="pane__body preview">
-                  <div class="preview__content">
-                    <section class="file-preview-empty">
-                      <p class="file-preview-empty__app-name">chilla</p>
-                      <p class="file-preview-empty__app-tagline">file viewer</p>
-                      <img
-                        class="file-preview-empty__image"
-                        src={EMPTY_STATE_IMAGE_PATH}
-                        alt="Pixel-art cat peeking in from the side"
-                      />
-                      <p class="file-preview-empty__title">
-                        Please select a file.
-                      </p>
-                      <div class="file-preview-empty__shortcuts">
-                        <For each={SHORTCUT_SECTIONS}>
-                          {(section) => (
-                            <section class="shortcuts-help__section">
-                              <h3 class="shortcuts-help__heading">
-                                {section.title}
-                              </h3>
-                              <ul class="shortcuts-help__list">
-                                <For each={section.shortcuts}>
-                                  {(shortcut) => (
-                                    <li class="shortcuts-help__row">
-                                      <span class="shortcuts-help__keys">
-                                        {renderShortcutKeys(shortcut.keys)}
-                                      </span>
-                                      <span class="shortcuts-help__desc">
-                                        {shortcut.description}
-                                      </span>
-                                    </li>
-                                  )}
-                                </For>
-                              </ul>
-                            </section>
-                          )}
-                        </For>
+                <Show when={!hasOpenDocument()}>
+                  <section class="pane workspace__document-empty">
+                    <header class="pane__header">
+                      <span class="pane__title">Viewer</span>
+                      <span>No file open</span>
+                    </header>
+                    <div class="pane__body preview">
+                      <div class="preview__content">
+                        <section class="file-preview-empty">
+                          <p class="file-preview-empty__app-name">chilla</p>
+                          <p class="file-preview-empty__app-tagline">
+                            file viewer
+                          </p>
+                          <img
+                            class="file-preview-empty__image"
+                            src={EMPTY_STATE_IMAGE_PATH}
+                            alt="Pixel-art cat peeking in from the side"
+                          />
+                          <p class="file-preview-empty__title">
+                            Please select a file.
+                          </p>
+                          <div class="file-preview-empty__shortcuts">
+                            <For each={SHORTCUT_SECTIONS}>
+                              {(section) => (
+                                <section class="shortcuts-help__section">
+                                  <h3 class="shortcuts-help__heading">
+                                    {section.title}
+                                  </h3>
+                                  <ul class="shortcuts-help__list">
+                                    <For each={section.shortcuts}>
+                                      {(shortcut) => (
+                                        <li class="shortcuts-help__row">
+                                          <span class="shortcuts-help__keys">
+                                            {renderShortcutKeys(shortcut.keys)}
+                                          </span>
+                                          <span class="shortcuts-help__desc">
+                                            {shortcut.description}
+                                          </span>
+                                        </li>
+                                      )}
+                                    </For>
+                                  </ul>
+                                </section>
+                              )}
+                            </For>
+                          </div>
+                        </section>
                       </div>
-                    </section>
-                  </div>
-                </div>
-              </section>
-            </Show>
-          </div>
+                    </div>
+                  </section>
+                </Show>
+              </div>
+            </>
+          </Show>
         </div>
 
         <Show when={isLoading()}>
@@ -2387,11 +2410,17 @@ export function WorkspaceShell() {
                   return "Loading workspace...";
                 }
 
-                return context.browser_root.kind === "explicit_file_set"
-                  ? "Opening the requested files..."
-                  : context.browser_root.selected_file_path !== null
-                    ? "Opening the requested file..."
-                    : "Loading workspace...";
+                if (context.browser_root.kind === "github_pr") {
+                  return "Opening the requested pull request...";
+                }
+
+                if (context.browser_root.kind === "explicit_file_set") {
+                  return "Opening the requested files...";
+                }
+
+                return context.browser_root.selected_file_path !== null
+                  ? "Opening the requested file..."
+                  : "Loading workspace...";
               })()}
             </div>
           </div>
