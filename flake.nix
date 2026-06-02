@@ -100,6 +100,7 @@
             alsa-lib
             pipewire
           ];
+          gitRuntimePath = lib.makeBinPath [ pkgs.git ];
 
           linuxRuntimeLibraryPath =
             if pkgs.stdenv.isLinux then
@@ -188,7 +189,7 @@
             src = tauriBuildSource;
             cargoExtraArgs = "--manifest-path src-tauri/Cargo.toml";
             buildInputs = commonBuildInputs;
-            nativeBuildInputs = with pkgs; [ pkg-config ];
+            nativeBuildInputs = with pkgs; [ git pkg-config ];
           };
 
           chilla = craneLib.buildPackage {
@@ -199,6 +200,7 @@
             cargoExtraArgs = "--manifest-path src-tauri/Cargo.toml";
             buildInputs = commonBuildInputs;
             nativeBuildInputs = with pkgs; [
+              git
               makeWrapper
               pkg-config
             ];
@@ -217,6 +219,7 @@
 
             postFixup = lib.optionalString pkgs.stdenv.isLinux ''
               wrapProgram $out/bin/chilla \
+                --prefix PATH : "${gitRuntimePath}" \
                 --prefix LD_LIBRARY_PATH : "${linuxRuntimeLibraryPath}" \
                 --set GIO_EXTRA_MODULES "${linuxGioModulePath}" \
                 --set XDG_DATA_DIRS "${linuxXdgDataDirs}" \
@@ -250,6 +253,7 @@
             openssl
             pkg-config
             taplo
+            git
             gh
             go-task
           ]
@@ -269,7 +273,19 @@
               inherit cargoArtifacts;
               cargoExtraArgs = "--manifest-path src-tauri/Cargo.toml";
               buildInputs = commonBuildInputs;
-              nativeBuildInputs = with pkgs; [ pkg-config ];
+              nativeBuildInputs = with pkgs; [ git pkg-config ];
+              preBuild = ''
+                # Tauri caches build-script outputs with absolute OUT_DIR paths.
+                # When crane reuses cargoArtifacts across derivations, those paths
+                # point at the previous sandbox and break permission generation.
+                rm -rf target/release/build/tauri-*
+                rm -rf target/release/build/tauri-build-*
+                rm -rf target/release/build/tauri-plugin-*
+                rm -rf target/release/build/tauri-runtime-*
+                rm -rf target/release/build/tauri-runtime-wry-*
+                rm -rf target/release/build/tauri-utils-*
+                rm -rf target/release/build/chilla-*
+              '';
               cargoClippyExtraArgs = "--all-targets -- -D warnings";
             };
 
