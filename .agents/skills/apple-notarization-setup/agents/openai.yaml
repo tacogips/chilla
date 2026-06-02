@@ -1,0 +1,4 @@
+interface:
+  display_name: "Apple Notarization Setup"
+  short_description: "Set up Apple signing and notarization prerequisites for chilla"
+  default_prompt: "Set up or verify Apple Developer ID signing, app-specific password storage, and local notarization readiness for chilla without exposing credential values."
