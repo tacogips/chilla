@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/release-24.11";
+    nixpkgs-webkit.url = "github:NixOS/nixpkgs/nixos-24.05";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     fenix = {
@@ -20,6 +21,7 @@
     {
       self,
       nixpkgs,
+      nixpkgs-webkit,
       nixpkgs-unstable,
       flake-utils,
       fenix,
@@ -32,6 +34,7 @@
         let
           overlays = [ fenix.overlays.default ];
           pkgs = import nixpkgs { inherit system overlays; };
+          pkgs-webkit = import nixpkgs-webkit { inherit system; };
           pkgs-unstable = import nixpkgs-unstable { inherit system; };
           lib = pkgs.lib;
           bun = pkgs-unstable.bun;
@@ -59,7 +62,9 @@
               );
           };
 
-          linuxGuiLibraries = with pkgs; [
+          linuxGuiPkgs = if pkgs.stdenv.isLinux then pkgs-webkit else pkgs;
+
+          linuxGuiLibraries = with linuxGuiPkgs; [
             atk
             cairo
             gdk-pixbuf
@@ -75,10 +80,10 @@
           # - gstreamer itself for coreelements like typefind/fakesink
           # - base/good/bad/ugly/libav for container/codec support
           # - pipewire so autoaudiosink can resolve a compatible pipewiresink
-          linuxGStreamerCorePackage = pkgs.gst_all_1.gstreamer.out;
+          linuxGStreamerCorePackage = linuxGuiPkgs.gst_all_1.gstreamer.out;
 
           linuxGStreamerPluginPackages =
-            (with pkgs.gst_all_1; [
+            (with linuxGuiPkgs.gst_all_1; [
               gst-plugins-base
               gst-plugins-good
               gst-plugins-bad
@@ -87,14 +92,14 @@
             ])
             ++ [
               linuxGStreamerCorePackage
-              pkgs.pipewire
+              linuxGuiPkgs.pipewire
             ];
 
           linuxGStreamerPluginPath = lib.makeSearchPath "lib/gstreamer-1.0" linuxGStreamerPluginPackages;
           linuxGStreamerPluginScanner =
             "${linuxGStreamerCorePackage}/libexec/gstreamer-1.0/gst-plugin-scanner";
 
-          linuxWebkitMediaLibraries = with pkgs; [
+          linuxWebkitMediaLibraries = with linuxGuiPkgs; [
             ffmpeg
             libpulseaudio
             alsa-lib
@@ -106,7 +111,7 @@
             if pkgs.stdenv.isLinux then
               lib.makeLibraryPath (
                 linuxGuiLibraries
-                ++ (with pkgs.gst_all_1; [
+                ++ (with linuxGuiPkgs.gst_all_1; [
                   linuxGStreamerCorePackage
                   gst-plugins-base
                 ])
@@ -114,11 +119,11 @@
               )
             else
               lib.makeLibraryPath linuxGuiLibraries;
-          linuxGioModulePath = lib.makeSearchPath "lib/gio/modules" (with pkgs; [
+          linuxGioModulePath = lib.makeSearchPath "lib/gio/modules" (with linuxGuiPkgs; [
             dconf.lib
             glib-networking
           ]);
-          linuxXdgDataDirs = lib.concatStringsSep ":" (with pkgs; [
+          linuxXdgDataDirs = lib.concatStringsSep ":" (with linuxGuiPkgs; [
             "${gsettings-desktop-schemas}/share/gsettings-schemas/${gsettings-desktop-schemas.name}"
             "${gtk3}/share/gsettings-schemas/${gtk3.name}"
             "${shared-mime-info}/share"
