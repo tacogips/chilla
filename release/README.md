@@ -114,7 +114,7 @@ Trusted macOS release assets are signed and notarized locally. Apple certificate
 Then publish the trusted DMG and `.app` zip with:
 
 ```bash
-task release-macos-dmg-local -- v0.1.6
+task release-macos-dmg-local -- v0.1.7
 ```
 
 GitHub Actions only produce unsigned validation artifacts for this bundle flow.

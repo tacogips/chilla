@@ -1,7 +1,7 @@
 [package]
 name = "chilla"
-version = "0.1.6"
-description = "A Tauri markdown workbench"
+version = "0.1.7"
+description = "A lightweight file and Git viewer"
 edition = "2021"
 
 [lib]
