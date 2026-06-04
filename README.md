@@ -286,6 +286,16 @@ Installer behavior:
 
 The current installer-facing Darwin tarball remains a Nix-based release artifact containing `bin/chilla`, not a `.app` bundle. It may still depend on `/nix/store` runtime paths on the target machine.
 
+### macOS DMG Install
+
+For Apple Silicon Macs, download the signed and notarized DMG from the latest GitHub release:
+
+```text
+https://github.com/tacogips/chilla/releases/latest
+```
+
+Open `chilla_<version>_aarch64.dmg`, then drag `chilla.app` into `Applications`.
+
 ## macOS DMG Releases
 
 The repository now also contains a separate Tauri macOS bundle flow for direct `.app` and `.dmg` builds:
@@ -324,7 +334,7 @@ Current caveats:
 
 - the cask now installs the macOS Apple Silicon DMG release artifact
 - it is currently constrained to Apple Silicon via Homebrew `depends_on arch: :arm64`
-- Homebrew trust comes from the published DMG; after the local signing/notarization release task uploads a new trusted DMG, the tap should update the cask SHA and remove any stale unsigned-artifact caveat
+- Homebrew trust comes from the published signed and notarized DMG; update the tap cask SHA after each DMG release
 
 ## Verification Status
 
