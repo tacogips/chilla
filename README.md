@@ -40,6 +40,7 @@ At the moment, Markdown source is viewable in a raw pane, but this app does not 
 
 - Flat file browser with keyboard navigation inspired by terminal file managers
 - Markdown heading extraction and table of contents
+- Direct Markdown view selection with `1` for raw source and `2` for rendered preview
 - Backend-owned Markdown parsing in Rust
 - Mermaid hydration on the frontend after preview render
 - Local Markdown image resolution with HEIC / HEIF image fallback and open-in-default-app affordance when the WebView cannot render an image
@@ -47,6 +48,7 @@ At the moment, Markdown source is viewable in a raw pane, but this app does not 
 - GitHub diff URL viewer for pull requests, commits, and compares with changed-file browsing, GitHub jump action, cached diff loading, and diff modes for left/right, stack, and full-file review
 - Local Git diff viewer for uncommitted repository changes and commit/range startup diffs using the same diff modes
 - Automatic refresh of opened Markdown documents when the file changes on disk
+- Direct CSV view selection with `1` for raw source and `2` for formatted table when available
 - Theme toggle with frontend CSS variables and backend syntax-theme synchronization
 - Custom undecorated desktop window chrome
 
@@ -67,6 +69,8 @@ Global shortcuts:
 - `R`: reload the current file
 - `Shift+T`: toggle table of contents for Markdown
 - `Shift+P`: switch Markdown raw/preview pane
+- `1`: select raw view for Markdown or CSV
+- `2`: select Markdown preview or formatted CSV view when available
 - `Shift+S`: toggle light/dark theme
 
 File tree shortcuts:
@@ -98,6 +102,12 @@ Image preview:
 - Markdown image links resolve local image paths relative to the Markdown document, including `.heic`, `.heif`, `.heics`, and `.heifs` files.
 - Direct file previews classify HEIC / HEIF files as images instead of generic binary files.
 - HEIC / HEIF display depends on the platform WebView decoder; when an image cannot render, chilla shows a fallback with an option to open the file in the default app.
+
+CSV preview:
+
+- `1`: raw CSV source
+- `2`: formatted CSV table when parsing and safety limits allow it
+- Numeric CSV view shortcuts are ignored while typing in editable controls such as the file filter.
 
 Diff viewer:
 

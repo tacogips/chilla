@@ -122,6 +122,8 @@ const SHORTCUT_LABELS = {
   reload: "R",
   toggleToc: "Shift+T",
   toggleMarkdownPane: "Shift+P",
+  rawView: "1",
+  secondaryView: "2",
   toggleTheme: "Shift+S",
   toggleFileTree: "Shift+L",
 } as const;
@@ -189,6 +191,14 @@ const SHORTCUT_SECTIONS: readonly {
       {
         keys: ["Shift", "P"],
         description: "Toggle Raw / Preview (Markdown) or Raw / Formatted (CSV)",
+      },
+      {
+        keys: ["1"],
+        description: "Select Raw view (Markdown / CSV)",
+      },
+      {
+        keys: ["2"],
+        description: "Select Preview view (Markdown) or Formatted view (CSV)",
       },
       {
         keys: ["Shift", "S"],
@@ -1769,6 +1779,41 @@ export function WorkspaceShell() {
     return className;
   });
 
+  const handleNumericPresentationShortcut = (event: KeyboardEvent): boolean => {
+    if (matchesShortcut(event, "1")) {
+      if (markdownDoc() !== null) {
+        event.preventDefault();
+        setMarkdownPane("raw");
+        return true;
+      }
+
+      if (csvPreview() !== null) {
+        event.preventDefault();
+        setCsvPaneMode("raw");
+        return true;
+      }
+
+      return false;
+    }
+
+    if (matchesShortcut(event, "2")) {
+      if (markdownDoc() !== null) {
+        event.preventDefault();
+        setMarkdownPane("preview");
+        return true;
+      }
+
+      const preview = csvPreview();
+      if (preview?.formatted_available === true) {
+        event.preventDefault();
+        setCsvPaneMode("formatted");
+        return true;
+      }
+    }
+
+    return false;
+  };
+
   onMount(() => {
     let isDisposed = false;
     let disposeListener: (() => void) | undefined;
@@ -1845,6 +1890,10 @@ export function WorkspaceShell() {
       }
 
       if (isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+
+      if (handleNumericPresentationShortcut(event)) {
         return;
       }
 
@@ -2082,7 +2131,7 @@ export function WorkspaceShell() {
                   }`}
                   type="button"
                   aria-label="Raw Markdown source"
-                  title={`Raw source (${SHORTCUT_LABELS.toggleMarkdownPane})`}
+                  title={`Raw source (${SHORTCUT_LABELS.rawView}; ${SHORTCUT_LABELS.toggleMarkdownPane} toggles)`}
                   onClick={() => setMarkdownPane("raw")}
                 >
                   <RawSourceGlyph />
@@ -2095,7 +2144,7 @@ export function WorkspaceShell() {
                   }`}
                   type="button"
                   aria-label="Markdown preview"
-                  title={`Preview (${SHORTCUT_LABELS.toggleMarkdownPane})`}
+                  title={`Preview (${SHORTCUT_LABELS.secondaryView}; ${SHORTCUT_LABELS.toggleMarkdownPane} toggles)`}
                   onClick={() => setMarkdownPane("preview")}
                 >
                   <PreviewGlyph />
@@ -2120,7 +2169,7 @@ export function WorkspaceShell() {
                       }`}
                       type="button"
                       aria-label="Raw CSV source"
-                      title={`Raw (${SHORTCUT_LABELS.toggleMarkdownPane})`}
+                      title={`Raw (${SHORTCUT_LABELS.rawView}; ${SHORTCUT_LABELS.toggleMarkdownPane} toggles)`}
                       onClick={() => setCsvPaneMode("raw")}
                     >
                       <RawSourceGlyph />
@@ -2134,7 +2183,7 @@ export function WorkspaceShell() {
                       type="button"
                       disabled={!csvRow.formatted_available}
                       aria-label="Formatted CSV table"
-                      title={`Formatted (${SHORTCUT_LABELS.toggleMarkdownPane})`}
+                      title={`Formatted (${SHORTCUT_LABELS.secondaryView}; ${SHORTCUT_LABELS.toggleMarkdownPane} toggles)`}
                       onClick={() => setCsvPaneMode("formatted")}
                     >
                       <PreviewGlyph />

@@ -116,6 +116,25 @@ The frontend keeps only presentation state and in-progress editing state. Parsed
 | Panel widths | Frontend | Persist locally per window if desired |
 | Dirty state | Frontend | Cleared on successful save or external reload resolution |
 
+### Shared Presentation Shortcut Model
+
+Screens that expose a finite view-mode control should support direct numeric selection when the shortcut is unambiguous for that screen.
+
+Design contract:
+
+- Git diff keeps its existing three-state mapping: `1` selects left/right, `2` selects stack, and `3` selects full-file diff.
+- Markdown uses the same direct-selection pattern for its two-state document presentation control: `1` selects raw source and `2` selects preview.
+- CSV uses the same two-state mapping in file view mode: `1` selects raw source and `2` selects formatted table when formatted output is available.
+- Numeric indexes that do not map to an available option are no-ops. For example, `3` does not change Markdown or CSV presentation, and `2` does not force CSV formatted mode when parsing or safety limits make it unavailable.
+- Numeric view shortcuts are frontend presentation state only. They must not call Tauri commands, mutate document content, reload files, or alter backend-authored snapshots.
+
+Shortcut validation rules:
+
+- The active screen owns its own numeric mapping so nested workspaces do not receive duplicate handling.
+- Global workspace shortcuts must ignore events whose target is editable, including text inputs, textareas, selects, and contenteditable elements.
+- Markdown editing remains the highest-risk editable surface; typing digits in the editor must insert text rather than switch views.
+- Existing non-numeric shortcuts, including save/open, TOC toggles, preview toggles, file-browser navigation, and git diff navigation, retain their current behavior.
+
 ### Markdown and TOC Parsing
 
 Rust performs Markdown parsing to minimize duplicate parsing logic and keep expensive transformations close to the file-watch and persistence layers.

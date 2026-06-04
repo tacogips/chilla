@@ -53,6 +53,23 @@ Layout rules:
 | Save document | Persist text and request new parsed snapshot |
 | External file changes | Refresh workspace or enter conflict resolution state |
 
+### View Switching Shortcuts
+
+Markdown view switching follows the same direct numeric shortcut pattern as the git diff workspace.
+
+| Shortcut | Result |
+|----------|--------|
+| `1` | Select raw Markdown source |
+| `2` | Select rendered Markdown preview |
+
+Rules:
+
+- `Shift+P` remains the two-state toggle between raw and preview.
+- `1` and `2` are direct selectors, not toggles.
+- `3` and higher digits do not affect Markdown view state because Markdown exposes only two view options.
+- Numeric view shortcuts are ignored while focus is inside the Markdown editor or any other editable control.
+- Switching views changes only frontend presentation state; it must not save, reload, reparse, or modify the Markdown buffer.
+
 ## Backend Contract
 
 Rust returns a document snapshot object to the frontend. The exact transport types belong in implementation, but the contract should contain at least:

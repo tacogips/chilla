@@ -41,6 +41,9 @@ Unlike Markdown, CSV remains a read-only file-view feature in this slice. The fo
 - CSV stays in file view mode; it does not enter Markdown mode.
 - The workspace header shows the same two-state source/rendered control pattern already used for Markdown.
 - `Shift+P` continues to toggle the active two-state preview, but for CSV the second state is labeled `Formatted` instead of `Preview`.
+- Numeric view shortcuts mirror the shared workspace pattern: `1` selects raw source, and `2` selects formatted table when formatted output is available.
+- `2` is a no-op when CSV parsing fails or safety limits disable formatted output; `3` and higher digits do not affect CSV view state.
+- Numeric view shortcuts must not run while focus is inside editable controls, including the file-browser filter field.
 
 ### Raw View
 
