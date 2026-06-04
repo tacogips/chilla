@@ -1,8 +1,8 @@
-# chila: yazi-like GUI file viewer with Markdown preview
+# chilla: lightweight file and Git viewer
 
 <img src="doc/empty-state-cat.png" alt="Pixel-art cat peeking in from the side" width="320" />
 
-`chilla` is a yazi-like GUI file viewer built with Tauri, Bun, Solid.js, and Rust. It opens directories and files from the command line, shows a flat file tree, and previews Markdown, text, images, video, and PDF content inside a desktop UI.
+`chilla` is a lightweight file and Git viewer built with Tauri, Bun, Solid.js, and Rust. It opens directories, files, Git diffs, and GitHub diff URLs from the command line, then previews Markdown, text, images, video, PDF content, and changed files inside a desktop UI.
 
 ## Captures
 
@@ -16,7 +16,7 @@ Movie preview:
 
 ## Current Product Shape
 
-The repository design documents started from a Markdown workbench concept, then evolved toward a mixed file-view mode. The current implementation is closer to a yazi-like desktop viewer/browser than a full Markdown editor:
+The repository design documents started from a Markdown workbench concept, then evolved toward a lightweight file and Git viewer. The current implementation is closer to a yazi-like desktop viewer/browser than a full Markdown editor:
 
 - `chilla` with no arguments opens the current working directory.
 - `chilla <dir>` opens that directory in file-view mode.
