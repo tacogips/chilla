@@ -521,6 +521,69 @@ describe("PrDiffWorkspace", () => {
     expect(scrollbar!.scrollLeft).toBe(72);
   });
 
+  it("pages the diff body with Ctrl-D and Ctrl-U", async () => {
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([textDiffFile("README.md", "readme")]),
+    );
+
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-path="README.md"]')).not.toBeNull();
+    });
+    click('[data-path="README.md"]');
+
+    const body = document.querySelector<HTMLDivElement>(".pr-diff-fileview");
+    if (body === null) {
+      throw new Error("missing diff file view");
+    }
+
+    Object.defineProperty(body, "clientHeight", {
+      configurable: true,
+      value: 400,
+    });
+    body.scrollTop = 0;
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        code: "KeyD",
+        ctrlKey: true,
+        key: "d",
+      }),
+    );
+
+    expect(body.scrollTop).toBe(180);
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        code: "KeyU",
+        ctrlKey: true,
+        key: "u",
+      }),
+    );
+
+    expect(body.scrollTop).toBe(0);
+
+    const filter = document.querySelector<HTMLInputElement>(
+      ".pr-browser__filter",
+    );
+    if (filter === null) {
+      throw new Error("missing diff filter input");
+    }
+
+    body.scrollTop = 50;
+    filter.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        bubbles: true,
+        code: "KeyD",
+        ctrlKey: true,
+        key: "d",
+      }),
+    );
+
+    expect(body.scrollTop).toBe(50);
+  });
+
   it("loads full file text lazily only after selecting full file mode", async () => {
     loadPrDiffMock.mockResolvedValue(
       snapshot([{ ...textDiffFile("src/app.ts"), full_text: null }]),

@@ -4,11 +4,136 @@
 
 `chilla` is a lightweight file and Git viewer built with Tauri, Bun, Solid.js, and Rust. It opens directories, files, Git diffs, and GitHub diff URLs from the command line, then previews Markdown, text, images, video, PDF content, and changed files inside a desktop UI.
 
+## Install
+
+### macOS: Homebrew Cask
+
+```bash
+brew tap tacogips/tap
+brew install --cask chilla
+```
+
+This installs the signed and notarized macOS application bundle through Homebrew. After installation, launch it from `Applications` or from the command line:
+
+```bash
+open -a chilla
+chilla .
+```
+
+To upgrade later:
+
+```bash
+brew update
+brew upgrade --cask chilla
+```
+
+To uninstall:
+
+```bash
+brew uninstall --cask chilla
+```
+
+Current Homebrew caveats:
+
+- the cask installs the macOS Apple Silicon DMG release artifact
+- it is currently constrained to Apple Silicon via Homebrew `depends_on arch: :arm64`
+- Homebrew trust comes from the published signed and notarized DMG
+
+### macOS: Direct DMG Download
+
+For Apple Silicon Macs, download the signed and notarized DMG directly from the latest GitHub release:
+
+```text
+https://github.com/tacogips/chilla/releases/latest
+```
+
+Manual install steps:
+
+1. Open the latest release page.
+2. Download the Apple Silicon DMG asset named like `chilla_<version>_aarch64.dmg`.
+3. Open the downloaded `.dmg` file.
+4. Drag `chilla.app` into `Applications`.
+5. Eject the mounted DMG.
+6. Launch `chilla` from `Applications`, or run `open -a chilla` from Terminal.
+
+If macOS Gatekeeper asks for confirmation on first launch, open the app from Finder with `Control` + click, choose `Open`, then confirm. The published DMG is signed and notarized; that prompt is the normal first-launch confirmation path when opening newly downloaded apps.
+
+Use the direct DMG route when you do not use Homebrew, or when you want to manually download a specific release asset.
+
+### Install Script
+
+The repository also includes a root-level `install.sh` for installing release tarballs:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash
+```
+
+Specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash -s -- v0.1.1
+```
+
+Uninstall:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash -s -- uninstall
+```
+
+Installer behavior:
+
+- resolves the current platform as one of `aarch64-darwin`, `x86_64-darwin`, `aarch64-linux`, or `x86_64-linux`
+- prefers a matching archive in a local `release/` directory when present
+- otherwise downloads the latest GitHub release asset named `chilla-v<version>-<target>.tar.gz`
+- installs the extracted release tree under `~/.local/share/chilla/releases/`
+- updates `~/.local/bin/chilla` to point at the installed wrapper
+- can update the user's shell profile with a managed PATH block unless `--no-modify-path` is used
+- supports `./install.sh uninstall` to remove the installed files and managed PATH block
+
+The current installer-facing Darwin tarball remains a Nix-based release artifact containing `bin/chilla`, not a `.app` bundle. It may still depend on `/nix/store` runtime paths on the target machine.
+
+For most macOS users, prefer the Homebrew Cask or direct DMG install paths above.
+
+## Run
+
+From an installed binary or `nix run`, the CLI shape is:
+
+```bash
+chilla [path]
+```
+
+Examples:
+
+```bash
+chilla
+chilla .
+chilla docs/
+chilla notes.md
+chilla movie.mp4
+```
+
+During development:
+
+```bash
+task dev
+```
+
+`nix run` can be used in the same style:
+
+```bash
+nix run . --
+nix run . -- README.md
+```
+
 ## Captures
 
 README preview:
 
 <img src="doc/captures/readme-capture.png" alt="chilla rendering the repository README in the preview pane" width="720" />
+
+Git diff viewer:
+
+<img src="doc/captures/git-diff-capture.png" alt="chilla showing a split Git diff with changed files in the sidebar" width="720" />
 
 Movie preview:
 
@@ -59,8 +184,8 @@ Global shortcuts:
 - `?`: show help
 - `Esc`: close help
 - `Q`: quit the app
-- `Ctrl+D`: scroll down
-- `Ctrl+U`: scroll up
+- `Ctrl+D`: page the active file view down; in Git diff mode, page the selected diff file view rather than the changed-file sidebar
+- `Ctrl+U`: page the active file view up; in Git diff mode, page the selected diff file view rather than the changed-file sidebar
 - `J` or `ArrowDown`: scroll the active file view down one line when the file tree is hidden
 - `K` or `ArrowUp`: scroll the active file view up one line when the file tree is hidden
 - `Shift+L`: toggle file tree
@@ -126,6 +251,8 @@ Diff viewer:
 - `2`: stack diff
 - `3`: full-file view
 - `Tab`: cycle diff modes in the same order
+- `Ctrl+D`: page the selected diff file view down
+- `Ctrl+U`: page the selected diff file view up
 - `O`: open the pull request, commit, or compare source in GitHub when reviewing a GitHub diff
 - Full-file view shows the latest file content, highlights added and modified lines, and marks deleted locations with a thin red line without rendering deleted content.
 
@@ -223,79 +350,6 @@ Notes:
 - If `DISPLAY` is not set, the runner falls back to `Xvfb` when available.
 - The smoke test opens the real workspace, filters to `README.md`, and verifies the rendered Markdown preview.
 
-## Running the App
-
-During development:
-
-```bash
-task dev
-```
-
-From a built binary or `nix run`, the CLI shape is:
-
-```bash
-chilla [path]
-```
-
-Examples:
-
-```bash
-chilla
-chilla .
-chilla docs/
-chilla notes.md
-chilla movie.mp4
-```
-
-`nix run` can be used in the same style:
-
-```bash
-nix run . --
-nix run . -- README.md
-```
-
-## Installing from Release Artifacts
-
-The repository now includes a root-level `install.sh` that follows the common "curl the latest release and install it" pattern:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash
-```
-
-Specific version:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash -s -- v0.1.1
-```
-
-Uninstall:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/tacogips/chilla/main/install.sh | bash -s -- uninstall
-```
-
-Installer behavior:
-
-- resolves the current platform as one of `aarch64-darwin`, `x86_64-darwin`, `aarch64-linux`, or `x86_64-linux`
-- prefers a matching archive in a local `release/` directory when present
-- otherwise downloads the latest GitHub release asset named `chilla-v<version>-<target>.tar.gz`
-- installs the extracted release tree under `~/.local/share/chilla/releases/`
-- updates `~/.local/bin/chilla` to point at the installed wrapper
-- can update the user's shell profile with a managed PATH block unless `--no-modify-path` is used
-- supports `./install.sh uninstall` to remove the installed files and managed PATH block
-
-The current installer-facing Darwin tarball remains a Nix-based release artifact containing `bin/chilla`, not a `.app` bundle. It may still depend on `/nix/store` runtime paths on the target machine.
-
-### macOS DMG Install
-
-For Apple Silicon Macs, download the signed and notarized DMG from the latest GitHub release:
-
-```text
-https://github.com/tacogips/chilla/releases/latest
-```
-
-Open `chilla_<version>_aarch64.dmg`, then drag `chilla.app` into `Applications`.
-
 ## macOS DMG Releases
 
 The repository now also contains a separate Tauri macOS bundle flow for direct `.app` and `.dmg` builds:
@@ -320,21 +374,6 @@ task release-macos-dmg-local -- v0.1.8
 ```
 
 Repository-local GitHub Actions build unsigned `.app`/`.dmg` artifacts only for validation. They do not sign, notarize, or publish trusted release assets.
-
-## Installing with Homebrew Cask
-
-Install with:
-
-```bash
-brew tap tacogips/tap
-brew install --cask chilla
-```
-
-Current caveats:
-
-- the cask now installs the macOS Apple Silicon DMG release artifact
-- it is currently constrained to Apple Silicon via Homebrew `depends_on arch: :arm64`
-- Homebrew trust comes from the published signed and notarized DMG; update the tap cask SHA after each DMG release
 
 ## Verification Status
 

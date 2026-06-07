@@ -73,6 +73,9 @@ interface LazyFileTextState {
   readonly error: string | null;
 }
 
+const MIN_DIFF_PAGE_SCROLL_PX = 80;
+const DIFF_PAGE_SCROLL_RATIO = 0.45;
+
 type FullFileLineKind = "context" | "add" | "modify";
 type FullFileRow =
   | {
@@ -103,6 +106,34 @@ function parentDir(path: string): string | null {
   }
 
   return dirname(path);
+}
+
+function matchesCtrlShortcut(event: KeyboardEvent, key: "d" | "u"): boolean {
+  const shortcutCode = `Key${key.toUpperCase()}`;
+
+  return (
+    (event.key.toLowerCase() === key || event.code === shortcutCode) &&
+    event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    !event.shiftKey
+  );
+}
+
+function scrollDiffPane(
+  body: HTMLElement | undefined,
+  direction: 1 | -1,
+): void {
+  if (body === undefined) {
+    return;
+  }
+
+  const delta =
+    Math.max(
+      MIN_DIFF_PAGE_SCROLL_PX,
+      Math.floor(body.clientHeight * DIFF_PAGE_SCROLL_RATIO),
+    ) * direction;
+  body.scrollTop += delta;
 }
 
 function statusLabel(file: PrDiffFile): string {
@@ -1223,6 +1254,7 @@ function LeftRightDiffHunk(props: {
 
 export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
   let filterInput: HTMLInputElement | undefined;
+  let diffFileView: HTMLDivElement | undefined;
   const [snapshot, setSnapshot] = createSignal<PrDiffSnapshot | null>(null);
   const [isLoading, setLoading] = createSignal(true);
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
@@ -1423,6 +1455,18 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
       }
 
       const key = event.key.toLowerCase();
+      if (matchesCtrlShortcut(event, "d")) {
+        event.preventDefault();
+        scrollDiffPane(diffFileView, 1);
+        return;
+      }
+
+      if (matchesCtrlShortcut(event, "u")) {
+        event.preventDefault();
+        scrollDiffPane(diffFileView, -1);
+        return;
+      }
+
       if (key === "j" || event.key === "ArrowDown" || event.key === "Down") {
         event.preventDefault();
         moveCursor(1);
@@ -1765,7 +1809,12 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
                         </div>
                       }
                     >
-                      <div class="pr-diff-fileview">
+                      <div
+                        ref={(element) => {
+                          diffFileView = element;
+                        }}
+                        class="pr-diff-fileview"
+                      >
                         <Show
                           when={
                             mode() === "left_right" &&

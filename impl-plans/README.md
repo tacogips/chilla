@@ -49,6 +49,7 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `git-diff-paging-shortcuts.md` | 2026-06-07 | `design-docs/specs/architecture.md#diff-workspace-paging-shortcuts` |
 | `macos-dmg-local-signing-release.md` | 2026-05-21 | `design-docs/specs/design-macos-dmg-release.md#signing-and-notarization` |
 | `linux-tauri-e2e-github-actions.md` | 2026-05-01 | `design-docs/specs/notes.md#linux-tauri-webdriver-e2e-notes` |
 | `in-app-multi-file-open.md` | 2026-05-02 | `design-docs/specs/design-file-viewer-mode.md#explicit-file-set-contract` |

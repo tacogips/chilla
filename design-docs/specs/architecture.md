@@ -395,6 +395,26 @@ Chilla should expose three user-facing diff modes for all GitHub diff source kin
 
 Full-file mode may require lazy full-text retrieval from a GitHub raw URL. Missing raw URLs, binary files, deleted files, or too-large files should show explicit placeholders instead of failing the whole diff workspace.
 
+### Diff Workspace Paging Shortcuts
+
+The documented global `Ctrl-D` and `Ctrl-U` paging shortcuts must apply to the visible diff viewer when a GitHub or local Git diff workspace is active.
+
+Design contract:
+
+- Diff workspace paging targets the changed-file content viewport, not the changed-file browser/sidebar and not the Markdown/file preview document pane.
+- The scroll target is the rendered diff file view for the selected file across left/right, stack, and full-file modes. In the current frontend shape this corresponds to the `.pr-diff-fileview` vertical scroll surface inside `.pr-diff-pane__body`.
+- `Ctrl-D` pages the selected diff file view down and `Ctrl-U` pages it up by the same active-document page amount used elsewhere unless later usability testing establishes a diff-specific page size.
+- If no file is selected, no text diff is available, or the selected diff view is not scrollable, the shortcut is a no-op scoped to the diff workspace.
+- Diff workspace shortcut handling must continue to ignore editable targets such as the changed-file filter input, text inputs, textareas, selects, and contenteditable elements.
+- The existing local diff toggle shortcut `G`, diff mode shortcuts `1`/`2`/`3`, `Tab` mode cycling, changed-file browser navigation, and GitHub jump action `O` retain their current behavior.
+- EPUB paging and media seek behavior remain owned by the regular document preview path and must not run while the Git diff workspace is active.
+
+Validation requirements:
+
+- Focused frontend tests should dispatch `Ctrl-D` and `Ctrl-U` while the diff workspace is active and assert that the diff file view scroll position changes in the requested direction.
+- Tests should cover the shortcut boundary by confirming editable diff controls do not page the view.
+- Existing tests for numeric diff mode shortcuts and changed-file browser navigation should continue to pass.
+
 ### UI State Model
 
 | State | Owner | Notes |
