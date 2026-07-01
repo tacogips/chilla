@@ -49,6 +49,7 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `codebase-file-splitting-and-lint.md` | 2026-07-01 | User maintenance request: split overly long files and fix lint issues |
 | `git-diff-paging-shortcuts.md` | 2026-06-07 | `design-docs/specs/architecture.md#diff-workspace-paging-shortcuts` |
 | `macos-dmg-local-signing-release.md` | 2026-05-21 | `design-docs/specs/design-macos-dmg-release.md#signing-and-notarization` |
 | `linux-tauri-e2e-github-actions.md` | 2026-05-01 | `design-docs/specs/notes.md#linux-tauri-webdriver-e2e-notes` |

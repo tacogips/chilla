@@ -127,8 +127,7 @@ function focusListButtonForPath(
   if (selectedPath !== null) {
     for (const button of buttons) {
       if (button.getAttribute("data-path") === selectedPath) {
-        button.focus({ preventScroll: true });
-        button.scrollIntoView({ block: "nearest" });
+        focusListButton(button);
         return true;
       }
     }
@@ -137,12 +136,19 @@ function focusListButtonForPath(
   const first = buttons.item(0);
 
   if (first !== null) {
-    first.focus({ preventScroll: true });
-    first.scrollIntoView({ block: "nearest" });
+    focusListButton(first);
     return true;
   }
 
   return false;
+}
+
+function focusListButton(button: HTMLButtonElement): void {
+  button.focus({ preventScroll: true });
+
+  if (typeof button.scrollIntoView === "function") {
+    button.scrollIntoView({ block: "nearest" });
+  }
 }
 
 export function FileBrowserPane(props: FileBrowserPaneProps) {

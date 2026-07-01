@@ -2,12 +2,10 @@
 :root {
   --radius-sm: 4px;
   --radius-md: 6px;
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  --font-mono:
-    ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", Menlo, Consolas,
-    monospace;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", Menlo,
+    Consolas, monospace;
   --preview-content-min-width: 36rem;
   --preview-content-inline-padding: clamp(0.125rem, 1vw, 0.6rem);
   --preview-content-block-padding: 0.35rem;
@@ -232,9 +230,7 @@ button {
   font-size: 0;
   line-height: 0;
   cursor: pointer;
-  transition:
-    color 120ms ease,
-    background 120ms ease;
+  transition: color 120ms ease, background 120ms ease;
 }
 
 .workspace__mode:hover:not(:disabled) {
@@ -280,10 +276,7 @@ button {
   background: var(--bg-elevated);
   color: var(--text-muted);
   line-height: 0;
-  transition:
-    color 120ms ease,
-    background 120ms ease,
-    border-color 120ms ease;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
 }
 
 .workspace__theme-toggle:hover {
@@ -333,10 +326,7 @@ button {
   color: var(--text-muted);
   font-size: 0;
   line-height: 0;
-  transition:
-    color 120ms ease,
-    background 120ms ease,
-    border-color 120ms ease;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
 }
 
 .workspace__window-button:hover {
@@ -360,10 +350,7 @@ button {
   color: var(--text);
   font-size: 0.68rem;
   font-weight: 500;
-  transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .button:hover:not(:disabled) {
@@ -654,9 +641,7 @@ button {
   background: transparent;
   color: var(--text-muted);
   font-size: 0.78rem;
-  transition:
-    background 120ms ease,
-    color 120ms ease;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .toc__button:hover,

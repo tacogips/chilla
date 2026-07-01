@@ -295,7 +295,7 @@ bunx tsc --noEmit
 bun run test
 
 # Optional formatter check if the project defines it
-bunx prettier --check .
+biome format .
 ```
 
 If the repository does not yet contain `package.json`, `tsconfig.json`, or the relevant Bun scripts, report that explicitly.

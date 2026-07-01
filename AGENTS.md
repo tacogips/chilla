@@ -169,7 +169,7 @@ This repository was originally generated from `ign-template`'s `rust-v1` templat
 - `bun` - JavaScript/TypeScript runtime and package manager
 - `tsc` - TypeScript compiler
 - `typescript-language-server` - TypeScript language server (LSP)
-- `prettier` - Frontend code formatter
+- `biome` - Frontend code formatter and linter
 - `clippy` - Rust linter
 - `rustfmt` - Rust formatter
 - `cargo-nextest` - Fast test runner

@@ -955,6 +955,167 @@ describe("FullFileDiff", () => {
     document.body.innerHTML = "";
   });
 
+  it("applies requested language syntax spans to full file content", () => {
+    const cases: readonly {
+      readonly path: string;
+      readonly content: string;
+      readonly keyword: string;
+      readonly comment: string;
+    }[] = [
+      {
+        path: "src/App.java",
+        content: "public class App { // java comment",
+        keyword: "public",
+        comment: "// java comment",
+      },
+      {
+        path: "src/App.scala",
+        content: "object App extends Runnable // scala comment",
+        keyword: "object",
+        comment: "// scala comment",
+      },
+      {
+        path: "src/app.lisp",
+        content: "(defun app () ; lisp comment",
+        keyword: "defun",
+        comment: "; lisp comment",
+      },
+      {
+        path: "src/app.rb",
+        content: "class App # ruby comment",
+        keyword: "class",
+        comment: "# ruby comment",
+      },
+      {
+        path: "src/app.py",
+        content: "def app(): # python comment",
+        keyword: "def",
+        comment: "# python comment",
+      },
+      {
+        path: "src/app.c",
+        content: "static int app(void) { // c comment",
+        keyword: "static",
+        comment: "// c comment",
+      },
+      {
+        path: "src/app.cpp",
+        content: "namespace app { // cpp comment",
+        keyword: "namespace",
+        comment: "// cpp comment",
+      },
+      {
+        path: "src/app.zig",
+        content: "pub fn app() void { // zig comment",
+        keyword: "pub",
+        comment: "// zig comment",
+      },
+      {
+        path: "src/App.vue",
+        content: "<template><!-- vue comment",
+        keyword: "template",
+        comment: "<!-- vue comment",
+      },
+      {
+        path: "db/migration.sql",
+        content: "SELECT id FROM users -- sql comment",
+        keyword: "SELECT",
+        comment: "-- sql comment",
+      },
+      {
+        path: "build.gradle",
+        content: "plugins { // gradle comment",
+        keyword: "plugins",
+        comment: "// gradle comment",
+      },
+      {
+        path: "config/application.xml",
+        content: '<?xml version="1.0"?><!-- xml comment',
+        keyword: "xml",
+        comment: "<!-- xml comment",
+      },
+      {
+        path: "assets/icon.svg",
+        content: "<svg><!-- svg comment",
+        keyword: "svg",
+        comment: "<!-- svg comment",
+      },
+      {
+        path: "config/application.properties",
+        content: "enabled=true # properties comment",
+        keyword: "true",
+        comment: "# properties comment",
+      },
+      {
+        path: "proto/service.proto",
+        content: "message User { // proto comment",
+        keyword: "message",
+        comment: "// proto comment",
+      },
+      {
+        path: "flake.nix",
+        content: "let value = true; # nix comment",
+        keyword: "let",
+        comment: "# nix comment",
+      },
+      {
+        path: "Dockerfile",
+        content: "FROM alpine # docker comment",
+        keyword: "FROM",
+        comment: "# docker comment",
+      },
+      {
+        path: "Makefile",
+        content: "include common.mk # make comment",
+        keyword: "include",
+        comment: "# make comment",
+      },
+      {
+        path: "src/Main.hs",
+        content: "module Main where -- haskell comment",
+        keyword: "module",
+        comment: "-- haskell comment",
+      },
+    ];
+
+    for (const testCase of cases) {
+      document.body.innerHTML = '<div id="root"></div>';
+      const root = document.getElementById("root");
+
+      if (root === null) {
+        throw new Error("missing test root");
+      }
+
+      const file: PrDiffFile = {
+        path: testCase.path,
+        old_path: null,
+        status: PrFileStatus.Modified,
+        additions: 1,
+        deletions: 0,
+        is_binary: false,
+        raw_url: `https://raw.githubusercontent.com/tacogips/chilla/main/${testCase.path}`,
+        chunks: [],
+        full_text: testCase.content,
+        full_text_truncated: false,
+      };
+
+      const dispose = render(() => FullFileDiff({ file }), root);
+
+      const keywordTexts = Array.from(
+        document.querySelectorAll(".pr-syntax--keyword"),
+      ).map((element) => element.textContent);
+      const commentTexts = Array.from(
+        document.querySelectorAll(".pr-syntax--comment"),
+      ).map((element) => element.textContent);
+
+      expect(keywordTexts).toContain(testCase.keyword);
+      expect(commentTexts).toContain(testCase.comment);
+
+      dispose();
+      document.body.innerHTML = "";
+    }
+  });
+
   it("highlights latest full-file changes and shows deletion markers", () => {
     document.body.innerHTML = '<div id="root"></div>';
     const root = document.getElementById("root");

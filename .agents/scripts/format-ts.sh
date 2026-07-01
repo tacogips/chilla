@@ -2,30 +2,37 @@
 
 set -euo pipefail
 
-if ! command -v bunx >/dev/null 2>&1; then
-  exit 0
+if ! command -v biome >/dev/null 2>&1; then
+  echo "biome not found; install it through the Nix dev shell or bun install"
+  exit 1
 fi
 
-shopt -s nullglob globstar
-
 frontend_files=(
-  src/**/*.ts
-  src/**/*.tsx
-  src/**/*.js
-  src/**/*.jsx
-  src/**/*.mjs
-  src/**/*.cjs
-  src/**/*.svelte
-  tests/**/*.ts
-  tests/**/*.tsx
-  test/**/*.ts
-  test/**/*.tsx
-  scripts/**/*.ts
-  scripts/**/*.tsx
 )
+
+for directory in src tests test scripts; do
+  if [ ! -d "${directory}" ]; then
+    continue
+  fi
+
+  while IFS= read -r -d '' file; do
+    frontend_files+=("${file}")
+  done < <(
+    find "${directory}" -type f \
+      \( -name '*.ts' \
+      -o -name '*.tsx' \
+      -o -name '*.js' \
+      -o -name '*.jsx' \
+      -o -name '*.mjs' \
+      -o -name '*.cjs' \
+      -o -name '*.css' \
+      -o -name '*.svelte' \) \
+      -print0
+  )
+done
 
 if [ ${#frontend_files[@]} -eq 0 ]; then
   exit 0
 fi
 
-bunx prettier --write "${frontend_files[@]}"
+biome format --write "${frontend_files[@]}"

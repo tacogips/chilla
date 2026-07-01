@@ -1,6 +1,6 @@
 [package]
 name = "chilla"
-version = "0.1.8"
+version = "0.1.9"
 description = "A lightweight file and Git viewer"
 edition = "2021"
 license = "MIT"

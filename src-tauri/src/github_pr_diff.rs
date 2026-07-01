@@ -1,10 +1,4 @@
-use std::{
-    collections::hash_map::DefaultHasher,
-    fs,
-    hash::{Hash, Hasher},
-    path::PathBuf,
-    time::Duration,
-};
+use std::time::Duration;
 
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
@@ -12,6 +6,23 @@ use reqwest::{StatusCode, Url};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, AppResult};
+
+mod cache;
+mod metadata;
+mod parser;
+
+#[cfg(test)]
+use cache::cache_file_path;
+use cache::{read_cached_snapshot, write_cached_snapshot};
+#[cfg(test)]
+use metadata::GitHubBranchRef;
+use metadata::{
+    metadata_from_commit_response, metadata_from_compare_response, metadata_from_pull_response,
+    GitHubCommitResponse, GitHubCompareResponse, GitHubDiffMetadata, GitHubPullFileResponse,
+    GitHubPullResponse,
+};
+use parser::normalize_pull_files;
+pub use parser::parse_unified_diff;
 
 const GITHUB_HOST: &str = "github.com";
 const GITHUB_API_HOST: &str = "https://api.github.com";
@@ -85,7 +96,7 @@ impl GitHubDiffSource {
     }
 
     #[must_use]
-    fn fallback_title(&self) -> String {
+    pub(super) fn fallback_title(&self) -> String {
         match self {
             Self::PullRequest { number } => format!("Pull request #{number}"),
             Self::Commit { sha } => format!("Commit {}", short_sha(sha)),
@@ -254,7 +265,7 @@ impl GitHubPrTarget {
     }
 }
 
-fn short_sha(sha: &str) -> &str {
+pub(super) fn short_sha(sha: &str) -> &str {
     sha.get(..sha.len().min(12)).unwrap_or(sha)
 }
 
@@ -361,212 +372,6 @@ pub struct PrDiffSnapshot {
     pub additions: u32,
     pub deletions: u32,
     pub warnings: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct GitHubDiffMetadata {
-    title: Option<String>,
-    state: Option<String>,
-    merged: Option<bool>,
-    merged_at: Option<String>,
-    updated_at: Option<String>,
-    base_branch: Option<String>,
-    head_branch: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct PrDiffCacheRecord {
-    updated_at: String,
-    snapshot: PrDiffSnapshot,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct GitHubPullResponse {
-    title: Option<String>,
-    state: Option<String>,
-    merged: Option<bool>,
-    merged_at: Option<String>,
-    updated_at: Option<String>,
-    base: Option<GitHubBranchRef>,
-    head: Option<GitHubBranchRef>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct GitHubCommitResponse {
-    sha: Option<String>,
-    commit: Option<GitHubCommitDetails>,
-    #[serde(default)]
-    files: Vec<GitHubPullFileResponse>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct GitHubCommitDetails {
-    message: Option<String>,
-    author: Option<GitHubCommitPerson>,
-    committer: Option<GitHubCommitPerson>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct GitHubCommitPerson {
-    date: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct GitHubCompareResponse {
-    status: Option<String>,
-    #[serde(default)]
-    ahead_by: Option<u32>,
-    #[serde(default)]
-    behind_by: Option<u32>,
-    base_commit: Option<GitHubCommitResponse>,
-    #[serde(default)]
-    commits: Vec<GitHubCommitResponse>,
-    #[serde(default)]
-    files: Vec<GitHubPullFileResponse>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct GitHubPullFileResponse {
-    filename: String,
-    previous_filename: Option<String>,
-    status: String,
-    additions: u32,
-    deletions: u32,
-    patch: Option<String>,
-    raw_url: Option<String>,
-    #[serde(default, skip_deserializing)]
-    full_text: Option<String>,
-    #[serde(default, skip_deserializing)]
-    full_text_truncated: bool,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct GitHubBranchRef {
-    #[serde(rename = "ref")]
-    branch_ref: Option<String>,
-}
-
-fn metadata_from_pull_response(response: GitHubPullResponse) -> GitHubDiffMetadata {
-    GitHubDiffMetadata {
-        title: response.title,
-        state: response.state,
-        merged: response.merged,
-        merged_at: response.merged_at,
-        updated_at: response.updated_at,
-        base_branch: response
-            .base
-            .as_ref()
-            .and_then(|value| value.branch_ref.clone()),
-        head_branch: response
-            .head
-            .as_ref()
-            .and_then(|value| value.branch_ref.clone()),
-    }
-}
-
-fn metadata_from_commit_response(
-    source: &GitHubDiffSource,
-    response: GitHubCommitResponse,
-) -> GitHubDiffMetadata {
-    let title = response
-        .commit
-        .as_ref()
-        .and_then(|commit| commit.message.as_deref())
-        .and_then(|message| message.lines().next())
-        .filter(|line| !line.trim().is_empty())
-        .map(str::to_string)
-        .or_else(|| {
-            response
-                .sha
-                .as_deref()
-                .map(short_sha)
-                .map(|sha| format!("Commit {sha}"))
-        })
-        .or_else(|| Some(source.fallback_title()));
-    let updated_at = response.commit.and_then(|commit| {
-        commit
-            .committer
-            .and_then(|person| person.date)
-            .or_else(|| commit.author.and_then(|person| person.date))
-    });
-
-    GitHubDiffMetadata {
-        title,
-        state: None,
-        merged: None,
-        merged_at: None,
-        updated_at,
-        base_branch: None,
-        head_branch: None,
-    }
-}
-
-fn metadata_from_compare_response(
-    source: &GitHubDiffSource,
-    response: GitHubCompareResponse,
-) -> GitHubDiffMetadata {
-    let updated_at = response
-        .commits
-        .last()
-        .and_then(|commit| {
-            commit.commit.as_ref().and_then(|details| {
-                details
-                    .committer
-                    .as_ref()
-                    .and_then(|person| person.date.clone())
-                    .or_else(|| {
-                        details
-                            .author
-                            .as_ref()
-                            .and_then(|person| person.date.clone())
-                    })
-            })
-        })
-        .or_else(|| {
-            response.base_commit.and_then(|commit| {
-                commit.commit.and_then(|details| {
-                    details
-                        .committer
-                        .and_then(|person| person.date)
-                        .or_else(|| details.author.and_then(|person| person.date))
-                })
-            })
-        });
-    let status = response.status;
-    let counts = match (response.ahead_by, response.behind_by) {
-        (Some(ahead), Some(behind)) => Some(format!("{ahead} ahead, {behind} behind")),
-        (Some(ahead), None) => Some(format!("{ahead} ahead")),
-        (None, Some(behind)) => Some(format!("{behind} behind")),
-        (None, None) => None,
-    };
-    let title = counts.map_or_else(
-        || source.fallback_title(),
-        |counts| format!("{} ({counts})", source.fallback_title()),
-    );
-
-    GitHubDiffMetadata {
-        title: Some(title),
-        state: status,
-        merged: None,
-        merged_at: None,
-        updated_at,
-        base_branch: match source {
-            GitHubDiffSource::Compare { base, .. } => Some(base.clone()),
-            GitHubDiffSource::PullRequest { .. }
-            | GitHubDiffSource::Commit { .. }
-            | GitHubDiffSource::GitWorktree { .. }
-            | GitHubDiffSource::GitCommit { .. }
-            | GitHubDiffSource::GitRange { .. } => None,
-        },
-        head_branch: match source {
-            GitHubDiffSource::Compare { head, .. } => Some(head.clone()),
-            GitHubDiffSource::PullRequest { .. }
-            | GitHubDiffSource::Commit { .. }
-            | GitHubDiffSource::GitWorktree { .. }
-            | GitHubDiffSource::GitCommit { .. }
-            | GitHubDiffSource::GitRange { .. } => None,
-        },
-    }
 }
 
 pub(crate) trait GitHubPrApi {
@@ -756,6 +561,22 @@ impl GitHubPrDiffService<ReqwestGitHubPrApi> {
     }
 }
 
+fn apply_file_cap(
+    mut raw_files: Vec<GitHubPullFileResponse>,
+) -> (Vec<GitHubPullFileResponse>, Vec<String>) {
+    if raw_files.len() <= MAX_DIFF_FILES {
+        return (raw_files, Vec::new());
+    }
+
+    raw_files.truncate(MAX_DIFF_FILES);
+    (
+        raw_files,
+        vec![format!(
+            "Only the first {MAX_DIFF_FILES} changed files are shown."
+        )],
+    )
+}
+
 impl<Api: GitHubPrApi> GitHubPrDiffService<Api> {
     #[cfg(test)]
     fn with_api(api: Api) -> Self {
@@ -925,364 +746,6 @@ fn validate_github_raw_url(raw_url: &str) -> AppResult<()> {
             "GitHub raw file URL is missing a host".to_string(),
         )),
     }
-}
-
-fn read_cached_snapshot(
-    target: &GitHubPrTarget,
-    updated_at: Option<&str>,
-) -> Option<PrDiffSnapshot> {
-    let updated_at = updated_at?;
-    let cache_path = cache_file_path(target);
-    let cache_text = fs::read_to_string(cache_path).ok()?;
-    let cache_record = serde_json::from_str::<PrDiffCacheRecord>(&cache_text).ok()?;
-
-    if cache_record.updated_at == updated_at {
-        Some(cache_record.snapshot)
-    } else {
-        None
-    }
-}
-
-fn write_cached_snapshot(
-    target: &GitHubPrTarget,
-    updated_at: &str,
-    snapshot: &PrDiffSnapshot,
-) -> std::io::Result<()> {
-    let cache_path = cache_file_path(target);
-    if let Some(parent) = cache_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    let cache_record = PrDiffCacheRecord {
-        updated_at: updated_at.to_string(),
-        snapshot: snapshot.clone(),
-    };
-    let cache_text = serde_json::to_string(&cache_record).map_err(std::io::Error::other)?;
-    fs::write(cache_path, cache_text)
-}
-
-fn cache_file_path(target: &GitHubPrTarget) -> PathBuf {
-    let mut hasher = DefaultHasher::new();
-    target.owner.hash(&mut hasher);
-    target.repo.hash(&mut hasher);
-    target.source.hash(&mut hasher);
-    let key = hasher.finish();
-
-    std::env::temp_dir()
-        .join("chilla")
-        .join("github-diff-cache")
-        .join(format!("source-{key:016x}.json"))
-}
-
-pub fn parse_unified_diff(input: &str) -> Vec<PrDiffFile> {
-    let mut files = Vec::new();
-    let mut current_file: Option<PrDiffFile> = None;
-    let mut current_chunk: Option<PrDiffChunk> = None;
-    let mut old_line = 0_u32;
-    let mut new_line = 0_u32;
-
-    for line in input.lines() {
-        if line.starts_with("diff --git ") {
-            flush_chunk(&mut current_file, &mut current_chunk);
-            if let Some(file) = current_file.take() {
-                files.push(file);
-            }
-            current_file = Some(PrDiffFile {
-                path: String::new(),
-                old_path: None,
-                status: PrFileStatus::Modified,
-                additions: 0,
-                deletions: 0,
-                chunks: Vec::new(),
-                is_binary: false,
-                raw_url: None,
-                full_text: None,
-                full_text_truncated: false,
-            });
-            continue;
-        }
-
-        let Some(file) = current_file.as_mut() else {
-            continue;
-        };
-
-        if let Some(path) = line.strip_prefix("rename from ") {
-            file.old_path = Some(path.to_string());
-            file.status = PrFileStatus::Renamed;
-            continue;
-        }
-
-        if let Some(path) = line.strip_prefix("rename to ") {
-            file.path = path.to_string();
-            file.status = PrFileStatus::Renamed;
-            continue;
-        }
-
-        if line.starts_with("new file mode ") {
-            file.status = PrFileStatus::Added;
-            continue;
-        }
-
-        if line.starts_with("deleted file mode ") {
-            file.status = PrFileStatus::Deleted;
-            continue;
-        }
-
-        if line.starts_with("copy from ") {
-            file.status = PrFileStatus::Copied;
-            continue;
-        }
-
-        if let Some(path) = line.strip_prefix("--- ") {
-            if path != "/dev/null" {
-                file.old_path = Some(strip_diff_path_prefix(path).to_string());
-            }
-            continue;
-        }
-
-        if let Some(path) = line.strip_prefix("+++ ") {
-            if path != "/dev/null" && file.path.is_empty() {
-                file.path = strip_diff_path_prefix(path).to_string();
-            }
-            continue;
-        }
-
-        if line.starts_with("Binary files ") {
-            file.is_binary = true;
-            continue;
-        }
-
-        if line.starts_with("@@ ") {
-            flush_chunk(&mut current_file, &mut current_chunk);
-            if let Some((next_chunk, next_old_line, next_new_line)) = parse_hunk_header(line) {
-                old_line = next_old_line;
-                new_line = next_new_line;
-                current_chunk = Some(next_chunk);
-            }
-            continue;
-        }
-
-        let Some(chunk) = current_chunk.as_mut() else {
-            continue;
-        };
-
-        if let Some(content) = line.strip_prefix('+') {
-            file.additions += 1;
-            chunk.changes.push(PrDiffChange {
-                change_type: PrDiffChangeType::Add,
-                old_line: None,
-                new_line: Some(new_line),
-                content: content.to_string(),
-            });
-            new_line += 1;
-            continue;
-        }
-
-        if let Some(content) = line.strip_prefix('-') {
-            file.deletions += 1;
-            chunk.changes.push(PrDiffChange {
-                change_type: PrDiffChangeType::Delete,
-                old_line: Some(old_line),
-                new_line: None,
-                content: content.to_string(),
-            });
-            old_line += 1;
-            continue;
-        }
-
-        if let Some(content) = line.strip_prefix(' ') {
-            chunk.changes.push(PrDiffChange {
-                change_type: PrDiffChangeType::Context,
-                old_line: Some(old_line),
-                new_line: Some(new_line),
-                content: content.to_string(),
-            });
-            old_line += 1;
-            new_line += 1;
-        }
-    }
-
-    flush_chunk(&mut current_file, &mut current_chunk);
-    if let Some(file) = current_file {
-        files.push(file);
-    }
-
-    files
-}
-
-fn normalize_pull_files(raw_files: Vec<GitHubPullFileResponse>) -> AppResult<Vec<PrDiffFile>> {
-    raw_files
-        .into_iter()
-        .map(|file| {
-            let status = normalize_file_status(&file.status)?;
-            let is_binary = infer_is_binary_file(&file);
-            let chunks = file
-                .patch
-                .as_deref()
-                .map(parse_patch_chunks)
-                .unwrap_or_default();
-
-            Ok(PrDiffFile {
-                path: file.filename,
-                old_path: file.previous_filename,
-                status,
-                additions: file.additions,
-                deletions: file.deletions,
-                chunks,
-                is_binary,
-                raw_url: file.raw_url,
-                full_text: file.full_text,
-                full_text_truncated: file.full_text_truncated,
-            })
-        })
-        .collect()
-}
-
-fn infer_is_binary_file(file: &GitHubPullFileResponse) -> bool {
-    file.patch.is_none() && (file.raw_url.is_none() || is_removed_file_status(&file.status))
-}
-
-fn is_removed_file_status(status: &str) -> bool {
-    status == "removed" || status == "deleted"
-}
-
-fn apply_file_cap(
-    mut raw_files: Vec<GitHubPullFileResponse>,
-) -> (Vec<GitHubPullFileResponse>, Vec<String>) {
-    if raw_files.len() <= MAX_DIFF_FILES {
-        return (raw_files, Vec::new());
-    }
-
-    raw_files.truncate(MAX_DIFF_FILES);
-    (
-        raw_files,
-        vec![format!(
-            "Only the first {MAX_DIFF_FILES} changed files are shown."
-        )],
-    )
-}
-
-fn normalize_file_status(status: &str) -> AppResult<PrFileStatus> {
-    match status {
-        "added" => Ok(PrFileStatus::Added),
-        "modified" | "changed" => Ok(PrFileStatus::Modified),
-        "removed" | "deleted" => Ok(PrFileStatus::Deleted),
-        "renamed" => Ok(PrFileStatus::Renamed),
-        "copied" => Ok(PrFileStatus::Copied),
-        other => Err(AppError::State(format!(
-            "unsupported GitHub diff file status `{other}`"
-        ))),
-    }
-}
-
-fn parse_patch_chunks(input: &str) -> Vec<PrDiffChunk> {
-    let mut chunks = Vec::new();
-    let mut current_chunk: Option<PrDiffChunk> = None;
-    let mut old_line = 0_u32;
-    let mut new_line = 0_u32;
-
-    for line in input.lines() {
-        if line.starts_with("@@ ") {
-            if let Some(chunk) = current_chunk.take() {
-                chunks.push(chunk);
-            }
-            if let Some((next_chunk, next_old_line, next_new_line)) = parse_hunk_header(line) {
-                old_line = next_old_line;
-                new_line = next_new_line;
-                current_chunk = Some(next_chunk);
-            }
-            continue;
-        }
-
-        let Some(chunk) = current_chunk.as_mut() else {
-            continue;
-        };
-
-        if let Some(content) = line.strip_prefix('+') {
-            chunk.changes.push(PrDiffChange {
-                change_type: PrDiffChangeType::Add,
-                old_line: None,
-                new_line: Some(new_line),
-                content: content.to_string(),
-            });
-            new_line += 1;
-            continue;
-        }
-
-        if let Some(content) = line.strip_prefix('-') {
-            chunk.changes.push(PrDiffChange {
-                change_type: PrDiffChangeType::Delete,
-                old_line: Some(old_line),
-                new_line: None,
-                content: content.to_string(),
-            });
-            old_line += 1;
-            continue;
-        }
-
-        if let Some(content) = line.strip_prefix(' ') {
-            chunk.changes.push(PrDiffChange {
-                change_type: PrDiffChangeType::Context,
-                old_line: Some(old_line),
-                new_line: Some(new_line),
-                content: content.to_string(),
-            });
-            old_line += 1;
-            new_line += 1;
-        }
-    }
-
-    if let Some(chunk) = current_chunk {
-        chunks.push(chunk);
-    }
-
-    chunks
-}
-
-fn flush_chunk(file: &mut Option<PrDiffFile>, chunk: &mut Option<PrDiffChunk>) {
-    if let (Some(file), Some(chunk)) = (file.as_mut(), chunk.take()) {
-        file.chunks.push(chunk);
-    }
-}
-
-fn strip_diff_path_prefix(path: &str) -> &str {
-    path.strip_prefix("a/")
-        .or_else(|| path.strip_prefix("b/"))
-        .unwrap_or(path)
-}
-
-fn parse_hunk_header(line: &str) -> Option<(PrDiffChunk, u32, u32)> {
-    let rest = line.strip_prefix("@@ ")?;
-    let marker_index = rest.find(" @@")?;
-    let ranges = &rest[..marker_index];
-    let header = line.to_string();
-    let mut parts = ranges.split_whitespace();
-    let old_range = parts.next()?.strip_prefix('-')?;
-    let new_range = parts.next()?.strip_prefix('+')?;
-    let (old_start, old_lines) = parse_range(old_range)?;
-    let (new_start, new_lines) = parse_range(new_range)?;
-
-    Some((
-        PrDiffChunk {
-            old_start,
-            old_lines,
-            new_start,
-            new_lines,
-            header,
-            changes: Vec::new(),
-        },
-        old_start,
-        new_start,
-    ))
-}
-
-fn parse_range(range: &str) -> Option<(u32, u32)> {
-    let (start, lines) = match range.split_once(',') {
-        Some((start, lines)) => (start.parse().ok()?, lines.parse().ok()?),
-        None => (range.parse().ok()?, 1),
-    };
-
-    Some((start, lines))
 }
 
 #[cfg(test)]

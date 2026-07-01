@@ -415,7 +415,7 @@ async function verifyReadmePreview(currentDriver: WebDriver): Promise<void> {
       By.css(".markdown-source-editor"),
     );
     const text = await raw.getAttribute("value");
-    return text !== null && text.includes(FIXTURE_README_TEXT);
+    return text?.includes(FIXTURE_README_TEXT);
   });
 
   await currentDriver

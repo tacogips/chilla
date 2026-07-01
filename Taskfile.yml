@@ -77,7 +77,17 @@ tasks:
   clippy:
     desc: Run clippy for the Tauri backend
     cmds:
-      - CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - task: lint-rust
+
+  lint-ts:
+    desc: Run TypeScript lint checks
+    cmds:
+      - bash .agents/scripts/lint-ts.sh
+
+  lint-rust:
+    desc: Run Rust lint checks
+    cmds:
+      - bash .agents/scripts/lint-rust.sh
 
   fmt:
     desc: Format frontend and backend sources
@@ -91,10 +101,18 @@ tasks:
       - cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
   lint:
-    desc: Run all lints (fmt check + clippy)
+    desc: Run all lints (TypeScript, Rust format check, and clippy)
     cmds:
+      - task: lint-ts
       - task: fmt-check
-      - task: clippy
+      - task: lint-rust
+
+  verify:
+    desc: Run the full local verification suite
+    cmds:
+      - task: check
+      - task: lint
+      - task: test
 
   clean:
     desc: Clean build artifacts
@@ -106,5 +124,4 @@ tasks:
     desc: Run all CI checks
     cmds:
       - task: build
-      - task: test
-      - task: clippy
+      - task: verify

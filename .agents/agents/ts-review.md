@@ -185,7 +185,7 @@ Check for:
 - [ ] Security issues (path traversal, injection, etc.)
 - [ ] Performance concerns (unnecessary iterations, memory leaks)
 - [ ] Missing JSDoc for public APIs
-- [ ] Inconsistent formatting (should be handled by prettier)
+- [ ] Inconsistent formatting (should be handled by Biome)
 - [ ] Unused imports or variables
 - [ ] Magic numbers or strings that should be constants
 

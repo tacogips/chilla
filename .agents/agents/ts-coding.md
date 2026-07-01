@@ -215,7 +215,7 @@ When writing TypeScript code:
 7. Write tests for critical functionality
 8. Keep dependencies minimal
 9. Use standard library and Bun APIs when possible
-10. **Always run `prettier` after making changes**
+10. **Always run Biome formatting after making changes**
 11. **Ensure typecheck passes without errors**
 
 ### Error Handling Best Practices

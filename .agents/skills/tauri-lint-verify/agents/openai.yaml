@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tauri Lint Verify"
+  short_description: "Run Rust and TypeScript lint checks for the Tauri app."
+  default_prompt: "Run the Tauri lint and verification checks for this repository."

@@ -84,7 +84,7 @@ const ASCIINEMA_HOSTNAME = "asciinema.org";
 const ASCIINEMA_RECORDING_PATH_PATTERN = /^\/a\/([A-Za-z0-9_-]+)\/?$/;
 
 let mermaidModulePromise:
-  | Promise<(typeof import("mermaid"))["default"]>
+  | Promise<typeof import("mermaid")["default"]>
   | undefined;
 
 interface MermaidThemeVariables {

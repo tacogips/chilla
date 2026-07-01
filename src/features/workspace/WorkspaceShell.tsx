@@ -1,8 +1,5 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { ParentProps } from "solid-js";
 import {
-  For,
   Show,
   createMemo,
   createSignal,
@@ -17,9 +14,7 @@ import type {
   DiffWorkspaceTarget,
   DocumentPresentationMode,
   DocumentSnapshot,
-  EpubNavigationItem,
   FilePreview,
-  HeadingNode,
   StartupContext,
 } from "../../lib/tauri/document";
 import {
@@ -45,14 +40,13 @@ import {
 import { FileBrowserPane } from "../file-view/FileBrowserPane";
 import type { FileBrowserSelectOptions } from "../file-view/FileBrowserPane";
 import { DEFAULT_FILE_TREE_SORT, DIRECTORY_PAGE_SIZE } from "../file-view/sort";
-import { PreviewPane } from "../preview/PreviewPane";
-import { PdfFilePreviewPane } from "../preview/PdfFilePreviewPane";
-import { MediaFilePreviewPane } from "../preview/MediaFilePreviewPane";
+import { WorkspaceDocumentColumn } from "./WorkspaceDocumentColumn";
 import {
-  EpubPreviewPane,
-  EPUB_PAGINATION_STEP_EVENT,
-} from "../preview/EpubPreviewPane";
-import { CsvFilePreviewPane } from "../preview/CsvFilePreviewPane";
+  MarkdownConflictBanner,
+  WorkspaceErrorBanner,
+  WorkspaceLoadingOverlay,
+} from "./WorkspaceFeedback";
+import { WorkspaceHeader } from "./WorkspaceHeader";
 import { PrDiffWorkspace } from "../pr-diff/PrDiffWorkspace";
 import { TocPane, type TocItem } from "../toc/TocPane";
 import {
@@ -64,723 +58,32 @@ import {
   startupContextForPickedTarget,
 } from "./openFiles";
 import type { WorkspaceSelection } from "./state";
-
-const EMPTY_STATE_IMAGE_PATH = "/empty-state-cat.png";
-
-function resolveCurrentWindow() {
-  try {
-    return getCurrentWindow();
-  } catch {
-    return null;
-  }
-}
-
-/** Delay before opening a file from keyboard selection alone (j-k); confirm opens immediately. */
-const SELECTION_PREVIEW_DEBOUNCE_MS = 500;
-/** Binary / media previews: shorter wait while keeping debounce for text and Markdown. */
-const SELECTION_PREVIEW_DEBOUNCE_FAST_MS = 120;
-const SMALL_MEDIA_SEEK_SECONDS = 5;
-
-function selectionPreviewDebounceMsForPath(filePath: string): number {
-  if (/\.csv$/i.test(filePath)) {
-    return SELECTION_PREVIEW_DEBOUNCE_FAST_MS;
-  }
-
-  if (/\.(pdf|png|apng|jpe?g|gif|webp|heics?|heifs?)$/i.test(filePath)) {
-    return SELECTION_PREVIEW_DEBOUNCE_FAST_MS;
-  }
-
-  if (
-    /\.(mp4|m4v|mov|webm|ogv|aac|flac|m4a|mp3|oga|ogg|opus|wav)$/i.test(
-      filePath,
-    )
-  ) {
-    return SELECTION_PREVIEW_DEBOUNCE_FAST_MS;
-  }
-
-  return SELECTION_PREVIEW_DEBOUNCE_MS;
-}
-
-function isVideoPath(filePath: string): boolean {
-  return /\.(mp4|m4v|mov|webm|ogv)$/i.test(filePath);
-}
-
-function isAudioPath(filePath: string): boolean {
-  return /\.(aac|flac|m4a|mp3|oga|ogg|opus|wav)$/i.test(filePath);
-}
+import {
+  hasActiveDocumentMediaElement,
+  hasActiveEpubPreview,
+  nudgeActiveDocumentPane,
+  scrollActiveDocumentPane,
+  seekActiveDocumentMediaElement,
+  stepActiveEpubPage,
+} from "./activeDocumentNavigation";
+import { matchesShortcut } from "./workspaceKeyboard";
+import {
+  type LoadedDirectoryState,
+  resolveSelectedPath,
+} from "./workspaceDirectoryState";
+import {
+  isVideoPath,
+  previewPath,
+  selectionPreviewDebounceMsForPath,
+} from "./workspacePreviewModel";
+import { ShortcutsHelpDialog } from "./workspaceShortcuts";
+import {
+  epubNavigationToTocItems,
+  markdownHeadingsToTocItems,
+} from "./workspaceToc";
+import { resolveCurrentWindow } from "./workspaceWindow";
 
 type MarkdownPane = "raw" | "preview";
-type InferredPreviewKind = "audio" | "video" | "pdf" | "default";
-type ShortcutDefinition = {
-  readonly keys: readonly string[];
-  readonly description: string;
-};
-
-const SHORTCUT_LABELS = {
-  openFiles: "Ctrl+O / Cmd+O",
-  copyPath: "Y",
-  reload: "R",
-  toggleToc: "Shift+T",
-  toggleMarkdownPane: "Shift+P",
-  rawView: "1",
-  secondaryView: "2",
-  toggleTheme: "Shift+S",
-  toggleFileTree: "Shift+L",
-} as const;
-
-const SHORTCUT_SECTIONS: readonly {
-  readonly title: string;
-  readonly shortcuts: readonly ShortcutDefinition[];
-}[] = [
-  {
-    title: "Workspace",
-    shortcuts: [
-      { keys: ["?"], description: "Show this help" },
-      { keys: ["Esc"], description: "Close help" },
-      { keys: ["Q"], description: "Quit application" },
-      {
-        keys: ["Ctrl", "O"],
-        description: "Open one or more files (also Cmd+O on macOS)",
-      },
-      {
-        keys: ["Ctrl", "D"],
-        description:
-          "Scroll the active document down, or advance one EPUB page",
-      },
-      {
-        keys: ["Ctrl", "U"],
-        description: "Scroll the active document up, or go back one EPUB page",
-      },
-      {
-        keys: ["J"],
-        description:
-          "When the file tree is hidden, move forward in the active document; paginated EPUB moves one page and media seeks 5 seconds",
-      },
-      {
-        keys: ["K"],
-        description:
-          "When the file tree is hidden, move backward in the active document; paginated EPUB moves one page and media seeks 5 seconds",
-      },
-      {
-        keys: ["↓"],
-        description:
-          "Move forward in the active document when the file tree is hidden; paginated EPUB advances one page",
-      },
-      {
-        keys: ["↑"],
-        description:
-          "Move backward in the active document when the file tree is hidden; paginated EPUB goes back one page",
-      },
-      {
-        keys: ["Shift", "L"],
-        description: "Toggle file tree",
-      },
-      {
-        keys: ["G"],
-        description: "Toggle local Git diff for the opened repository",
-      },
-      {
-        keys: ["Y"],
-        description: "Copy selected file or directory absolute path",
-      },
-      { keys: ["R"], description: "Reload current file" },
-      {
-        keys: ["Shift", "T"],
-        description: "Toggle table of contents (Markdown / EPUB)",
-      },
-      {
-        keys: ["Shift", "P"],
-        description: "Toggle Raw / Preview (Markdown) or Raw / Formatted (CSV)",
-      },
-      {
-        keys: ["1"],
-        description: "Select Raw view (Markdown / CSV)",
-      },
-      {
-        keys: ["2"],
-        description: "Select Preview view (Markdown) or Formatted view (CSV)",
-      },
-      {
-        keys: ["Shift", "S"],
-        description: "Toggle light / dark theme",
-      },
-      {
-        keys: ["Ctrl", "S"],
-        description: "Save Markdown document (also Cmd+S on macOS)",
-      },
-    ],
-  },
-  {
-    title: "File tree",
-    shortcuts: [
-      { keys: ["/"], description: "Focus filter" },
-      {
-        keys: ["Esc"],
-        description: "Clear filter and return to list (when filter focused)",
-      },
-      {
-        keys: ["Enter"],
-        description:
-          "First filtered row when filter is focused (same as Ctrl+M); preview loads immediately (no debounce)",
-      },
-      {
-        keys: ["Ctrl", "M"],
-        description: "Same as Enter when the filter field is focused",
-      },
-      {
-        keys: ["J", "↓"],
-        description: "Move selection down",
-      },
-      {
-        keys: ["K", "↑"],
-        description: "Move selection up",
-      },
-      {
-        keys: ["0"],
-        description: "Reset sort to default (name ascending)",
-      },
-      {
-        keys: ["a", "A"],
-        description: "Sort by name ascending / descending",
-      },
-      {
-        keys: ["e", "E"],
-        description: "Sort by extension ascending / descending",
-      },
-      {
-        keys: ["m", "M"],
-        description: "Sort by modified time ascending / descending",
-      },
-      {
-        keys: ["s", "S"],
-        description: "Sort by size ascending / descending",
-      },
-      {
-        keys: ["H", "←"],
-        description: "Parent directory",
-      },
-      {
-        keys: ["L", "→", "Enter"],
-        description: "Open or confirm",
-      },
-    ],
-  },
-  {
-    title: "Media preview (file open)",
-    shortcuts: [
-      {
-        keys: ["Space"],
-        description:
-          "Play / pause (macOS/Windows when focus is outside the player), or open in default player (Linux)",
-      },
-      {
-        keys: ["J", "K"],
-        description:
-          "When the file tree is hidden, seek forward / back 5 seconds",
-      },
-      {
-        keys: ["Ctrl", "D"],
-        description: "Seek forward 15 seconds",
-      },
-      {
-        keys: ["Ctrl", "U"],
-        description: "Seek back 15 seconds",
-      },
-    ],
-  },
-];
-
-function SunGlyph() {
-  return (
-    <svg class="workspace__theme-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <circle
-        cx="12"
-        cy="12"
-        r="4"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-      />
-      <path
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-width="2"
-        d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M6.35 17.65l-1.41 1.41M19.07 4.93l-1.41 1.41"
-      />
-    </svg>
-  );
-}
-
-function MoonGlyph() {
-  return (
-    <svg class="workspace__theme-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
-      />
-    </svg>
-  );
-}
-
-function WorkspaceHeaderIcon(props: ParentProps<{ readonly class?: string }>) {
-  return (
-    <svg
-      class={props.class ?? "workspace__header-action-icon"}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      {props.children}
-    </svg>
-  );
-}
-
-function RawSourceGlyph() {
-  return (
-    <WorkspaceHeaderIcon>
-      <path
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M16 18l6-6-6-6M8 6l-6 6 6 6"
-      />
-    </WorkspaceHeaderIcon>
-  );
-}
-
-function PreviewGlyph() {
-  return (
-    <WorkspaceHeaderIcon>
-      <path
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
-      />
-      <circle
-        cx="12"
-        cy="12"
-        r="3"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-      />
-    </WorkspaceHeaderIcon>
-  );
-}
-
-function TocGlyph() {
-  return (
-    <WorkspaceHeaderIcon>
-      <path
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"
-      />
-    </WorkspaceHeaderIcon>
-  );
-}
-
-function ReloadGlyph() {
-  return (
-    <WorkspaceHeaderIcon>
-      <path
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
-      />
-    </WorkspaceHeaderIcon>
-  );
-}
-
-function MinimizeWindowGlyph() {
-  return (
-    <WorkspaceHeaderIcon>
-      <path
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-width="2"
-        d="M5 12h14"
-      />
-    </WorkspaceHeaderIcon>
-  );
-}
-
-function MaximizeWindowGlyph() {
-  return (
-    <WorkspaceHeaderIcon>
-      <rect
-        x="5"
-        y="5"
-        width="14"
-        height="14"
-        rx="2"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-      />
-    </WorkspaceHeaderIcon>
-  );
-}
-
-function CloseWindowGlyph() {
-  return (
-    <WorkspaceHeaderIcon>
-      <path
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M18 6L6 18M6 6l12 12"
-      />
-    </WorkspaceHeaderIcon>
-  );
-}
-
-function getActiveDocumentScrollBody(): HTMLElement | null {
-  const column = document.querySelector(".workspace__document-column");
-
-  if (column === null) {
-    return null;
-  }
-
-  const pane = column.querySelector(".pane:not(.pane--hidden)");
-
-  if (pane === null) {
-    return null;
-  }
-
-  return pane.querySelector<HTMLElement>(".pane__body");
-}
-
-function getActiveDocumentMediaElement(): HTMLMediaElement | null {
-  const body = getActiveDocumentScrollBody();
-
-  if (body === null) {
-    return null;
-  }
-
-  const media = body.querySelector("video, audio");
-
-  return media instanceof HTMLMediaElement ? media : null;
-}
-
-function hasActiveDocumentMediaElement(): boolean {
-  return getActiveDocumentMediaElement() !== null;
-}
-
-function scrollActiveDocumentPane(direction: 1 | -1): void {
-  const body = getActiveDocumentScrollBody();
-
-  if (body === null) {
-    return;
-  }
-
-  const delta = Math.max(80, Math.floor(body.clientHeight * 0.45)) * direction;
-  body.scrollTop += delta;
-}
-
-function nudgeActiveDocumentPane(direction: 1 | -1): void {
-  const body = getActiveDocumentScrollBody();
-
-  if (body === null) {
-    return;
-  }
-
-  const computedStyle = getComputedStyle(body);
-  const lineHeight = Number.parseFloat(computedStyle.lineHeight);
-  const delta =
-    (Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 24) *
-    direction;
-  body.scrollTop += delta;
-}
-
-function seekActiveDocumentMediaElement(direction: 1 | -1): void {
-  const media = getActiveDocumentMediaElement();
-
-  if (media === null) {
-    return;
-  }
-
-  const unclampedTime =
-    media.currentTime + direction * SMALL_MEDIA_SEEK_SECONDS;
-  const duration = media.duration;
-  const nextTime = Number.isFinite(duration)
-    ? Math.min(Math.max(unclampedTime, 0), duration)
-    : Math.max(unclampedTime, 0);
-
-  media.currentTime = nextTime;
-}
-
-function previewPath(preview: FilePreview | null): string | null {
-  return preview?.path ?? null;
-}
-
-function previewHtml(preview: FilePreview | null): string {
-  if (preview === null) {
-    return '<section class="file-preview-empty"><p class="file-preview-empty__title">No file selected</p><p class="file-preview-empty__hint">Pick a file in the file tree to open it here.</p></section>';
-  }
-
-  if (preview.kind === "csv") {
-    return preview.raw_html;
-  }
-
-  if ("html" in preview) {
-    return preview.html;
-  }
-
-  return '<section class="file-preview-empty"><p class="file-preview-empty__title">No file selected</p><p class="file-preview-empty__hint">Pick a file in the file tree to open it here.</p></section>';
-}
-
-function previewMimeType(preview: FilePreview | null): string {
-  return preview?.mime_type ?? "";
-}
-
-function formatPreviewSize(sizeBytes: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let size = sizeBytes;
-  let unitIndex = 0;
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-
-  if (unitIndex === 0) {
-    return `${sizeBytes} ${units[unitIndex]}`;
-  }
-
-  return `${size.toFixed(1)} ${units[unitIndex]}`;
-}
-
-function previewSubtitle(preview: FilePreview | null): string {
-  if (preview?.kind === "csv") {
-    return `File type: CSV | File size: ${formatPreviewSize(preview.size_bytes)}`;
-  }
-
-  if (preview?.kind === "epub") {
-    return "File type: EPUB";
-  }
-
-  if (preview?.kind === "text") {
-    return `File type: ${preview.file_type} | File size: ${formatPreviewSize(preview.size_bytes)}`;
-  }
-
-  if (preview?.kind === "binary") {
-    return `File type: Binary | File size: ${formatPreviewSize(preview.size_bytes)}`;
-  }
-
-  return "Rendered HTML";
-}
-
-function hasActiveEpubPreview(preview: FilePreview | null): boolean {
-  return preview?.kind === "epub";
-}
-
-function stepActiveEpubPage(step: number): boolean {
-  const reader = document.querySelector<HTMLElement>(".epub-reader");
-
-  if (!(reader instanceof HTMLElement)) {
-    return false;
-  }
-
-  reader.dispatchEvent(
-    new CustomEvent(EPUB_PAGINATION_STEP_EVENT, {
-      detail: { step },
-    }),
-  );
-
-  return true;
-}
-
-function inferPreviewKind(preview: FilePreview | null): InferredPreviewKind {
-  if (preview === null) {
-    return "default";
-  }
-
-  const mimeType = previewMimeType(preview);
-  const path = preview?.path ?? "";
-
-  if (
-    preview.kind === "audio" ||
-    mimeType.startsWith("audio/") ||
-    isAudioPath(path)
-  ) {
-    return "audio";
-  }
-
-  if (
-    preview.kind === "video" ||
-    mimeType.startsWith("video/") ||
-    isVideoPath(path)
-  ) {
-    return "video";
-  }
-
-  if (preview.kind === "pdf" || mimeType === "application/pdf") {
-    return "pdf";
-  }
-
-  return "default";
-}
-
-function mediaPreviewKind(
-  preview: FilePreview | null,
-): "audio" | "video" | null {
-  const kind = inferPreviewKind(preview);
-  return kind === "audio" || kind === "video" ? kind : null;
-}
-
-function mediaStreamUrl(preview: FilePreview | null): string | null {
-  switch (preview?.kind) {
-    case "audio":
-    case "video":
-      return preview.stream_url;
-    default:
-      return null;
-  }
-}
-
-function isMediaFilePreview(
-  preview: FilePreview | null,
-): preview is Extract<FilePreview, { path: string; file_name: string }> {
-  return mediaPreviewKind(preview) !== null;
-}
-
-interface LoadedDirectoryState {
-  readonly listingKind: "directory" | "explicit_file_set";
-  readonly current_directory_path: string;
-  readonly parent_directory_path: string | null;
-  readonly explicit_source_paths: readonly string[] | null;
-  readonly entries: readonly DirectoryEntry[];
-  readonly total_entry_count: number;
-  readonly next_offset: number;
-  readonly sort: DirectoryListSort;
-  readonly query: string;
-}
-
-function defaultFocusedEntryPath(
-  entries: readonly DirectoryEntry[],
-): string | null {
-  const preferred = entries.find((entry) => !entry.is_directory) ?? entries[0];
-  return preferred?.path ?? null;
-}
-
-function resolveSelectedPath(
-  listingKind: "directory" | "explicit_file_set",
-  currentDirectoryPath: string,
-  entries: readonly DirectoryEntry[],
-  requestedPath: string | null,
-): string | null {
-  if (
-    requestedPath === null ||
-    (listingKind === "directory" && requestedPath === currentDirectoryPath)
-  ) {
-    return defaultFocusedEntryPath(entries);
-  }
-
-  const matched = entries.find(
-    (entry) =>
-      entry.path === requestedPath || entry.canonical_path === requestedPath,
-  );
-
-  return matched?.path ?? defaultFocusedEntryPath(entries);
-}
-
-function renderShortcutKeys(keys: readonly string[]) {
-  return (
-    <>
-      <For each={keys}>
-        {(key, index) => (
-          <>
-            <Show when={index() > 0}>
-              <span class="shortcuts-help__plus">
-                {key.length === 1 || key === "Enter" ? "/" : "+"}
-              </span>
-            </Show>
-            <kbd>{key}</kbd>
-          </>
-        )}
-      </For>
-    </>
-  );
-}
-
-function markdownHeadingsToTocItems(
-  headings: readonly HeadingNode[],
-): readonly TocItem[] {
-  return headings.map((heading) => ({
-    title: heading.title,
-    anchorId: heading.anchor_id,
-    metaLabel: `L${heading.line_start}`,
-    children: markdownHeadingsToTocItems(heading.children),
-  }));
-}
-
-function epubNavigationToTocItems(
-  items: readonly EpubNavigationItem[],
-): readonly TocItem[] {
-  return items.map((item) => ({
-    title: item.label,
-    anchorId: item.anchor_id,
-    children: epubNavigationToTocItems(item.children),
-  }));
-}
-
-function hasExactModifiers(
-  event: KeyboardEvent,
-  modifiers: {
-    readonly ctrl?: boolean;
-    readonly meta?: boolean;
-    readonly alt?: boolean;
-    readonly shift?: boolean;
-  },
-) {
-  return (
-    event.ctrlKey === (modifiers.ctrl ?? false) &&
-    event.metaKey === (modifiers.meta ?? false) &&
-    event.altKey === (modifiers.alt ?? false) &&
-    event.shiftKey === (modifiers.shift ?? false)
-  );
-}
-
-function matchesShortcut(
-  event: KeyboardEvent,
-  key: string,
-  modifiers: {
-    readonly ctrl?: boolean;
-    readonly meta?: boolean;
-    readonly alt?: boolean;
-    readonly shift?: boolean;
-  } = {},
-) {
-  const shortcutCode =
-    key.length === 1 && key >= "a" && key <= "z"
-      ? `Key${key.toUpperCase()}`
-      : null;
-
-  return (
-    (event.key.toLowerCase() === key || event.code === shortcutCode) &&
-    hasExactModifiers(event, modifiers)
-  );
-}
-
 export function WorkspaceShell() {
   const appWindow = resolveCurrentWindow();
   let directoryRequestId = 0;
@@ -821,8 +124,9 @@ export function WorkspaceShell() {
   });
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
   const [isLoading, setLoading] = createSignal(true);
-  const [colorScheme, setColorScheme] =
-    createSignal<ColorScheme>(getColorScheme());
+  const [colorScheme, setColorScheme] = createSignal<ColorScheme>(
+    getColorScheme(),
+  );
 
   const applyDirectoryState = (
     nextState: LoadedDirectoryState,
@@ -2064,302 +1368,49 @@ export function WorkspaceShell() {
   return (
     <main class="workspace">
       <Portal>
-        <Show when={isShortcutsHelpOpen()}>
-          <div class="shortcuts-help-layer">
-            <div
-              class="shortcuts-help-backdrop"
-              role="presentation"
-              aria-hidden="true"
-            />
-            <div
-              class="shortcuts-help"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="shortcuts-help-title"
-              tabIndex={-1}
-              ref={(element) => {
-                queueMicrotask(() => {
-                  element?.focus();
-                });
-              }}
-            >
-              <h2 id="shortcuts-help-title" class="shortcuts-help__title">
-                Keyboard shortcuts
-              </h2>
-
-              <For each={SHORTCUT_SECTIONS}>
-                {(section) => (
-                  <section class="shortcuts-help__section">
-                    <h3 class="shortcuts-help__heading">{section.title}</h3>
-                    <ul class="shortcuts-help__list">
-                      <For each={section.shortcuts}>
-                        {(shortcut) => (
-                          <li class="shortcuts-help__row">
-                            <span class="shortcuts-help__keys">
-                              {renderShortcutKeys(shortcut.keys)}
-                            </span>
-                            <span class="shortcuts-help__desc">
-                              {shortcut.description}
-                            </span>
-                          </li>
-                        )}
-                      </For>
-                    </ul>
-                  </section>
-                )}
-              </For>
-
-              <p class="shortcuts-help__footer">
-                Shortcuts are ignored while typing in a search field.
-              </p>
-            </div>
-          </div>
-        </Show>
+        <ShortcutsHelpDialog open={isShortcutsHelpOpen()} />
       </Portal>
       <div class="workspace__frame">
-        <header class="workspace__header" data-tauri-drag-region="">
-          <div class="workspace__actions" data-tauri-drag-region="false">
-            <Show when={md() !== null}>
-              <div
-                class="workspace__mode-group"
-                role="group"
-                aria-label="Markdown view"
-              >
-                <button
-                  class={`workspace__mode${
-                    markdownPane() === "raw" ? " workspace__mode--active" : ""
-                  }`}
-                  type="button"
-                  aria-label="Raw Markdown source"
-                  title={`Raw source (${SHORTCUT_LABELS.rawView}; ${SHORTCUT_LABELS.toggleMarkdownPane} toggles)`}
-                  onClick={() => setMarkdownPane("raw")}
-                >
-                  <RawSourceGlyph />
-                </button>
-                <button
-                  class={`workspace__mode${
-                    markdownPane() === "preview"
-                      ? " workspace__mode--active"
-                      : ""
-                  }`}
-                  type="button"
-                  aria-label="Markdown preview"
-                  title={`Preview (${SHORTCUT_LABELS.secondaryView}; ${SHORTCUT_LABELS.toggleMarkdownPane} toggles)`}
-                  onClick={() => setMarkdownPane("preview")}
-                >
-                  <PreviewGlyph />
-                </button>
-              </div>
-            </Show>
+        <WorkspaceHeader
+          activeGitDiff={activeGitDiffTarget() !== null}
+          appWindow={appWindow}
+          canOpenGitDiff={
+            diffTarget() === null &&
+            directoryState()?.listingKind === "directory"
+          }
+          colorScheme={colorScheme()}
+          csvPaneMode={csvPaneMode()}
+          csvPreview={csvPreview()}
+          hasOpenDocument={hasOpenDocument()}
+          hasTocDocument={hasTocDocument()}
+          isTocOpen={isTocOpen()}
+          markdownOpen={md() !== null}
+          markdownPane={markdownPane()}
+          onCloseGitDiff={handleCloseGitDiff}
+          onCycleColorScheme={() => {
+            void cycleColorScheme();
+          }}
+          onOpenFiles={() => {
+            void handleOpenFiles();
+          }}
+          onOpenGitDiff={() => {
+            void handleOpenGitDiff();
+          }}
+          onReloadCurrent={() => {
+            void handleReloadCurrent();
+          }}
+          onSelectCsvPaneMode={setCsvPaneMode}
+          onSelectMarkdownPane={setMarkdownPane}
+          onToggleToc={() => setTocOpen((value) => !value)}
+        />
 
-            <Show when={csvPreview()}>
-              {(getCsv) => {
-                const csvRow = getCsv();
-                return (
-                  <div
-                    class="workspace__mode-group"
-                    role="group"
-                    aria-label="CSV view"
-                  >
-                    <button
-                      class={`workspace__mode${
-                        csvPaneMode() === "raw"
-                          ? " workspace__mode--active"
-                          : ""
-                      }`}
-                      type="button"
-                      aria-label="Raw CSV source"
-                      title={`Raw (${SHORTCUT_LABELS.rawView}; ${SHORTCUT_LABELS.toggleMarkdownPane} toggles)`}
-                      onClick={() => setCsvPaneMode("raw")}
-                    >
-                      <RawSourceGlyph />
-                    </button>
-                    <button
-                      class={`workspace__mode${
-                        csvPaneMode() === "formatted"
-                          ? " workspace__mode--active"
-                          : ""
-                      }`}
-                      type="button"
-                      disabled={!csvRow.formatted_available}
-                      aria-label="Formatted CSV table"
-                      title={`Formatted (${SHORTCUT_LABELS.secondaryView}; ${SHORTCUT_LABELS.toggleMarkdownPane} toggles)`}
-                      onClick={() => setCsvPaneMode("formatted")}
-                    >
-                      <PreviewGlyph />
-                    </button>
-                  </div>
-                );
-              }}
-            </Show>
+        <WorkspaceErrorBanner message={errorMessage()} />
 
-            <Show
-              when={activeGitDiffTarget() !== null}
-              fallback={
-                <Show
-                  when={
-                    diffTarget() === null &&
-                    directoryState()?.listingKind === "directory"
-                  }
-                >
-                  <button
-                    class="button button--ghost"
-                    type="button"
-                    aria-label="Open Git diff mode"
-                    title="Open Git diff mode"
-                    onClick={() => {
-                      void handleOpenGitDiff();
-                    }}
-                  >
-                    Git diff
-                  </button>
-                </Show>
-              }
-            >
-              <button
-                class="button button--ghost"
-                type="button"
-                aria-label="Return to file view"
-                title="Return to file view"
-                onClick={handleCloseGitDiff}
-              >
-                File view
-              </button>
-            </Show>
-
-            <button
-              class="button"
-              type="button"
-              aria-label="Open one or more files"
-              title={`Open files (${SHORTCUT_LABELS.openFiles})`}
-              onClick={() => {
-                void handleOpenFiles();
-              }}
-            >
-              Open files
-            </button>
-
-            <Show when={hasTocDocument()}>
-              <button
-                class={`button button--ghost workspace__icon-button${
-                  isTocOpen() ? " button--active" : ""
-                }`}
-                type="button"
-                aria-label="Toggle table of contents"
-                title={`Toggle TOC (${SHORTCUT_LABELS.toggleToc})`}
-                onClick={() => setTocOpen((value) => !value)}
-              >
-                <TocGlyph />
-              </button>
-            </Show>
-
-            <button
-              class="button button--ghost workspace__icon-button"
-              type="button"
-              disabled={!hasOpenDocument()}
-              aria-label="Reload current file"
-              title={`Reload file (${SHORTCUT_LABELS.reload})`}
-              onClick={() => void handleReloadCurrent()}
-            >
-              <ReloadGlyph />
-            </button>
-
-            <button
-              class="workspace__theme-toggle"
-              type="button"
-              aria-label={
-                colorScheme() === "dark"
-                  ? "Switch to light theme"
-                  : "Switch to dark theme"
-              }
-              title={
-                colorScheme() === "dark"
-                  ? `Light theme (${SHORTCUT_LABELS.toggleTheme})`
-                  : `Dark theme (${SHORTCUT_LABELS.toggleTheme})`
-              }
-              onClick={() => {
-                void cycleColorScheme();
-              }}
-            >
-              <Show when={colorScheme() === "dark"} fallback={<MoonGlyph />}>
-                <SunGlyph />
-              </Show>
-            </button>
-
-            <div
-              class="workspace__window-controls"
-              aria-label="Window controls"
-            >
-              <button
-                class="workspace__window-button"
-                type="button"
-                aria-label="Minimize window"
-                title="Minimize"
-                onClick={() => {
-                  void appWindow?.minimize();
-                }}
-              >
-                <MinimizeWindowGlyph />
-              </button>
-              <button
-                class="workspace__window-button"
-                type="button"
-                aria-label="Toggle maximize window"
-                title="Maximize"
-                onClick={() => {
-                  void appWindow?.toggleMaximize();
-                }}
-              >
-                <MaximizeWindowGlyph />
-              </button>
-              <button
-                class="workspace__window-button workspace__window-button--close"
-                type="button"
-                aria-label="Close window"
-                title="Close"
-                onClick={() => {
-                  void appWindow?.close();
-                }}
-              >
-                <CloseWindowGlyph />
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <Show when={errorMessage() !== null}>
-          <div class="banner banner--error">{errorMessage()}</div>
-        </Show>
-
-        <Show when={markdownExternalConflict() !== null}>
-          <div class="banner">
-            <span>
-              This file changed on disk while you have unsaved edits in the
-              editor.
-            </span>
-            <div class="banner__actions">
-              <button
-                type="button"
-                class="workspace__text-button"
-                onClick={() => {
-                  const disk = markdownExternalConflict();
-                  if (disk !== null) {
-                    applyMarkdownSnapshot(disk);
-                  }
-                }}
-              >
-                Reload from disk
-              </button>
-              <button
-                type="button"
-                class="workspace__text-button"
-                onClick={() => setMarkdownExternalConflict(null)}
-              >
-                Keep editing
-              </button>
-            </div>
-          </div>
-        </Show>
+        <MarkdownConflictBanner
+          snapshot={markdownExternalConflict()}
+          onKeepEditing={() => setMarkdownExternalConflict(null)}
+          onReloadFromDisk={applyMarkdownSnapshot}
+        />
 
         <div class={viewerGridClassName()}>
           <Show when={diffTarget()}>
@@ -2410,197 +1461,35 @@ export function WorkspaceShell() {
                 />
               </Show>
 
-              <div class="workspace__document-column">
-                <Show when={md() !== null && markdownPane() === "raw"}>
-                  <section class="pane workspace__markdown-raw-pane">
-                    <header class="pane__header">
-                      <span class="pane__title">Markdown</span>
-                      <span>Source (editable)</span>
-                    </header>
-                    <div class="pane__body markdown-raw-body">
-                      <textarea
-                        class="markdown-source-editor"
-                        spellcheck={false}
-                        value={markdownEditorBuffer()}
-                        onInput={(event) =>
-                          setMarkdownEditorBuffer(event.currentTarget.value)
-                        }
-                      />
-                    </div>
-                  </section>
-                </Show>
-
-                <Show when={md() !== null && markdownPane() === "preview"}>
-                  <PreviewPane
-                    colorScheme={colorScheme()}
-                    documentPath={md()?.path ?? null}
-                    html={md()?.html ?? ""}
-                    selectedAnchorId={selection().anchorId}
-                    {...(markdownIsDirty()
-                      ? {
-                          subtitle:
-                            "Unsaved changes; preview shows last saved content.",
-                        }
-                      : {})}
-                    visible={true}
-                  />
-                </Show>
-
-                <Show
-                  when={md() === null && fp() !== null && fp()?.kind === "epub"}
-                >
-                  <EpubPreviewPane
-                    colorScheme={colorScheme()}
-                    documentPath={previewPath(fp())}
-                    html={previewHtml(fp())}
-                    onRelocate={(anchorId) => {
-                      setSelection({
-                        anchorId,
-                        lineStart: null,
-                      });
-                    }}
-                    selectedAnchorId={selection().anchorId}
-                    subtitle={previewSubtitle(fp())}
-                    toc={epubPreview()?.toc ?? []}
-                    visible={true}
-                  />
-                </Show>
-
-                <Show when={csvPreview()}>
-                  {(getCsv) => (
-                    <CsvFilePreviewPane
-                      colorScheme={colorScheme()}
-                      presentationMode={csvPaneMode()}
-                      preview={getCsv()}
-                      subtitle={previewSubtitle(fp())}
-                    />
-                  )}
-                </Show>
-
-                <Show
-                  when={
-                    md() === null &&
-                    fp() !== null &&
-                    inferPreviewKind(fp()) === "default" &&
-                    fp()?.kind !== "epub" &&
-                    fp()?.kind !== "csv"
-                  }
-                >
-                  <PreviewPane
-                    colorScheme={colorScheme()}
-                    documentPath={previewPath(fp())}
-                    html={previewHtml(fp())}
-                    selectedAnchorId={null}
-                    subtitle={previewSubtitle(fp())}
-                    visible={true}
-                  />
-                </Show>
-
-                <Show when={md() === null && inferPreviewKind(fp()) === "pdf"}>
-                  <PdfFilePreviewPane
-                    path={fp()!.path}
-                    fileName={fp()!.file_name}
-                  />
-                </Show>
-
-                <Show when={md() === null && isMediaFilePreview(fp())}>
-                  <MediaFilePreviewPane
-                    kind={mediaPreviewKind(fp())!}
-                    path={fp()!.path}
-                    streamUrl={mediaStreamUrl(fp())}
-                    fileName={fp()!.file_name}
-                    autoplayRequestId={
-                      mediaPreviewKind(fp()) === "video"
-                        ? videoAutoplayRequestId()
-                        : 0
-                    }
-                  />
-                </Show>
-
-                <Show when={!hasOpenDocument()}>
-                  <section class="pane workspace__document-empty">
-                    <header class="pane__header">
-                      <span class="pane__title">Viewer</span>
-                      <span>No file open</span>
-                    </header>
-                    <div class="pane__body preview">
-                      <div class="preview__content">
-                        <section class="file-preview-empty">
-                          <p class="file-preview-empty__app-name">chilla</p>
-                          <p class="file-preview-empty__app-tagline">
-                            file viewer
-                          </p>
-                          <img
-                            class="file-preview-empty__image"
-                            src={EMPTY_STATE_IMAGE_PATH}
-                            alt="Pixel-art cat peeking in from the side"
-                          />
-                          <p class="file-preview-empty__title">
-                            Please select a file.
-                          </p>
-                          <div class="file-preview-empty__shortcuts">
-                            <For each={SHORTCUT_SECTIONS}>
-                              {(section) => (
-                                <section class="shortcuts-help__section">
-                                  <h3 class="shortcuts-help__heading">
-                                    {section.title}
-                                  </h3>
-                                  <ul class="shortcuts-help__list">
-                                    <For each={section.shortcuts}>
-                                      {(shortcut) => (
-                                        <li class="shortcuts-help__row">
-                                          <span class="shortcuts-help__keys">
-                                            {renderShortcutKeys(shortcut.keys)}
-                                          </span>
-                                          <span class="shortcuts-help__desc">
-                                            {shortcut.description}
-                                          </span>
-                                        </li>
-                                      )}
-                                    </For>
-                                  </ul>
-                                </section>
-                              )}
-                            </For>
-                          </div>
-                        </section>
-                      </div>
-                    </div>
-                  </section>
-                </Show>
-              </div>
+              <WorkspaceDocumentColumn
+                colorScheme={colorScheme()}
+                csvPaneMode={csvPaneMode()}
+                csvPreview={csvPreview()}
+                epubToc={epubPreview()?.toc ?? []}
+                filePreview={fp()}
+                hasOpenDocument={hasOpenDocument()}
+                markdownDoc={md()}
+                markdownEditorBuffer={markdownEditorBuffer()}
+                markdownIsDirty={markdownIsDirty()}
+                markdownPane={markdownPane()}
+                selection={selection()}
+                videoAutoplayRequestId={videoAutoplayRequestId()}
+                onMarkdownEditorInput={setMarkdownEditorBuffer}
+                onRelocateEpub={(anchorId) => {
+                  setSelection({
+                    anchorId,
+                    lineStart: null,
+                  });
+                }}
+              />
             </>
           </Show>
         </div>
 
-        <Show when={isLoading()}>
-          <div class="workspace__loading" role="status" aria-live="polite">
-            <div class="workspace__loading-inner">
-              {(() => {
-                const context = startupContext();
-                if (context === null) {
-                  return "Loading workspace...";
-                }
-
-                if (context.browser_root.kind === "github_pr") {
-                  return "Opening the requested GitHub diff...";
-                }
-
-                if (context.browser_root.kind === "git_diff") {
-                  return "Opening the requested Git diff...";
-                }
-
-                if (context.browser_root.kind === "explicit_file_set") {
-                  return "Opening the requested files...";
-                }
-
-                return context.browser_root.selected_file_path !== null
-                  ? "Opening the requested file..."
-                  : "Loading workspace...";
-              })()}
-            </div>
-          </div>
-        </Show>
+        <WorkspaceLoadingOverlay
+          loading={isLoading()}
+          startupContext={startupContext()}
+        />
       </div>
     </main>
   );
