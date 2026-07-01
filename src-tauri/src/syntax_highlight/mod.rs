@@ -127,7 +127,7 @@ fn path_syntax_token(path: &Path) -> Option<String> {
         .and_then(|extension| extension.to_str())
         .map(|extension| extension.to_ascii_lowercase())
         .and_then(|extension| match extension.as_str() {
-            "bash" | "env" | "ksh" | "nix" | "sh" | "zsh" => Some(extension),
+            "bash" | "env" | "ksh" | "nix" | "sh" | "swift" | "zsh" => Some(extension),
             _ => None,
         })
 }
@@ -146,6 +146,7 @@ fn path_syntax_display_name(path: &Path) -> Option<String> {
     match path_syntax_token(path)?.as_str() {
         "bash" | "env" | "ksh" | "sh" | "zsh" => Some("Shell".to_string()),
         "nix" => Some("Nix".to_string()),
+        "swift" => Some("Swift".to_string()),
         other => Some(display_syntax_name(other)),
     }
 }
@@ -252,9 +253,31 @@ mod tests {
     }
 
     #[test]
+    fn highlights_swift_files_and_fences() {
+        let file_html = highlight_file_source(
+            "struct App { let title = \"chilla\" }\n",
+            Path::new("App.swift"),
+            SyntaxUiTheme::Dark,
+        );
+        let fence_html = highlight_markdown_fence(
+            "struct App { let title = \"chilla\" }\n",
+            Some("swift"),
+            SyntaxUiTheme::Dark,
+        );
+
+        for html in [file_html, fence_html] {
+            assert!(
+                html.contains("style=") && html.contains("<span"),
+                "expected syntax-highlighted Swift HTML, got: {html}"
+            );
+        }
+    }
+
+    #[test]
     fn describes_shell_and_nix_paths_with_user_facing_labels() {
         assert_eq!(describe_file_syntax(Path::new("install.sh")), "Shell");
         assert_eq!(describe_file_syntax(Path::new("zsh")), "Shell");
         assert_eq!(describe_file_syntax(Path::new("flake.nix")), "Nix");
+        assert_eq!(describe_file_syntax(Path::new("App.swift")), "Swift");
     }
 }

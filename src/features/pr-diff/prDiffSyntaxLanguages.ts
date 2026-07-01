@@ -56,6 +56,10 @@ export function syntaxKindForPath(path: string): SyntaxKind {
     return "haskell";
   }
 
+  if (extension === "swift") {
+    return "swift";
+  }
+
   if (extension === "rs") {
     return "rust";
   }
@@ -149,6 +153,7 @@ export function commentStartForSyntax(
     syntaxKind === "c" ||
     syntaxKind === "cpp" ||
     syntaxKind === "zig" ||
+    syntaxKind === "swift" ||
     syntaxKind === "groovy" ||
     syntaxKind === "protobuf" ||
     syntaxKind === "rust" ||

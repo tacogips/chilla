@@ -10,6 +10,7 @@ export type SyntaxKind =
   | "cpp"
   | "zig"
   | "haskell"
+  | "swift"
   | "vue"
   | "sql"
   | "groovy"

@@ -460,6 +460,70 @@ describe("PrDiffWorkspace", () => {
     });
   });
 
+  it("navigates file diffs in path order and selects the visible tree item", async () => {
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([
+        textDiffFile("src/z-last.ts", "last"),
+        textDiffFile("README.md", "readme"),
+        textDiffFile("src/a-first.ts", "first"),
+      ]),
+    );
+
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("No file selected.");
+      expect(document.querySelector('[data-path="README.md"]')).not.toBeNull();
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: ">" }));
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("readme");
+      expect(
+        document
+          .querySelector('[data-path="README.md"]')
+          ?.classList.contains("file-browser__button--active"),
+      ).toBe(true);
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: ">" }));
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("first");
+      expect(document.querySelector(".pr-browser__path")?.textContent).toBe(
+        "src",
+      );
+      expect(
+        document
+          .querySelector('[data-path="src/a-first.ts"]')
+          ?.classList.contains("file-browser__button--active"),
+      ).toBe(true);
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: ">" }));
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("last");
+      expect(
+        document
+          .querySelector('[data-path="src/z-last.ts"]')
+          ?.classList.contains("file-browser__button--active"),
+      ).toBe(true);
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "<" }));
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("first");
+      expect(
+        document
+          .querySelector('[data-path="src/a-first.ts"]')
+          ?.classList.contains("file-browser__button--active"),
+      ).toBe(true);
+    });
+  });
+
   it("uses one horizontal scrollbar per left/right diff hunk", async () => {
     loadPrDiffMock.mockResolvedValue(
       snapshot([textDiffFile("bun.lock", "long content")]),
@@ -1075,6 +1139,12 @@ describe("FullFileDiff", () => {
         content: "module Main where -- haskell comment",
         keyword: "module",
         comment: "-- haskell comment",
+      },
+      {
+        path: "src/App.swift",
+        content: 'struct App { let title = "chilla" // swift comment',
+        keyword: "struct",
+        comment: "// swift comment",
       },
     ];
 

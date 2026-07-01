@@ -119,6 +119,22 @@ function JumpIcon() {
   );
 }
 
+function PreviousFileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M10.25 3.25 5.5 8l4.75 4.75" />
+    </svg>
+  );
+}
+
+function NextFileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M5.75 3.25 10.5 8l-4.75 4.75" />
+    </svg>
+  );
+}
+
 function PrDiffLoading(props: { readonly compact?: boolean }) {
   return (
     <div
@@ -844,6 +860,21 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
     const file = selectedFile();
     return file === null ? null : (lazyFileText()[file.path] ?? null);
   });
+  const selectedFileIndex = createMemo(() => {
+    const path = selectedPath();
+    if (path === null) {
+      return -1;
+    }
+
+    return sortedFiles().findIndex((file) => file.path === path);
+  });
+  const hasPreviousFile = createMemo(
+    () => sortedFiles().length > 0 && selectedFileIndex() !== 0,
+  );
+  const hasNextFile = createMemo(() => {
+    const fileCount = sortedFiles().length;
+    return fileCount > 0 && selectedFileIndex() < fileCount - 1;
+  });
   const headerSourceLabel = createMemo(() =>
     sourceDisplayLabel(
       snapshot()?.identity.source ?? fallbackSourceForTarget(props.target),
@@ -946,6 +977,36 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
     setSelectedPath(entry.kind === "file" ? entry.path : null);
   };
 
+  const selectFilePath = (path: string) => {
+    setCurrentDir(parentDir(path) ?? "");
+    setQuery("");
+    setCursorPath(path);
+    setSelectedPath(path);
+    queueMicrotask(() => {
+      if (diffFileView !== undefined) {
+        diffFileView.scrollTop = 0;
+      }
+    });
+  };
+
+  const navigateFileByPathOrder = (step: 1 | -1) => {
+    const pathOrderedFiles = sortedFiles();
+    if (pathOrderedFiles.length === 0) {
+      return;
+    }
+
+    const currentIndex = selectedFileIndex();
+    const fallbackIndex = step === 1 ? -1 : pathOrderedFiles.length;
+    const boundedIndex = Math.min(
+      pathOrderedFiles.length - 1,
+      Math.max(0, (currentIndex === -1 ? fallbackIndex : currentIndex) + step),
+    );
+    const nextFile = pathOrderedFiles[boundedIndex];
+    if (nextFile !== undefined) {
+      selectFilePath(nextFile.path);
+    }
+  };
+
   const selectEntry = (entry: BrowserEntry) => {
     focusEntry(entry);
     if (entry.kind === "directory") {
@@ -1012,6 +1073,18 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
       if (matchesCtrlShortcut(event, "u")) {
         event.preventDefault();
         scrollDiffPane(diffFileView, -1);
+        return;
+      }
+
+      if (event.key === "<") {
+        event.preventDefault();
+        navigateFileByPathOrder(-1);
+        return;
+      }
+
+      if (event.key === ">") {
+        event.preventDefault();
+        navigateFileByPathOrder(1);
         return;
       }
 
@@ -1259,6 +1332,26 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
             role="group"
             aria-label="Diff actions and diff mode"
           >
+            <button
+              type="button"
+              class="workspace__mode"
+              title="Previous file (<)"
+              aria-label="Previous file"
+              disabled={!hasPreviousFile()}
+              onClick={() => navigateFileByPathOrder(-1)}
+            >
+              <PreviousFileIcon />
+            </button>
+            <button
+              type="button"
+              class="workspace__mode"
+              title="Next file (>)"
+              aria-label="Next file"
+              disabled={!hasNextFile()}
+              onClick={() => navigateFileByPathOrder(1)}
+            >
+              <NextFileIcon />
+            </button>
             <Show when={props.target.kind === "github"}>
               <button
                 type="button"
