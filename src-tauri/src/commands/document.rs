@@ -160,47 +160,17 @@ pub async fn load_pr_diff_file_text(raw_url: String) -> Result<PrDiffFileText, S
 
 #[tauri::command]
 pub fn list_directory(
-    path: Option<String>,
-    sort: Option<DirectoryListSort>,
-    query: Option<String>,
-    offset: Option<usize>,
-    limit: Option<usize>,
-    input: Option<ListDirectoryInput>,
+    input: ListDirectoryInput,
     state: State<'_, AppState>,
 ) -> Result<DirectoryPage, String> {
-    let resolved_path = input
-        .as_ref()
-        .map(|value| value.path.clone())
-        .or(path)
-        .ok_or_else(|| "missing required key path".to_string())?;
-    let resolved_sort = input
-        .as_ref()
-        .and_then(|value| value.sort)
-        .or(sort)
-        .unwrap_or_default();
-    let resolved_query = input
-        .as_ref()
-        .and_then(|value| value.query.clone())
-        .or(query);
-    let resolved_offset = input
-        .as_ref()
-        .and_then(|value| value.offset)
-        .or(offset)
-        .unwrap_or(0);
-    let resolved_limit = input
-        .as_ref()
-        .and_then(|value| value.limit)
-        .or(limit)
-        .unwrap_or(0);
-
     state
         .viewer_service()
         .list_directory(
-            Path::new(&resolved_path),
-            resolved_sort,
-            resolved_query.as_deref(),
-            resolved_offset,
-            resolved_limit,
+            Path::new(&input.path),
+            input.sort.unwrap_or_default(),
+            input.query.as_deref(),
+            input.offset.unwrap_or(0),
+            input.limit.unwrap_or(0),
         )
         .map_err(format_command_error)
 }
@@ -279,12 +249,18 @@ pub fn open_document(path: String, state: State<'_, AppState>) -> Result<Documen
 pub fn save_document(
     path: String,
     source_text: String,
+    expected_revision_token: String,
     state: State<'_, AppState>,
 ) -> Result<DocumentSnapshot, String> {
     let theme = state.syntax_ui_theme();
     let snapshot = state
         .document_service()
-        .save(Path::new(&path), &source_text, theme)
+        .save(
+            Path::new(&path),
+            &source_text,
+            &expected_revision_token,
+            theme,
+        )
         .map_err(format_command_error)?;
 
     Ok(snapshot)

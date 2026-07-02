@@ -581,7 +581,11 @@ export function WorkspaceShell() {
     }
 
     try {
-      const nextSnapshot = await saveDocument(doc.path, markdownEditorBuffer());
+      const nextSnapshot = await saveDocument(
+        doc.path,
+        markdownEditorBuffer(),
+        doc.revision_token,
+      );
       applyMarkdownSnapshot(nextSnapshot);
       setErrorMessage(null);
     } catch (error: unknown) {

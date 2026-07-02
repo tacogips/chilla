@@ -109,6 +109,14 @@ pub struct EpubNavigationItem {
     pub children: Vec<EpubNavigationItem>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CsvRowCountStatus {
+    Complete,
+    Truncated,
+    ParseError,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FilePreview {
@@ -173,6 +181,7 @@ pub enum FilePreview {
         column_count: usize,
         displayed_row_count: usize,
         total_row_count: Option<usize>,
+        row_count_status: CsvRowCountStatus,
         truncated: bool,
         formatted_available: bool,
         parse_error: Option<String>,

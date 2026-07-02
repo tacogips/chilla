@@ -18,8 +18,8 @@ use crate::{
         is_textual_mime, should_preview_as_csv,
     },
     viewer::types::{
-        BrowserRoot, DirectoryListSort, DirectoryPage, ExplicitFileSetPage, FilePreview,
-        StartupContext, WorkspaceMode,
+        BrowserRoot, CsvRowCountStatus, DirectoryListSort, DirectoryPage, ExplicitFileSetPage,
+        FilePreview, StartupContext, WorkspaceMode,
     },
 };
 
@@ -253,13 +253,15 @@ impl ViewerService {
     ) -> AppResult<FilePreview> {
         let file_bytes = fs::read(path).map_err(|source| AppError::io("read", path, source))?;
         let source_text = String::from_utf8_lossy(&file_bytes);
+        let encoding_notice = lossy_utf8_notice(&file_bytes);
         let file_type = syntax_highlight::describe_file_syntax(path);
         let highlighted_html =
             syntax_highlight::highlight_file_source(&source_text, path, ui_theme);
         let html = format!(
-            "<section class=\"file-preview file-preview--text\"><p class=\"file-preview__meta\">File type: {} | File size: {}</p>{}</section>",
+            "<section class=\"file-preview file-preview--text\"><p class=\"file-preview__meta\">File type: {} | File size: {}{}</p>{}</section>",
             escape_html_text(&file_type),
             escape_html_text(&format_file_size(file_bytes.len() as u64)),
+            encoding_notice,
             highlighted_html,
         );
 
@@ -282,6 +284,7 @@ impl ViewerService {
     ) -> AppResult<FilePreview> {
         let file_bytes = fs::read(path).map_err(|source| AppError::io("read", path, source))?;
         let source_text = String::from_utf8_lossy(&file_bytes);
+        let encoding_notice = lossy_utf8_notice(&file_bytes);
         let source_owned = source_text.into_owned();
         let source_for_view = source_owned
             .strip_prefix('\u{feff}')
@@ -297,15 +300,23 @@ impl ViewerService {
         let highlighted_html =
             syntax_highlight::highlight_file_source(source_for_view, path, ui_theme);
         let raw_html = format!(
-            "<section class=\"file-preview file-preview--text\"><p class=\"file-preview__meta\">File type: {} | File size: {}</p>{}</section>",
+            "<section class=\"file-preview file-preview--text\"><p class=\"file-preview__meta\">File type: {} | File size: {}{}</p>{}</section>",
             escape_html_text(&file_type),
             escape_html_text(&format_file_size(file_bytes.len() as u64)),
+            encoding_notice,
             highlighted_html,
         );
 
         let parsed = parse_csv_preview(source_for_view, CsvPreviewLimits::default());
         let formatted_available = parsed.parse_error.is_none();
         let parse_error = parsed.parse_error.clone();
+        let row_count_status = if parse_error.is_some() {
+            CsvRowCountStatus::ParseError
+        } else if parsed.truncated {
+            CsvRowCountStatus::Truncated
+        } else {
+            CsvRowCountStatus::Complete
+        };
 
         Ok(FilePreview::Csv {
             path: display_path(path),
@@ -316,6 +327,7 @@ impl ViewerService {
             column_count: parsed.column_count,
             displayed_row_count: parsed.displayed_row_count,
             total_row_count: parsed.total_row_count,
+            row_count_status,
             truncated: parsed.truncated,
             formatted_available,
             parse_error,
@@ -342,6 +354,14 @@ impl ViewerService {
                 .len(),
             message,
         })
+    }
+}
+
+fn lossy_utf8_notice(bytes: &[u8]) -> &'static str {
+    if std::str::from_utf8(bytes).is_ok() {
+        ""
+    } else {
+        " | Encoding: UTF-8 with replacement characters"
     }
 }
 
@@ -373,8 +393,8 @@ mod tests {
         cli::StartupTarget,
         syntax_highlight::SyntaxUiTheme,
         viewer::types::{
-            BrowserRoot, DirectoryListSort, DirectorySortDirection, DirectorySortField,
-            FilePreview, WorkspaceMode,
+            BrowserRoot, CsvRowCountStatus, DirectoryListSort, DirectorySortDirection,
+            DirectorySortField, FilePreview, WorkspaceMode,
         },
     };
 
@@ -950,6 +970,7 @@ mod tests {
                 mime_type,
                 rows,
                 column_count,
+                row_count_status,
                 formatted_available,
                 parse_error,
                 raw_html,
@@ -958,6 +979,7 @@ mod tests {
                 assert_eq!(mime_type, "text/csv");
                 assert!(formatted_available);
                 assert!(parse_error.is_none());
+                assert_eq!(row_count_status, CsvRowCountStatus::Complete);
                 assert_eq!(column_count, 2);
                 assert_eq!(rows.len(), 2);
                 assert_eq!(rows[0], vec!["a", "b"]);

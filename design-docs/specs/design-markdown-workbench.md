@@ -10,6 +10,12 @@ This document specifies the user-facing workspace behavior and the mixed-stack r
 
 This document now describes the Markdown workbench behavior inside the current mixed Tauri + Bun application.
 
+**Status note (2026-07-03)**: The current shipped product is primarily a
+file/Git viewer with Markdown edit-and-save support in the raw pane. The original
+three-column editor-first workbench described below is partially superseded; use
+`README.md` and `design-docs/specs/design-file-viewer-mode.md` as the current
+product-shape references.
+
 - The repository already contains the frontend `src/` tree and the Tauri backend under `src-tauri/`.
 - This document defines Markdown-specific behavior and component boundaries; file-view startup behavior is covered by `design-docs/specs/design-file-viewer-mode.md`.
 - Repository restructuring is no longer part of the Markdown workbench scope.

@@ -110,6 +110,28 @@ fn parser_options() -> Options {
 fn sanitize_event(event: Event<'_>) -> Event<'_> {
     match event {
         Event::Html(html) | Event::InlineHtml(html) => sanitize_raw_html_event(html),
+        Event::Start(Tag::Link {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) => Event::Start(Tag::Link {
+            link_type,
+            dest_url: sanitize_markdown_link_url(dest_url),
+            title,
+            id,
+        }),
+        Event::Start(Tag::Image {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) => Event::Start(Tag::Image {
+            link_type,
+            dest_url: sanitize_markdown_media_url(dest_url),
+            title,
+            id,
+        }),
         other => other,
     }
 }
@@ -171,7 +193,7 @@ fn sanitize_raw_img_tag(raw_html: &str) -> Option<String> {
     let attributes = parse_html_attributes(attr_source);
     let src = attributes.get("src")?.trim();
 
-    if src.is_empty() {
+    if !is_safe_media_url(src) {
         return None;
     }
 
@@ -207,6 +229,51 @@ fn sanitize_raw_img_tag(raw_html: &str) -> Option<String> {
 
 fn is_safe_html_dimension(value: &str) -> bool {
     !value.is_empty() && value.chars().all(|character| character.is_ascii_digit())
+}
+
+fn sanitize_markdown_link_url(url: CowStr<'_>) -> CowStr<'_> {
+    if is_safe_link_url(url.as_ref()) {
+        url
+    } else {
+        CowStr::from("#")
+    }
+}
+
+fn sanitize_markdown_media_url(url: CowStr<'_>) -> CowStr<'_> {
+    if is_safe_media_url(url.as_ref()) {
+        url
+    } else {
+        CowStr::from("")
+    }
+}
+
+fn is_safe_link_url(value: &str) -> bool {
+    is_safe_url(value, false)
+}
+
+fn is_safe_media_url(value: &str) -> bool {
+    is_safe_url(value, true)
+}
+
+fn is_safe_url(value: &str, allow_data_image: bool) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.starts_with("//") {
+        return false;
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("data:") {
+        return allow_data_image && lower.starts_with("data:image/");
+    }
+
+    if let Some(scheme_end) = trimmed.find(':') {
+        let first_path_boundary = trimmed.find(['/', '?', '#']).unwrap_or(trimmed.len());
+        if scheme_end < first_path_boundary {
+            return matches!(&lower[..scheme_end], "http" | "https");
+        }
+    }
+
+    true
 }
 
 fn parse_html_attributes(value: &str) -> BTreeMap<String, String> {
@@ -516,13 +583,17 @@ fn count_character(value: &str, target: char) -> usize {
 }
 
 fn render_embedded_media(media: &EmbeddedMediaDraft) -> String {
+    let alt_text = media.alt_text.trim();
+    if !is_safe_media_url(&media.destination) {
+        return escape_html_text(alt_text);
+    }
+
     let source = escape_html_attribute(&media.destination);
     let title_attribute = if media.title.trim().is_empty() {
         String::new()
     } else {
         format!(" title=\"{}\"", escape_html_attribute(&media.title))
     };
-    let alt_text = media.alt_text.trim();
     let escaped_alt_text = escape_html_attribute(alt_text);
 
     match media.kind {
@@ -876,6 +947,42 @@ mod tests {
             .html
             .contains("<img src=\"etc/msrv-badge.svg\" alt=\"MSRV\" />"));
         assert!(!rendered.html.contains("onerror"));
+    }
+
+    #[test]
+    fn rejects_unsafe_raw_html_img_src_schemes() {
+        let rendered = render_markdown(
+            "<img src=\"javascript:alert(1)\" alt=\"MSRV\">",
+            SyntaxUiTheme::Dark,
+        );
+
+        assert!(!rendered.html.contains("<img"));
+        assert!(rendered.html.contains("&lt;img"));
+    }
+
+    #[test]
+    fn allows_image_data_urls_only_for_media_destinations() {
+        let rendered = render_markdown(
+            "![pixel](data:image/png;base64,AAAA)\n\n[x](data:image/png;base64,AAAA)",
+            SyntaxUiTheme::Dark,
+        );
+
+        assert!(rendered.html.contains("src=\"data:image/png;base64,AAAA\""));
+        assert!(rendered.html.contains("<a href=\"#\">x</a>"));
+    }
+
+    #[test]
+    fn neutralizes_unsafe_markdown_link_and_image_urls() {
+        let rendered = render_markdown(
+            "[bad](javascript:alert(1)) ![bad](vbscript:alert(1)) [also bad](//example.com)",
+            SyntaxUiTheme::Dark,
+        );
+
+        assert!(rendered.html.contains("<a href=\"#\">bad</a>"));
+        assert!(rendered.html.contains("<a href=\"#\">also bad</a>"));
+        assert!(!rendered.html.contains("javascript:"));
+        assert!(!rendered.html.contains("vbscript:"));
+        assert!(!rendered.html.contains("<img"));
     }
 
     #[test]

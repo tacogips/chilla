@@ -14,6 +14,8 @@ pub enum AppError {
     UnsupportedPathKind(String),
     #[error("failed to parse EPUB `{path}`: {message}")]
     EpubParse { path: String, message: String },
+    #[error("document changed on disk before save: {path}")]
+    DocumentConflict { path: String },
     #[error("failed to {action} `{path}`: {source}")]
     Io {
         action: &'static str,
@@ -44,6 +46,7 @@ impl AppError {
             | Self::NotAFile(_)
             | Self::NotADirectory(_)
             | Self::UnsupportedPathKind(_)
+            | Self::DocumentConflict { .. }
             | Self::EpubParse { .. }
             | Self::Io { .. } => 3,
             Self::Watcher(_) | Self::State(_) => 1,

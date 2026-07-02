@@ -20,6 +20,7 @@ function csvFixture(
     column_count: 2,
     displayed_row_count: 2,
     total_row_count: 2,
+    row_count_status: "complete",
     truncated: false,
     formatted_available: true,
     parse_error: null,
@@ -131,6 +132,7 @@ describe("CsvFilePreviewPane", () => {
             column_count: 0,
             displayed_row_count: 0,
             total_row_count: null,
+            row_count_status: "parse_error",
             formatted_available: false,
             parse_error: "mock parse failure",
           })}

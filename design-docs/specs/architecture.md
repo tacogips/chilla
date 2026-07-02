@@ -14,6 +14,13 @@ Architectural patterns, system structure, and technical decisions.
 
 This section defines the target architecture for the desktop Markdown viewer/editor experience.
 
+**Status note (2026-07-03)**: This section is partially superseded by the current
+file/Git viewer product shape described in `README.md` and
+`design-docs/specs/design-file-viewer-mode.md`. The still-current parts are the
+mixed Tauri/Bun boundary, backend-owned Markdown parsing, save conflict semantics,
+and file watcher behavior. The three-column editor-first layout is historical
+context rather than the primary shipped workspace.
+
 ### Repository Baseline And Migration Context
 
 The repository is now a mixed Tauri + Bun application:

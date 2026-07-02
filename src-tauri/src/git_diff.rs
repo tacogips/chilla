@@ -15,6 +15,7 @@ use crate::{
 };
 
 const MAX_LOCAL_FULL_FILE_BYTES: usize = 512 * 1024;
+const MAX_UNTRACKED_DIFF_FILES: usize = 300;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct GitDiffTarget {
@@ -81,11 +82,11 @@ impl GitDiffService {
 
     pub fn load(&self, target: &GitDiffTarget) -> AppResult<PrDiffSnapshot> {
         let repo_path = resolve_git_repository_root(Path::new(&target.repo_path))?;
-        let diff_text = match &target.source {
+        let (diff_text, warnings) = match &target.source {
             GitDiffSource::Worktree => self.worktree_diff(&repo_path)?,
             GitDiffSource::Commit { commit } => {
                 validate_git_revision(commit)?;
-                run_git_text(
+                let diff_text = run_git_text(
                     &repo_path,
                     &[
                         "show",
@@ -96,7 +97,8 @@ impl GitDiffService {
                         commit,
                     ],
                     true,
-                )?
+                )?;
+                (diff_text, Vec::new())
             }
             GitDiffSource::Range {
                 base,
@@ -110,7 +112,7 @@ impl GitDiffService {
                 } else {
                     format!("{base}..{head}")
                 };
-                run_git_text(
+                let diff_text = run_git_text(
                     &repo_path,
                     &[
                         "diff",
@@ -120,7 +122,8 @@ impl GitDiffService {
                         &range,
                     ],
                     true,
-                )?
+                )?;
+                (diff_text, Vec::new())
             }
         };
 
@@ -153,11 +156,11 @@ impl GitDiffService {
             files,
             additions,
             deletions,
-            warnings: Vec::new(),
+            warnings,
         })
     }
 
-    fn worktree_diff(&self, repo_path: &Path) -> AppResult<String> {
+    fn worktree_diff(&self, repo_path: &Path) -> AppResult<(String, Vec<String>)> {
         let mut diff = run_git_text(
             repo_path,
             &[
@@ -169,8 +172,17 @@ impl GitDiffService {
             ],
             true,
         )?;
+        let mut warnings = Vec::new();
+        let untracked_paths = untracked_paths(repo_path)?;
+        let untracked_count = untracked_paths.len();
 
-        for path in untracked_paths(repo_path)? {
+        if untracked_count > MAX_UNTRACKED_DIFF_FILES {
+            warnings.push(format!(
+                "Only the first {MAX_UNTRACKED_DIFF_FILES} untracked files are shown."
+            ));
+        }
+
+        for path in untracked_paths.into_iter().take(MAX_UNTRACKED_DIFF_FILES) {
             let untracked_diff = run_git_text(
                 repo_path,
                 &["diff", "--no-index", "--binary", "--", "/dev/null", &path],
@@ -182,7 +194,7 @@ impl GitDiffService {
             diff.push_str(&untracked_diff);
         }
 
-        Ok(diff)
+        Ok((diff, warnings))
     }
 }
 

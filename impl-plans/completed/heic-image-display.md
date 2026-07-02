@@ -12,9 +12,9 @@
 **Primary Source**: `design-docs/specs/architecture.md#heic--heif-image-display-architecture`
 
 **Codex-Agent References**:
-- `/Users/taco/gits/tacogips/chilla/AGENTS.md`
-- `/Users/taco/gits/tacogips/chilla/.agents/skills/tauri-development/SKILL.md`
-- `/Users/taco/gits/tacogips/chilla/.agents/skills/chilla-post-edit-launch/SKILL.md`
+- `AGENTS.md`
+- `.agents/skills/tauri-development/SKILL.md`
+- `.agents/skills/chilla-post-edit-launch/SKILL.md`
 
 ### Summary
 
@@ -227,7 +227,7 @@ Required contracts if direct WebView decode is insufficient:
 **Tasks In Progress**: None.
 **Blockers**: None.
 **Notes**: Implemented HEIC/HEIF extension-to-MIME classification in `src-tauri/src/viewer/service.rs`, preserved the existing `FilePreview::Image` / `kind: "image"` contract, and added frontend local-resource resolution metadata plus image-load fallback in `src/features/preview/PreviewPane.tsx`. No backend conversion dependency was added: local macOS WebView runtime inspection displayed a real `.heic` image from `/tmp/chilla-heic-runtime/heic-check.md`, and unsupported platforms are covered by the frontend image error fallback with an open-in-default-app action. User-facing documentation was refreshed in `README.md` to mention HEIC / HEIF image preview support when the platform WebView can decode the file. Direct file-view HEIC routing is covered by `open_file_preview_treats_heic_and_heif_paths_as_images`; the direct file-view GUI path is not claimed as runtime-verified because macOS exposed the installed `/Applications/chilla.app` process to accessibility after debug launch.
-**Verification**: `bash .agents/scripts/format-ts.sh`; `CARGO_TERM_QUIET=true cargo fmt`; `bun run typecheck`; `bun run test`; `bun run test:dom`; `CARGO_TERM_QUIET=true cargo check`; `CARGO_TERM_QUIET=true cargo test`; `CARGO_TERM_QUIET=true cargo clippy --all-targets --all-features`; `bun run tauri build --debug --no-bundle`; `/Users/taco/gits/tacogips/chilla/target/debug/chilla`.
+**Verification**: `bash .agents/scripts/format-ts.sh`; `CARGO_TERM_QUIET=true cargo fmt`; `bun run typecheck`; `bun run test`; `bun run test:dom`; `CARGO_TERM_QUIET=true cargo check`; `CARGO_TERM_QUIET=true cargo test`; `CARGO_TERM_QUIET=true cargo clippy --all-targets --all-features`; `bun run tauri build --debug --no-bundle`; `target/debug/chilla`.
 
 ### Session: 2026-05-27 Step 6 Rerun After Step 7 Review
 **Tasks Completed**: Addressed Step 7 mid finding against TASK-005 progress recording.

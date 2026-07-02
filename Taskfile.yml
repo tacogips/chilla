@@ -93,12 +93,12 @@ tasks:
     desc: Format frontend and backend sources
     cmds:
       - bash .agents/scripts/format-ts.sh
-      - cargo fmt --manifest-path src-tauri/Cargo.toml
+      - CARGO_TERM_QUIET=true cargo fmt --manifest-path src-tauri/Cargo.toml
 
   fmt-check:
     desc: Check backend formatting
     cmds:
-      - cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - CARGO_TERM_QUIET=true cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
   lint:
     desc: Run all lints (TypeScript, Rust format check, and clippy)
@@ -118,7 +118,7 @@ tasks:
     desc: Clean build artifacts
     cmds:
       - rm -rf dist
-      - cargo clean --manifest-path src-tauri/Cargo.toml
+      - CARGO_TERM_QUIET=true cargo clean --manifest-path src-tauri/Cargo.toml
 
   ci:
     desc: Run all CI checks

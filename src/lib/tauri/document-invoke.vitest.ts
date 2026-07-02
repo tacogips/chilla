@@ -16,6 +16,7 @@ import {
   loadGitDiff,
   loadPrDiff,
   loadPrDiffFileText,
+  saveDocument,
 } from "./document";
 import type { DirectoryPage, DirectoryListSort } from "./document";
 
@@ -165,6 +166,36 @@ describe("loadPrDiff", () => {
     });
     expect(invokeMock).toHaveBeenNthCalledWith(2, "load_pr_diff", {
       target: compareTarget,
+    });
+  });
+});
+
+describe("saveDocument", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("sends the expected revision token with the save payload", async () => {
+    const response = {
+      path: "/workspace/README.md",
+      file_name: "README.md",
+      source_text: "# Updated\n",
+      source_html: "<pre></pre>",
+      html: "<h1>Updated</h1>",
+      headings: [],
+      revision_token: "next-revision",
+      last_modified: "1",
+    };
+    invokeMock.mockResolvedValue(response);
+
+    await expect(
+      saveDocument("/workspace/README.md", "# Updated\n", "current-revision"),
+    ).resolves.toEqual(response);
+
+    expect(invokeMock).toHaveBeenCalledWith("save_document", {
+      path: "/workspace/README.md",
+      sourceText: "# Updated\n",
+      expectedRevisionToken: "current-revision",
     });
   });
 });

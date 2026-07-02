@@ -22,6 +22,8 @@ struct DirectoryEntrySeed {
     path: PathBuf,
     name: String,
     is_directory: bool,
+    size_bytes: u64,
+    modified_at_unix_ms: u64,
 }
 
 #[derive(Debug)]
@@ -309,11 +311,14 @@ fn directory_entry_seed_from_fs_entry(
         .file_type()
         .map_err(|source| AppError::io("read file type for", &entry_path, source))?;
 
+    let entry_metadata = match fs::metadata(&entry_path) {
+        Ok(metadata) => metadata,
+        Err(_) => return Ok(None),
+    };
+    let modified_at_unix_ms = metadata_modified_at_unix_ms(&entry_metadata)
+        .map_err(|source| AppError::io("read modified time for", &entry_path, source))?;
     let is_directory = if file_type.is_symlink() {
-        match fs::metadata(&entry_path) {
-            Ok(metadata) => metadata.is_dir(),
-            Err(_) => return Ok(None),
-        }
+        entry_metadata.is_dir()
     } else {
         file_type.is_dir()
     };
@@ -322,6 +327,8 @@ fn directory_entry_seed_from_fs_entry(
         path: entry_path,
         name: entry_name,
         is_directory,
+        size_bytes: entry_metadata.len(),
+        modified_at_unix_ms,
     }))
 }
 
@@ -331,49 +338,43 @@ fn directory_entry_record_from_fs_entry(
     let Some(seed) = directory_entry_seed_from_fs_entry(entry)? else {
         return Ok(None);
     };
-    let entry_metadata = match fs::metadata(&seed.path) {
-        Ok(metadata) => metadata,
-        Err(_) => return Ok(None),
-    };
-    let modified_at_unix_ms = metadata_modified_at_unix_ms(&entry_metadata)
-        .map_err(|source| AppError::io("read modified time for", &seed.path, source))?;
-
     Ok(Some(DirectoryEntryRecord {
+        size_bytes: seed.size_bytes,
+        modified_at_unix_ms: seed.modified_at_unix_ms,
         seed,
-        size_bytes: entry_metadata.len(),
-        modified_at_unix_ms,
     }))
 }
 
 fn directory_entry_from_seed(seed: &DirectoryEntrySeed) -> AppResult<DirectoryEntry> {
-    let entry_metadata = fs::metadata(&seed.path)
-        .map_err(|source| AppError::io("read metadata for", &seed.path, source))?;
-    let modified_at_unix_ms = metadata_modified_at_unix_ms(&entry_metadata)
-        .map_err(|source| AppError::io("read modified time for", &seed.path, source))?;
-
     Ok(DirectoryEntry {
         // Use the directory listing path (symlink name), not the canonical target, so
         // each row is unique and keyboard navigation matches the focused item.
         path: display_path(&seed.path),
-        canonical_path: display_path(&canonicalize_path(&seed.path)?),
+        canonical_path: canonical_display_path_or_logical(&seed.path),
         name: seed.name.clone(),
         directory_hint: String::new(),
         is_directory: seed.is_directory,
-        size_bytes: entry_metadata.len(),
-        modified_at_unix_ms,
+        size_bytes: seed.size_bytes,
+        modified_at_unix_ms: seed.modified_at_unix_ms,
     })
 }
 
 fn directory_entry_from_record(record: &DirectoryEntryRecord) -> AppResult<DirectoryEntry> {
     Ok(DirectoryEntry {
         path: display_path(&record.seed.path),
-        canonical_path: display_path(&canonicalize_path(&record.seed.path)?),
+        canonical_path: canonical_display_path_or_logical(&record.seed.path),
         name: record.seed.name.clone(),
         directory_hint: String::new(),
         is_directory: record.seed.is_directory,
         size_bytes: record.size_bytes,
         modified_at_unix_ms: record.modified_at_unix_ms,
     })
+}
+
+fn canonical_display_path_or_logical(path: &Path) -> String {
+    canonicalize_path(path)
+        .map(|canonical_path| display_path(&canonical_path))
+        .unwrap_or_else(|_| display_path(path))
 }
 
 fn compare_directory_entry_records(

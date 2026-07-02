@@ -561,22 +561,6 @@ impl GitHubPrDiffService<ReqwestGitHubPrApi> {
     }
 }
 
-fn apply_file_cap(
-    mut raw_files: Vec<GitHubPullFileResponse>,
-) -> (Vec<GitHubPullFileResponse>, Vec<String>) {
-    if raw_files.len() <= MAX_DIFF_FILES {
-        return (raw_files, Vec::new());
-    }
-
-    raw_files.truncate(MAX_DIFF_FILES);
-    (
-        raw_files,
-        vec![format!(
-            "Only the first {MAX_DIFF_FILES} changed files are shown."
-        )],
-    )
-}
-
 impl<Api: GitHubPrApi> GitHubPrDiffService<Api> {
     #[cfg(test)]
     fn with_api(api: Api) -> Self {
@@ -651,9 +635,6 @@ impl<Api: GitHubPrApi> GitHubPrDiffService<Api> {
                 break;
             }
         }
-
-        let (all_files, cap_warnings) = apply_file_cap(all_files);
-        warnings.extend(cap_warnings);
 
         normalize_pull_files(all_files).map(|mut files| {
             files.sort_by(|left, right| left.path.cmp(&right.path));
@@ -753,11 +734,10 @@ mod tests {
     use std::cell::RefCell;
 
     use super::{
-        apply_file_cap, cache_file_path, normalize_pull_files, parse_unified_diff,
-        read_cached_snapshot, write_cached_snapshot, GitHubBranchRef, GitHubDiffMetadata,
-        GitHubDiffSource, GitHubPrApi, GitHubPrDiffService, GitHubPrTarget, GitHubPullFileResponse,
-        GitHubPullResponse, PrDiffChangeType, PrDiffIdentity, PrDiffSnapshot, PrFileStatus,
-        FILES_PAGE_SIZE,
+        cache_file_path, normalize_pull_files, parse_unified_diff, read_cached_snapshot,
+        write_cached_snapshot, GitHubBranchRef, GitHubDiffMetadata, GitHubDiffSource, GitHubPrApi,
+        GitHubPrDiffService, GitHubPrTarget, GitHubPullFileResponse, GitHubPullResponse,
+        PrDiffChangeType, PrDiffIdentity, PrDiffSnapshot, PrFileStatus, FILES_PAGE_SIZE,
     };
 
     #[test]
@@ -999,35 +979,6 @@ index 1111111..2222222 100644
         assert!(read_cached_snapshot(&target, Some("2026-06-03T00:00:00Z")).is_none());
 
         let _ = std::fs::remove_file(cache_path);
-    }
-
-    #[test]
-    fn caps_github_rest_file_entries_with_warning() {
-        let mut raw_files = Vec::new();
-        for index in 0..(super::MAX_DIFF_FILES + 1) {
-            raw_files.push(GitHubPullFileResponse {
-                filename: format!("file-{index}.txt"),
-                previous_filename: None,
-                status: "modified".to_string(),
-                additions: 1,
-                deletions: 0,
-                patch: Some("@@ -1 +1 @@\n-old\n+new".to_string()),
-                raw_url: None,
-                full_text: None,
-                full_text_truncated: false,
-            });
-        }
-
-        let (capped, warnings) = apply_file_cap(raw_files);
-
-        assert_eq!(capped.len(), super::MAX_DIFF_FILES);
-        assert_eq!(
-            warnings,
-            vec![format!(
-                "Only the first {} changed files are shown.",
-                super::MAX_DIFF_FILES
-            )]
-        );
     }
 
     #[test]

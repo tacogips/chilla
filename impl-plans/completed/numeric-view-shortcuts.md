@@ -227,8 +227,8 @@ Optional only if Rust/Tauri files are unexpectedly touched:
 - `bun run typecheck` passed.
 - `bun run test:dom` passed after fixing the new editable-target test fixture; final result was 11 files / 82 tests passed.
 - `bun run test` passed with 19 tests.
-- `CARGO_TERM_QUIET=true bun run tauri build --debug --no-bundle` passed and rebuilt `/Users/taco/gits/tacogips/chilla/target/debug/chilla`.
-- `nohup /Users/taco/gits/tacogips/chilla/target/debug/chilla >/tmp/chilla-numeric-view-shortcuts.log 2>&1 &` was executed; shell PID 61763 exited with an empty log while a pre-existing `chilla` bundle process remained running.
+- `CARGO_TERM_QUIET=true bun run tauri build --debug --no-bundle` passed and rebuilt `target/debug/chilla`.
+- `nohup "$PWD/target/debug/chilla" >/tmp/chilla-numeric-view-shortcuts.log 2>&1 &` was executed; shell PID 61763 exited with an empty log while a pre-existing `chilla` bundle process remained running.
 **Notes**: Implemented workspace-local numeric view selection for Markdown and CSV only after editable-target guarding. CSV `2` remains gated by `formatted_available`; Markdown `3` and unavailable indexes remain no-ops. No Rust or Tauri command files changed, so Cargo verification was not needed.
 
 ## Related Plans

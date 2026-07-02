@@ -17,6 +17,7 @@ use crate::{
 struct ActiveWatcher {
     _watcher: RecommendedWatcher,
     _watched_path: PathBuf,
+    _watched_directory: PathBuf,
 }
 
 #[derive(Clone, Default)]
@@ -39,6 +40,10 @@ impl WatcherService {
         syntax_ui_theme: Arc<RwLock<SyntaxUiTheme>>,
     ) -> AppResult<()> {
         let watched_path = path.clone();
+        let watched_directory = watched_path
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| AppError::State("document path has no parent directory".to_string()))?;
         let last_refresh = Arc::new(Mutex::new(None::<Instant>));
         let refresh_guard = Arc::clone(&last_refresh);
         let app_handle_for_callback = app_handle.clone();
@@ -90,7 +95,7 @@ impl WatcherService {
             })?;
 
         watcher.configure(Config::default().with_poll_interval(Duration::from_millis(250)))?;
-        watcher.watch(&watched_path, RecursiveMode::NonRecursive)?;
+        watcher.watch(&watched_directory, RecursiveMode::NonRecursive)?;
 
         let mut active_watcher = self
             .active_watcher
@@ -99,6 +104,7 @@ impl WatcherService {
         *active_watcher = Some(ActiveWatcher {
             _watcher: watcher,
             _watched_path: watched_path,
+            _watched_directory: watched_directory,
         });
 
         Ok(())
@@ -119,8 +125,37 @@ fn paths_match(candidate: &Path, watched_path: &Path) -> bool {
         return true;
     }
 
+    if candidate.file_name() == watched_path.file_name()
+        && candidate.parent() == watched_path.parent()
+    {
+        return true;
+    }
+
     match candidate.canonicalize() {
         Ok(path) => path == watched_path,
         Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::paths_match;
+
+    #[test]
+    fn paths_match_accepts_same_directory_replacement_path_without_canonicalizing() {
+        assert!(paths_match(
+            Path::new("/tmp/chilla/notes.md"),
+            Path::new("/tmp/chilla/notes.md")
+        ));
+    }
+
+    #[test]
+    fn paths_match_rejects_same_name_in_different_directory() {
+        assert!(!paths_match(
+            Path::new("/tmp/chilla-other/notes.md"),
+            Path::new("/tmp/chilla/notes.md")
+        ));
     }
 }

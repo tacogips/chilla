@@ -5,6 +5,7 @@ export type RevisionToken = string;
 export type WorkspaceMode = "markdown" | "file_view" | "pr_diff";
 /** Raw vs formatted/rendered presentation (Markdown and CSV file preview). */
 export type DocumentPresentationMode = "raw" | "formatted";
+export type CsvRowCountStatus = "complete" | "truncated" | "parse_error";
 
 export interface HeadingNode {
   readonly level: number;
@@ -213,6 +214,7 @@ export type FilePreview =
       readonly column_count: number;
       readonly displayed_row_count: number;
       readonly total_row_count: number | null;
+      readonly row_count_status: CsvRowCountStatus;
       readonly truncated: boolean;
       readonly formatted_available: boolean;
       readonly parse_error: string | null;
@@ -1232,11 +1234,13 @@ export async function stopDocumentWatch(): Promise<void> {
 export async function saveDocument(
   path: string,
   sourceText: string,
+  expectedRevisionToken: RevisionToken,
 ): Promise<DocumentSnapshot> {
   try {
     return await invoke<DocumentSnapshot>("save_document", {
       path,
       sourceText,
+      expectedRevisionToken,
     });
   } catch (error: unknown) {
     throw new Error(toErrorMessage(error));

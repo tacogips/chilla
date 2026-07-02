@@ -67,27 +67,38 @@ fn resolve_syntax<'a>(
     ss: &'a SyntaxSet,
     lang_token: Option<&str>,
     path: Option<&Path>,
+    source: Option<&str>,
 ) -> &'a SyntaxReference {
-    if let Some(path) = path {
-        if let Ok(Some(syntax)) = ss.find_syntax_for_file(path) {
-            return syntax;
-        }
-    }
-
     let raw = lang_token
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
-        .or_else(|| path.and_then(path_syntax_token));
+        .or_else(|| path.and_then(path_syntax_token))
+        .or_else(|| {
+            path.and_then(|path| {
+                path.extension()
+                    .and_then(|extension| extension.to_str())
+                    .map(str::to_string)
+            })
+        });
 
-    let Some(raw) = raw.as_deref() else {
-        return ss.find_syntax_plain_text();
-    };
+    if let Some(raw) = raw.as_deref() {
+        let lower = canonical_lang_token(raw);
+        if let Some(syntax) = ss
+            .find_syntax_by_extension(&lower)
+            .or_else(|| ss.find_syntax_by_token(&lower))
+        {
+            return syntax;
+        }
+    }
 
-    let lower = canonical_lang_token(raw);
-    ss.find_syntax_by_extension(&lower)
-        .or_else(|| ss.find_syntax_by_token(&lower))
-        .unwrap_or_else(|| ss.find_syntax_plain_text())
+    if let Some(first_line) = source.and_then(|source| source.lines().next()) {
+        if let Some(syntax) = ss.find_syntax_by_first_line(first_line) {
+            return syntax;
+        }
+    }
+
+    ss.find_syntax_plain_text()
 }
 
 fn canonical_lang_token(raw: &str) -> String {
@@ -153,7 +164,7 @@ fn path_syntax_display_name(path: &Path) -> Option<String> {
 
 pub fn describe_file_syntax(path: &Path) -> String {
     let ss = syntax_set();
-    let syntax = resolve_syntax(ss, None, Some(path));
+    let syntax = resolve_syntax(ss, None, Some(path), None);
 
     if syntax.name != ss.find_syntax_plain_text().name {
         return display_syntax_name(&syntax.name);
@@ -183,7 +194,7 @@ fn escaped_fallback(source: &str) -> String {
 /// Full-file preview in the file viewer: grammar is inferred from the file path.
 pub fn highlight_file_source(source: &str, path: &Path, ui: SyntaxUiTheme) -> String {
     let ss = syntax_set();
-    let syntax = resolve_syntax(ss, None, Some(path));
+    let syntax = resolve_syntax(ss, None, Some(path), Some(source));
     highlighted_html_for_string(source, ss, syntax, syntect_theme(ui))
         .unwrap_or_else(|_| escaped_fallback(source))
 }
@@ -195,7 +206,7 @@ pub fn highlight_markdown_fence(
     ui: SyntaxUiTheme,
 ) -> String {
     let ss = syntax_set();
-    let syntax = resolve_syntax(ss, lang_token, None);
+    let syntax = resolve_syntax(ss, lang_token, None, Some(source));
     highlighted_html_for_string(source, ss, syntax, syntect_theme(ui))
         .unwrap_or_else(|_| escaped_fallback(source))
 }

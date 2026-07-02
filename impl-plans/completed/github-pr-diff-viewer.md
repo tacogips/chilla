@@ -1,9 +1,9 @@
 # GitHub Diff Viewer Source Expansion Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Design Reference**: `design-docs/specs/architecture.md#github-diff-viewer-architecture`; `design-docs/specs/command.md#github-diff-url-contract`
 **Created**: 2026-06-02
-**Last Updated**: 2026-06-02
+**Last Updated**: 2026-07-03
 
 ---
 

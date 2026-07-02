@@ -985,7 +985,14 @@ fn render_node(
         }
         NodeType::Element => {
             let tag_name = node.tag_name().name();
-            if matches!(tag_name, "script" | "noscript") {
+            if should_skip_epub_element_subtree(tag_name) {
+                return Ok(());
+            }
+
+            if !is_allowed_epub_element(tag_name) {
+                for child in node.children() {
+                    render_node(child, archive, epub_path, context, output)?;
+                }
                 return Ok(());
             }
 
@@ -995,7 +1002,9 @@ fn render_node(
 
             for attribute in node.attributes() {
                 let attribute_name = attribute.name();
-                if attribute_name.starts_with("on") {
+                if attribute_name.starts_with("on")
+                    || !is_allowed_epub_attribute(tag_name, attribute_name)
+                {
                     continue;
                 }
 
@@ -1007,14 +1016,17 @@ fn render_node(
                     _ => attribute_name,
                 };
 
-                let rewritten_value = rewrite_attribute_value(
+                let Some(rewritten_value) = rewrite_attribute_value(
                     tag_name,
                     attribute_name,
                     attribute.value(),
                     archive,
                     epub_path,
                     context,
-                )?;
+                )?
+                else {
+                    continue;
+                };
                 if attribute_name == "id" {
                     data_epub_href = Some(format!(
                         "{}#{}",
@@ -1053,6 +1065,103 @@ fn render_node(
     }
 }
 
+fn should_skip_epub_element_subtree(tag_name: &str) -> bool {
+    matches!(
+        tag_name,
+        "script"
+            | "noscript"
+            | "iframe"
+            | "object"
+            | "embed"
+            | "form"
+            | "input"
+            | "button"
+            | "select"
+            | "textarea"
+            | "meta"
+            | "link"
+            | "svg"
+            | "math"
+    )
+}
+
+fn is_allowed_epub_element(tag_name: &str) -> bool {
+    matches!(
+        tag_name,
+        "a" | "abbr"
+            | "article"
+            | "aside"
+            | "b"
+            | "blockquote"
+            | "br"
+            | "caption"
+            | "cite"
+            | "code"
+            | "col"
+            | "colgroup"
+            | "dd"
+            | "del"
+            | "dfn"
+            | "div"
+            | "dl"
+            | "dt"
+            | "em"
+            | "figcaption"
+            | "figure"
+            | "h1"
+            | "h2"
+            | "h3"
+            | "h4"
+            | "h5"
+            | "h6"
+            | "hr"
+            | "i"
+            | "img"
+            | "ins"
+            | "li"
+            | "main"
+            | "mark"
+            | "ol"
+            | "p"
+            | "pre"
+            | "q"
+            | "rp"
+            | "rt"
+            | "ruby"
+            | "s"
+            | "section"
+            | "small"
+            | "span"
+            | "strong"
+            | "sub"
+            | "sup"
+            | "table"
+            | "tbody"
+            | "td"
+            | "tfoot"
+            | "th"
+            | "thead"
+            | "tr"
+            | "u"
+            | "ul"
+    )
+}
+
+fn is_allowed_epub_attribute(tag_name: &str, attribute_name: &str) -> bool {
+    if matches!(attribute_name, "id" | "class" | "title" | "lang" | "dir") {
+        return true;
+    }
+
+    match tag_name {
+        "a" => attribute_name == "href",
+        "img" => matches!(attribute_name, "src" | "alt" | "width" | "height"),
+        "td" | "th" => matches!(attribute_name, "colspan" | "rowspan" | "scope"),
+        "ol" => matches!(attribute_name, "start" | "type"),
+        "ul" => attribute_name == "type",
+        _ => false,
+    }
+}
+
 fn rewrite_attribute_value(
     tag_name: &str,
     attribute_name: &str,
@@ -1060,9 +1169,9 @@ fn rewrite_attribute_value(
     archive: &mut ZipArchive<File>,
     epub_path: &Path,
     context: &RenderContext<'_>,
-) -> AppResult<String> {
+) -> AppResult<Option<String>> {
     match attribute_name {
-        "id" => Ok(fragment_anchor_id(context.chapter_path, value)),
+        "id" => Ok(Some(fragment_anchor_id(context.chapter_path, value))),
         "src" | "poster" => rewrite_archive_resource_reference(
             value,
             context.chapter_path,
@@ -1083,38 +1192,42 @@ fn rewrite_attribute_value(
                 )
             }
         }
-        "style" => rewrite_css_urls(
-            value,
-            context.chapter_path,
-            archive,
-            epub_path,
-            context.package,
-        ),
-        _ => Ok(value.to_string()),
+        _ => Ok(Some(value.to_string())),
     }
 }
 
-fn rewrite_anchor_href(value: &str, context: &RenderContext<'_>) -> AppResult<String> {
+fn rewrite_anchor_href(value: &str, context: &RenderContext<'_>) -> AppResult<Option<String>> {
     let trimmed = value.trim();
-    if trimmed.is_empty() || trimmed.starts_with("data:") || is_external_url(trimmed) {
-        return Ok(trimmed.to_string());
+    if trimmed.is_empty() || trimmed.starts_with("data:") {
+        return Ok(None);
+    }
+
+    if is_external_url(trimmed) {
+        return if is_safe_external_epub_link(trimmed) {
+            Ok(Some(trimmed.to_string()))
+        } else {
+            Ok(None)
+        };
     }
 
     if trimmed.starts_with('#') {
         let fragment = trimmed.trim_start_matches('#');
         if fragment.is_empty() {
-            return Ok(format!("#{}", chapter_section_id(context.chapter_path)));
+            return Ok(Some(format!(
+                "#{}",
+                chapter_section_id(context.chapter_path)
+            )));
         }
-        return Ok(format!(
+        return Ok(Some(format!(
             "#{}",
             fragment_anchor_id(context.chapter_path, fragment)
-        ));
+        )));
     }
 
     if let Some((_, Some(anchor_id))) =
         normalized_navigation_target(trimmed, context.chapter_path, context.package)
     {
-        return Ok(format!("#{anchor_id}"));
+        return Ok(Some(format!("#{anchor_id}")));
     }
 
     let (path_part, _) = split_resource_suffix(trimmed);
@@ -1125,11 +1238,11 @@ fn rewrite_anchor_href(value: &str, context: &RenderContext<'_>) -> AppResult<St
     };
     if let Some(item) = context.package.manifest_by_path.get(&resolved_path) {
         if item.media_type == "application/xhtml+xml" || item.media_type == "text/html" {
-            return Ok(format!("#{}", chapter_section_id(&resolved_path)));
+            return Ok(Some(format!("#{}", chapter_section_id(&resolved_path))));
         }
     }
 
-    Ok(trimmed.to_string())
+    Ok(None)
 }
 
 fn rewrite_archive_resource_reference(
@@ -1138,30 +1251,34 @@ fn rewrite_archive_resource_reference(
     archive: &mut ZipArchive<File>,
     epub_path: &Path,
     package: &EpubPackage,
-) -> AppResult<String> {
+) -> AppResult<Option<String>> {
     let trimmed = value.trim();
-    if trimmed.is_empty()
-        || trimmed.starts_with('#')
-        || trimmed.starts_with("data:")
-        || is_external_url(trimmed)
-    {
-        return Ok(trimmed.to_string());
+    if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("data:") {
+        return Ok(None);
+    }
+
+    if is_external_url(trimmed) {
+        return Ok(None);
     }
 
     let (path_part, suffix) = split_resource_suffix(trimmed);
     let resolved_path = resolve_archive_path(base_path, path_part);
     let Some(media_type) = media_type_for_archive_path(package, &resolved_path) else {
-        return Ok(trimmed.to_string());
+        return Ok(None);
     };
 
     if media_type == "application/xhtml+xml" || media_type == "text/html" {
-        return Ok(format!("#{}{}", chapter_section_id(&resolved_path), suffix));
+        return Ok(Some(format!(
+            "#{}{}",
+            chapter_section_id(&resolved_path),
+            suffix
+        )));
     }
 
     let Some(bytes) = try_read_zip_bytes(archive, &resolved_path, epub_path)? else {
-        return Ok(trimmed.to_string());
+        return Ok(None);
     };
-    Ok(data_url(media_type, &bytes))
+    Ok(Some(data_url(media_type, &bytes)))
 }
 
 fn rewrite_css_urls(
@@ -1200,13 +1317,20 @@ fn rewrite_css_urls(
             package,
         )?;
         rewritten.push('"');
-        rewritten.push_str(&resolved_target);
+        if let Some(resolved_target) = resolved_target {
+            rewritten.push_str(&resolved_target);
+        }
         rewritten.push_str("\")");
         remaining = &after_open[end + 1..];
     }
 
     rewritten.push_str(remaining);
     Ok(rewritten)
+}
+
+fn is_safe_external_epub_link(value: &str) -> bool {
+    let lower = value.trim().to_ascii_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://")
 }
 
 fn media_type_for_archive_path<'a>(
@@ -1349,11 +1473,12 @@ fn data_url(media_type: &str, bytes: &[u8]) -> String {
 }
 
 fn is_external_url(value: &str) -> bool {
-    value.starts_with("http://")
-        || value.starts_with("https://")
-        || value.starts_with("mailto:")
-        || value.starts_with("tel:")
-        || value.starts_with("//")
+    let lower = value.to_ascii_lowercase();
+    lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("mailto:")
+        || lower.starts_with("tel:")
+        || lower.starts_with("//")
 }
 
 fn escape_html_text(value: &str) -> String {
@@ -1367,4 +1492,65 @@ fn escape_html_attribute(value: &str) -> String {
     escape_html_text(value)
         .replace('"', "&quot;")
         .replace('\'', "&#39;")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::{
+        is_allowed_epub_attribute, is_allowed_epub_element, rewrite_anchor_href,
+        should_skip_epub_element_subtree, EpubPackage, RenderContext,
+    };
+
+    fn empty_package() -> EpubPackage {
+        EpubPackage {
+            title: None,
+            author: None,
+            manifest_by_path: HashMap::new(),
+            spine_paths: vec!["chapter.xhtml".to_string()],
+            navigation_document_path: None,
+            toc_ncx_path: None,
+        }
+    }
+
+    #[test]
+    fn epub_policy_drops_active_content_elements() {
+        for tag_name in ["script", "iframe", "object", "embed", "form", "svg"] {
+            assert!(should_skip_epub_element_subtree(tag_name));
+            assert!(!is_allowed_epub_element(tag_name));
+        }
+    }
+
+    #[test]
+    fn epub_policy_limits_attributes_by_element() {
+        assert!(is_allowed_epub_attribute("a", "href"));
+        assert!(is_allowed_epub_attribute("img", "src"));
+        assert!(is_allowed_epub_attribute("p", "class"));
+        assert!(!is_allowed_epub_attribute("img", "srcset"));
+        assert!(!is_allowed_epub_attribute("a", "style"));
+        assert!(!is_allowed_epub_attribute("button", "formaction"));
+    }
+
+    #[test]
+    fn epub_anchor_rewrite_rejects_data_and_protocol_relative_urls() {
+        let package = empty_package();
+        let context = RenderContext {
+            chapter_path: "chapter.xhtml",
+            package: &package,
+        };
+
+        assert_eq!(
+            rewrite_anchor_href("data:text/html,hi", &context).unwrap(),
+            None
+        );
+        assert_eq!(
+            rewrite_anchor_href("//example.com", &context).unwrap(),
+            None
+        );
+        assert_eq!(
+            rewrite_anchor_href("https://example.com", &context).unwrap(),
+            Some("https://example.com".to_string())
+        );
+    }
 }

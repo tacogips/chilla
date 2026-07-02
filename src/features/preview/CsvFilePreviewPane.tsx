@@ -85,7 +85,7 @@ function CsvPreviewNotices(props: { readonly preview: CsvPreviewModel }) {
       />
 
       <CsvNotice
-        when={props.preview.formatted_available && props.preview.truncated}
+        when={props.preview.row_count_status === "truncated"}
         kind="truncate"
         text="Table preview is truncated for performance. Use Raw view for the complete source."
       />

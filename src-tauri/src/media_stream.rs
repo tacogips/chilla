@@ -5,7 +5,7 @@ use std::{
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, RwLock,
     },
     thread,
@@ -16,7 +16,8 @@ use crate::error::{AppError, AppResult};
 use crate::mp4_faststart::{FaststartLayout, VirtualSegment};
 
 const STREAM_HOST: &str = "127.0.0.1";
-const CORS_ALLOW_ORIGIN: &str = "*";
+const MAX_MEDIA_STREAM_ENTRIES: usize = 256;
+const MAX_MEDIA_STREAM_CONNECTIONS: usize = 32;
 
 #[derive(Clone)]
 pub struct MediaStreamService {
@@ -56,12 +57,14 @@ impl MediaStreamService {
             .port();
         let entries = Arc::new(RwLock::new(HashMap::new()));
         let thread_entries = Arc::clone(&entries);
+        let active_connections = Arc::new(AtomicUsize::new(0));
+        let thread_active_connections = Arc::clone(&active_connections);
         let token_seed: Arc<str> = Arc::from(new_token_seed());
 
         thread::Builder::new()
             .name("chilla-media-stream".to_string())
             .spawn(move || {
-                run_media_stream_server(listener, thread_entries);
+                run_media_stream_server(listener, thread_entries, thread_active_connections);
             })
             .map_err(|source| {
                 AppError::State(format!(
@@ -81,29 +84,25 @@ impl MediaStreamService {
         let canonical_path = std::fs::canonicalize(path)
             .map_err(|source| AppError::io("canonicalize media stream path", path, source))?;
         let token = self.new_entry_token(&canonical_path);
-        let canonical_path_display = canonical_path.display().to_string();
         let faststart = prepare_faststart_state(canonical_path.clone(), mime_type);
 
         let entry = MediaStreamEntry {
-            path: canonical_path,
+            path: canonical_path.clone(),
             mime_type: mime_type.to_string(),
             faststart,
         };
 
-        self.entries
-            .write()
-            .map_err(|_| {
-                AppError::State("failed to lock media stream registry for write".to_string())
-            })?
-            .insert(token.clone(), entry);
-
-        eprintln!(
-            "[media-stream] register path={} mime_type={} token={} url=http://{STREAM_HOST}:{}/media/{token}",
-            canonical_path_display,
-            mime_type,
-            token,
-            self.port
-        );
+        let mut registry = self.entries.write().map_err(|_| {
+            AppError::State("failed to lock media stream registry for write".to_string())
+        })?;
+        registry.retain(|_, existing| existing.path != canonical_path);
+        while registry.len() >= MAX_MEDIA_STREAM_ENTRIES {
+            let Some(old_token) = registry.keys().next().cloned() else {
+                break;
+            };
+            registry.remove(&old_token);
+        }
+        registry.insert(token.clone(), entry);
 
         Ok(format!("http://{STREAM_HOST}:{}/media/{token}", self.port))
     }
@@ -142,13 +141,7 @@ fn prepare_faststart_state(path: PathBuf, mime_type: &str) -> Arc<RwLock<Faststa
         .name("chilla-media-faststart".to_string())
         .spawn(move || {
             let next_status = match crate::mp4_faststart::analyze_mp4(&path_for_thread) {
-                Some(layout) => {
-                    eprintln!(
-                        "[media-stream] faststart layout ready for path={}",
-                        path_for_thread.display()
-                    );
-                    FaststartStatus::Ready(Arc::new(layout))
-                }
+                Some(layout) => FaststartStatus::Ready(Arc::new(layout)),
                 None => FaststartStatus::Unavailable,
             };
 
@@ -198,17 +191,64 @@ fn ready_faststart_layout(entry: &MediaStreamEntry) -> Option<Arc<FaststartLayou
 fn run_media_stream_server(
     listener: TcpListener,
     entries: Arc<RwLock<HashMap<String, MediaStreamEntry>>>,
+    active_connections: Arc<AtomicUsize>,
 ) {
     for connection in listener.incoming() {
-        let Ok(stream) = connection else {
+        let Ok(mut stream) = connection else {
+            continue;
+        };
+        let Some(permit) = ConnectionPermit::try_acquire(&active_connections) else {
+            let _ = write_response(
+                &mut stream,
+                "503 Service Unavailable",
+                &[("Content-Length", "0")],
+                None,
+                false,
+            );
             continue;
         };
         let entries = Arc::clone(&entries);
         let _ = thread::Builder::new()
             .name("chilla-media-stream-client".to_string())
             .spawn(move || {
+                let _permit = permit;
                 let _ = handle_connection(stream, entries);
             });
+    }
+}
+
+struct ConnectionPermit {
+    active_connections: Arc<AtomicUsize>,
+}
+
+impl ConnectionPermit {
+    fn try_acquire(active_connections: &Arc<AtomicUsize>) -> Option<Self> {
+        let mut current = active_connections.load(Ordering::Relaxed);
+        loop {
+            if current >= MAX_MEDIA_STREAM_CONNECTIONS {
+                return None;
+            }
+
+            match active_connections.compare_exchange_weak(
+                current,
+                current + 1,
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => {
+                    return Some(Self {
+                        active_connections: Arc::clone(active_connections),
+                    });
+                }
+                Err(next_current) => current = next_current,
+            }
+        }
+    }
+}
+
+impl Drop for ConnectionPermit {
+    fn drop(&mut self) {
+        self.active_connections.fetch_sub(1, Ordering::Release);
     }
 }
 
@@ -262,33 +302,23 @@ fn handle_connection(
 
         let keep_alive = !connection_close;
 
-        eprintln!(
-            "[media-stream] request method={} target={} range={} keep_alive={}",
-            method,
-            target,
-            range_header.as_deref().unwrap_or("-"),
-            keep_alive
-        );
-
         if method != "GET" && method != "HEAD" {
-            write_logged_empty_response(
+            write_response(
                 &mut writer,
                 "405 Method Not Allowed",
-                &target,
-                &[("method", &method), ("target", &target)],
                 &[("Allow", "GET, HEAD"), ("Content-Length", "0")],
+                None,
                 false,
             )?;
             return Ok(());
         }
 
         let Some(token) = media_token_from_target(&target) else {
-            write_logged_empty_response(
+            write_response(
                 &mut writer,
                 "404 Not Found",
-                &target,
-                &[("method", &method), ("target", &target)],
                 &[("Content-Length", "0")],
+                None,
                 false,
             )?;
             return Ok(());
@@ -299,12 +329,11 @@ fn handle_connection(
             .ok()
             .and_then(|registry| registry.get(token).cloned())
         else {
-            write_logged_empty_response(
+            write_response(
                 &mut writer,
                 "404 Not Found",
-                &target,
-                &[("method", &method), ("token", token)],
                 &[("Content-Length", "0")],
+                None,
                 false,
             )?;
             return Ok(());
@@ -350,16 +379,15 @@ fn serve_file(
         Ok(None) => ("200 OK", 0, file_len.saturating_sub(1)),
         Err(()) => {
             let content_range = format!("bytes */{file_len}");
-            write_logged_empty_response(
+            write_response(
                 stream,
                 "416 Range Not Satisfiable",
-                &entry.path.display().to_string(),
-                &[("range", range_header.unwrap_or("-"))],
                 &[
                     ("Accept-Ranges", "bytes"),
                     ("Content-Range", &content_range),
                     ("Content-Length", "0"),
                 ],
+                None,
                 false,
             )?;
             return Ok(());
@@ -376,7 +404,6 @@ fn serve_file(
 
     let mut headers = vec![
         ("Accept-Ranges", "bytes".to_string()),
-        ("Access-Control-Allow-Origin", CORS_ALLOW_ORIGIN.to_string()),
         ("Content-Type", entry.mime_type.clone()),
         ("Content-Length", content_length_header),
     ];
@@ -391,27 +418,11 @@ fn serve_file(
         .collect::<Vec<_>>();
 
     if is_head || content_length == 0 {
-        eprintln!(
-            "[media-stream] response status={} path={} range={} head={}",
-            status,
-            entry.path.display(),
-            range_header.unwrap_or("-"),
-            is_head
-        );
         write_response(stream, status, &header_refs, None, keep_alive)?;
         return Ok(());
     }
 
     file.seek(SeekFrom::Start(start))?;
-    eprintln!(
-        "[media-stream] response status={} path={} range={} head={} bytes={}-{}",
-        status,
-        entry.path.display(),
-        range_header.unwrap_or("-"),
-        is_head,
-        start,
-        end
-    );
     write_response_head(stream, status, &header_refs, keep_alive)?;
     copy_n_bytes(&mut file, stream, content_length)
 }
@@ -436,16 +447,15 @@ fn serve_virtual_file(
         Ok(None) => ("200 OK", 0, file_len.saturating_sub(1)),
         Err(()) => {
             let content_range = format!("bytes */{file_len}");
-            write_logged_empty_response(
+            write_response(
                 stream,
                 "416 Range Not Satisfiable",
-                &entry.path.display().to_string(),
-                &[("range", range_header.unwrap_or("-"))],
                 &[
                     ("Accept-Ranges", "bytes"),
                     ("Content-Range", &content_range),
                     ("Content-Length", "0"),
                 ],
+                None,
                 false,
             )?;
             return Ok(());
@@ -462,7 +472,6 @@ fn serve_virtual_file(
 
     let mut headers = vec![
         ("Accept-Ranges", "bytes".to_string()),
-        ("Access-Control-Allow-Origin", CORS_ALLOW_ORIGIN.to_string()),
         ("Content-Type", entry.mime_type.clone()),
         ("Content-Length", content_length_header),
     ];
@@ -477,26 +486,9 @@ fn serve_virtual_file(
         .collect::<Vec<_>>();
 
     if is_head || content_length == 0 {
-        eprintln!(
-            "[media-stream] response status={} path={} range={} head={} (virtual faststart)",
-            status,
-            entry.path.display(),
-            range_header.unwrap_or("-"),
-            is_head
-        );
         write_response(stream, status, &header_refs, None, keep_alive)?;
         return Ok(());
     }
-
-    eprintln!(
-        "[media-stream] response status={} path={} range={} head={} bytes={}-{} (virtual faststart)",
-        status,
-        entry.path.display(),
-        range_header.unwrap_or("-"),
-        is_head,
-        start,
-        end
-    );
 
     write_response_head(stream, status, &header_refs, keep_alive)?;
 
@@ -585,33 +577,6 @@ fn parse_range(range_header: Option<&str>, file_len: u64) -> Result<Option<(u64,
     Ok(Some((start, end)))
 }
 
-fn write_logged_empty_response(
-    stream: &mut TcpStream,
-    status: &str,
-    path: &str,
-    details: &[(&str, &str)],
-    headers: &[(&str, &str)],
-    keep_alive: bool,
-) -> io::Result<()> {
-    let mut detail_parts = String::new();
-
-    for (index, (name, value)) in details.iter().enumerate() {
-        if index > 0 {
-            detail_parts.push(' ');
-        }
-        detail_parts.push_str(name);
-        detail_parts.push('=');
-        detail_parts.push_str(value);
-    }
-
-    eprintln!(
-        "[media-stream] response status={} path={} {}",
-        status, path, detail_parts
-    );
-
-    write_response(stream, status, headers, None, keep_alive)
-}
-
 fn write_response(
     stream: &mut TcpStream,
     status: &str,
@@ -670,14 +635,20 @@ fn copy_n_bytes<R: Read, W: Write>(reader: &mut R, writer: &mut W, len: u64) -> 
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::HashMap,
+        fs,
         io::Cursor,
+        io::{Read, Write},
+        net::{TcpListener, TcpStream},
         path::Path,
         sync::{Arc, RwLock},
+        thread,
+        time::{SystemTime, UNIX_EPOCH},
     };
 
     use super::{
-        copy_n_bytes, parse_range, ready_faststart_layout, should_prepare_faststart,
-        FaststartStatus,
+        copy_n_bytes, handle_connection, parse_range, ready_faststart_layout,
+        should_prepare_faststart, FaststartStatus, MediaStreamEntry,
     };
 
     #[test]
@@ -738,5 +709,55 @@ mod tests {
         };
 
         assert!(ready_faststart_layout(&entry).is_none());
+    }
+
+    #[test]
+    fn http_handler_serves_registered_media_without_wildcard_cors() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "chilla-media-stream-test-{}-{unique}.txt",
+            std::process::id()
+        ));
+        fs::write(&path, "media body").expect("write media fixture");
+
+        let mut registry = HashMap::new();
+        registry.insert(
+            "test-token".to_string(),
+            MediaStreamEntry {
+                path: path.clone(),
+                mime_type: "text/plain".to_string(),
+                faststart: Arc::new(RwLock::new(FaststartStatus::Unsupported)),
+            },
+        );
+        let entries = Arc::new(RwLock::new(registry));
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind test listener");
+        let address = listener.local_addr().expect("listener addr");
+        let handler_entries = Arc::clone(&entries);
+        let handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept connection");
+            handle_connection(stream, handler_entries).expect("handle connection");
+        });
+
+        let mut client = TcpStream::connect(address).expect("connect client");
+        client
+            .write_all(
+                b"GET /media/test-token HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+            )
+            .expect("write request");
+        let mut response = String::new();
+        client.read_to_string(&mut response).expect("read response");
+        handle.join().expect("handler joins");
+        let _ = fs::remove_file(path);
+
+        assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+        assert!(response.contains("Content-Type: text/plain"), "{response}");
+        assert!(
+            !response.contains("Access-Control-Allow-Origin"),
+            "{response}"
+        );
+        assert!(response.ends_with("media body"), "{response}");
     }
 }

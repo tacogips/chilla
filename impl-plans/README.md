@@ -40,15 +40,17 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan | Created | Design Reference |
 | ---- | ------- | ---------------- |
-| `local-git-diff-viewer.md` | 2026-06-02 | `design-docs/specs/architecture.md#github-diff-viewer-architecture`; `design-docs/specs/command.md#local-git-diff-startup-contract` |
-| `github-pr-diff-viewer.md` | 2026-06-02 | `design-docs/specs/architecture.md#github-diff-viewer-architecture`; `design-docs/specs/command.md#github-diff-url-contract` |
-| `heic-image-display.md` | 2026-05-27 | `design-docs/specs/architecture.md#heic--heif-image-display-architecture` |
-| `numeric-view-shortcuts.md` | 2026-06-04 | `design-docs/specs/architecture.md#shared-presentation-shortcut-model`; `design-docs/specs/design-markdown-workbench.md#view-switching-shortcuts`; `design-docs/specs/design-csv-viewer.md#entry-and-activation` |
+| - | - | - |
 
 ## Completed Plans
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `design-implementation-review-remediation.md` | 2026-07-03 | `design-docs/specs/design-implementation-review.md` |
+| `github-pr-diff-viewer.md` | 2026-07-03 | `design-docs/specs/architecture.md#github-diff-viewer-architecture`; `design-docs/specs/command.md#github-diff-url-contract` |
+| `numeric-view-shortcuts.md` | 2026-07-03 | `design-docs/specs/architecture.md#shared-presentation-shortcut-model`; `design-docs/specs/design-markdown-workbench.md#view-switching-shortcuts`; `design-docs/specs/design-csv-viewer.md#entry-and-activation` |
+| `local-git-diff-viewer.md` | 2026-07-03 | `design-docs/specs/architecture.md#github-diff-viewer-architecture`; `design-docs/specs/command.md#local-git-diff-startup-contract` |
+| `heic-image-display.md` | 2026-07-03 | `design-docs/specs/architecture.md#heic--heif-image-display-architecture` |
 | `codebase-file-splitting-and-lint.md` | 2026-07-01 | User maintenance request: split overly long files and fix lint issues |
 | `git-diff-paging-shortcuts.md` | 2026-06-07 | `design-docs/specs/architecture.md#diff-workspace-paging-shortcuts` |
 | `macos-dmg-local-signing-release.md` | 2026-05-21 | `design-docs/specs/design-macos-dmg-release.md#signing-and-notarization` |

@@ -63,9 +63,17 @@ impl DocumentService {
         &self,
         path: &Path,
         source_text: &str,
+        expected_revision_token: &str,
         ui_theme: SyntaxUiTheme,
     ) -> AppResult<DocumentSnapshot> {
         let canonical_path = canonicalize_document_path(path)?;
+        let current_snapshot = self.open(&canonical_path, ui_theme)?;
+        if current_snapshot.revision_token != expected_revision_token {
+            return Err(AppError::DocumentConflict {
+                path: canonical_path.display().to_string(),
+            });
+        }
+
         fs::write(&canonical_path, source_text)
             .map_err(|source| AppError::io("write", &canonical_path, source))?;
         self.open(&canonical_path, ui_theme)
@@ -104,5 +112,100 @@ pub fn canonicalize_document_path(path: &Path) -> AppResult<PathBuf> {
         Err(AppError::UnsupportedExtension(
             canonical_path.display().to_string(),
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        sync::atomic::{AtomicU64, Ordering},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use crate::{error::AppError, syntax_highlight::SyntaxUiTheme};
+
+    use super::DocumentService;
+
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    impl TestDir {
+        fn new() -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let counter = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "chilla-document-service-tests-{}-{unique}-{counter}",
+                std::process::id()
+            ));
+            fs::create_dir_all(&path).expect("create temp test directory");
+            Self { path }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    #[test]
+    fn save_rejects_stale_revision_token() {
+        let test_dir = TestDir::new();
+        let path = test_dir.path().join("notes.md");
+        fs::write(&path, "# Original\n").expect("write markdown");
+        let service = DocumentService::new();
+        let snapshot = service.open(&path, SyntaxUiTheme::Dark).expect("open");
+
+        fs::write(&path, "# External\n").expect("external write");
+        let error = service
+            .save(
+                &path,
+                "# Local\n",
+                &snapshot.revision_token,
+                SyntaxUiTheme::Dark,
+            )
+            .expect_err("stale save should fail");
+
+        assert!(matches!(error, AppError::DocumentConflict { .. }));
+        assert_eq!(
+            fs::read_to_string(&path).expect("read markdown"),
+            "# External\n"
+        );
+    }
+
+    #[test]
+    fn save_accepts_current_revision_token() {
+        let test_dir = TestDir::new();
+        let path = test_dir.path().join("notes.md");
+        fs::write(&path, "# Original\n").expect("write markdown");
+        let service = DocumentService::new();
+        let snapshot = service.open(&path, SyntaxUiTheme::Dark).expect("open");
+
+        let saved = service
+            .save(
+                &path,
+                "# Local\n",
+                &snapshot.revision_token,
+                SyntaxUiTheme::Dark,
+            )
+            .expect("save");
+
+        assert_eq!(saved.source_text, "# Local\n");
+        assert_eq!(
+            fs::read_to_string(&path).expect("read markdown"),
+            "# Local\n"
+        );
     }
 }

@@ -159,7 +159,7 @@ The repository design documents started from a Markdown workbench concept, then 
   - text-like files: syntax-highlighted source preview
   - binary files: metadata/placeholder preview
 
-At the moment, Markdown source is viewable in a raw pane, but this app does not yet expose the editable save flow described in the original workbench design.
+Markdown source can be edited in the raw pane and saved back to disk. If the file changes on disk while the editor has unsaved changes, chilla keeps the local buffer and surfaces a conflict flow instead of silently overwriting it.
 
 ## Features
 
@@ -172,7 +172,7 @@ At the moment, Markdown source is viewable in a raw pane, but this app does not 
 - Direct image-file previews for common raster formats and HEIC / HEIF files that the platform WebView can decode
 - GitHub diff URL viewer for pull requests, commits, and compares with changed-file browsing, GitHub jump action, cached diff loading, and diff modes for left/right, stack, and full-file review
 - Local Git diff viewer for uncommitted repository changes and commit/range startup diffs using the same diff modes
-- Automatic refresh of opened Markdown documents when the file changes on disk
+- Automatic refresh of opened Markdown documents when the file changes on disk, including common atomic-replace save patterns
 - Direct CSV view selection with `1` for raw source and `2` for formatted table when available
 - Theme toggle with frontend CSS variables and backend syntax-theme synchronization
 - Custom undecorated desktop window chrome

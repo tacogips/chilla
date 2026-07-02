@@ -41,7 +41,8 @@ The positional arguments are named `path` in product messaging and accept relati
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| None | - | - | The first product slice does not define end-user runtime environment variables |
+| `GITHUB_TOKEN` | No | unset | Optional token for GitHub API and raw-file requests. The backend only attaches it to internally constructed GitHub API URLs or validated `https://github.com` / `https://raw.githubusercontent.com` raw-file URLs. |
+| `GH_TOKEN` | No | unset | Compatibility fallback used when `GITHUB_TOKEN` is unset. It has the same host restrictions as `GITHUB_TOKEN`. |
 
 ### Exit Codes
 
@@ -66,6 +67,7 @@ The positional arguments are named `path` in product messaging and accept relati
 - GitHub diff URLs are valid only as a single positional startup target in this slice. Combining a GitHub diff URL with local paths is invalid CLI usage.
 - Local Git diff startup is recognized when the first positional argument resolves to a directory inside a Git repository and the second positional argument is not an existing file path.
 - If both positional arguments resolve to files, explicit file-set startup wins.
+- If the second argument names an existing path in the current working directory, `chilla <git_dir> <name>` is treated as explicit file-set startup rather than a Git revision selector. Use a non-colliding revision spelling when a branch or commit-ish name collides with a local path.
 - Multi-file startup is valid only when every positional argument resolves to a readable file. Mixing directories into a multi-path invocation is rejected as invalid CLI usage for this slice.
 - In multi-file startup, the initially opened file is the first canonicalized filepath in CLI order; the left pane remains open because file switching is the primary task.
 - If multiple provided paths canonicalize to the same file, duplicates are removed while preserving the first occurrence for initial selection. If only one unique file remains, startup follows the single-file contract.
