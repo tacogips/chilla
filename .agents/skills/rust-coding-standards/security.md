@@ -15,8 +15,9 @@ The following content types are strictly prohibited in any output files:
 - Never include absolute filesystem paths from the host machine
 - Use relative paths from project root instead
 - Examples of prohibited patterns:
-  - `/absolute/host/path/...`
-  - `C:\absolute\host\path\...`
+  - `/home/username/...`
+  - `/Users/username/...`
+  - `C:\Users\username\...`
 
 ### 2. Credential Information
 
@@ -42,7 +43,7 @@ Never include any of the following:
 
 ```rust
 // BAD - Exposes host path
-let config_path = "/absolute/host/path/config.toml";
+let config_path = "/home/user/projects/myapp/config.toml";
 
 // GOOD - Uses relative path
 let config_path = "./config.toml";
@@ -54,7 +55,7 @@ let config_path = std::env::current_dir()?.join("config.toml");
 
 ```markdown
 <!-- BAD -->
-Project located at: /absolute/host/path/project
+Project located at: /home/developer/workspace/project
 
 <!-- GOOD -->
 Project located at: ./project (relative to workspace root)

@@ -1,0 +1,3 @@
+interface:
+  display_name: "supply-chain-secure-publish"
+  short_description: "Use when publishing Rust crates to crates.io or managing crate repositories. Provides supply chain attack countermeasures including crates.io token management, CI/CD publishing pipelines, and pre-publish security checklists. Adapted from Shai-Hulud npm attack lessons."

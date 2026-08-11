@@ -23,6 +23,12 @@ Apply these standards when:
 3. **Simple Over Clever** - Prefer readable code over clever abstractions
 4. **Fail Fast** - Catch errors at compile time via strong typing
 
+## Source File Size
+
+- **Hard limit**: No Rust source file (`*.rs`) under `src/`, `tests/`, `benches/`, or `examples/` should stay above **1000 lines**. If a file is at or past that size, **split it** in the same change set or as a focused follow-up.
+- **How to split**: Prefer clear module boundaries around features, adapters, domain logic, test fixtures, or cohesive helpers. Keep public APIs stable with `mod` organization and `pub use` facades when callers already import from an established path.
+- **Agents**: When editing or reviewing code, if a touched file is **1000+ lines**, treat splitting as **in scope** for the task unless the user explicitly excludes it.
+
 ## Quick Reference
 
 ### Must-Use Patterns

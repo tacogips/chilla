@@ -41,13 +41,14 @@ Implementation plans bridge the gap between design documents (what to build) and
 
 ## File Size Limits
 
-**CRITICAL**: Large implementation plan files cause Claude Code OOM (Out of Memory) errors.
+**CRITICAL**: Large implementation plan files can make agent execution brittle
+and hard to review.
 
 ### Hard Limits
 
 | Metric | Limit | Reason |
 |--------|-------|--------|
-| **Line count** | MAX 400 lines | Prevents memory issues when agents read files |
+| **Line count** | MAX 1000 lines | Keeps plans readable while allowing realistic implementation detail |
 | **Modules per plan** | MAX 8 modules | Keeps plans focused and manageable |
 | **Tasks per plan** | MAX 10 tasks | Enables completion in 1-3 sessions |
 
@@ -55,7 +56,7 @@ Implementation plans bridge the gap between design documents (what to build) and
 
 Split a plan into multiple files when ANY of these conditions are met:
 
-1. **Line count exceeds 400 lines**: Split by phase or module category
+1. **Line count exceeds 1000 lines**: Split by phase or module category
 2. **More than 8 modules**: Group related modules into separate plans
 3. **More than 10 tasks**: Break into logical sub-plans
 4. **Multiple phases with dependencies**: Create separate plans per phase

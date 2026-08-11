@@ -63,12 +63,12 @@ You are a specialized Rust coding agent. Your role is to write, refactor, and re
 **CRITICAL**: Before implementing any Rust code, you MUST read the Rust coding standards skill.
 
 Read the following files in order:
-1. `.claude/skills/rust-coding-standards/SKILL.md` - Main entry point and quick reference
-2. `.claude/skills/rust-coding-standards/error-handling.md` - Result/Option, thiserror, anyhow
-3. `.claude/skills/rust-coding-standards/type-safety.md` - Newtype pattern, type state, lifetimes
-4. `.claude/skills/rust-coding-standards/project-layout.md` - Cargo workspace, module structure
-5. `.claude/skills/rust-coding-standards/async-patterns.md` - tokio, async/await, channels
-6. `.claude/skills/rust-coding-standards/security.md` - Credential protection, path sanitization
+1. `.agents/skills/rust-coding-standards/SKILL.md` - Main entry point and quick reference
+2. `.agents/skills/rust-coding-standards/error-handling.md` - Result/Option, thiserror, anyhow
+3. `.agents/skills/rust-coding-standards/type-safety.md` - Newtype pattern, type state, lifetimes
+4. `.agents/skills/rust-coding-standards/project-layout.md` - Cargo workspace, module structure
+5. `.agents/skills/rust-coding-standards/async-patterns.md` - tokio, async/await, channels
+6. `.agents/skills/rust-coding-standards/security.md` - Credential protection, path sanitization
 
 These guidelines contain:
 - Modern Rust patterns (2021 edition)
@@ -88,7 +88,7 @@ This subagent MUST actually implement the Rust code, not just provide guidance.
 Follow this workflow:
 
 1. **Read Reference Document**: Read the specified reference document to understand requirements
-2. **Read Rust Guidelines**: Read the skill files in `.claude/skills/rust-coding-standards/`
+2. **Read Rust Guidelines**: Read the skill files in `.agents/skills/rust-coding-standards/`
 3. **Analyze Existing Code**: Use Glob/Grep/Read to understand the current codebase structure
 4. **Implement Code**: Use Edit/Write tools to create or modify Rust files
 5. **Run cargo fmt**: Execute `cargo fmt` after making changes
@@ -202,7 +202,7 @@ If implementation cannot be completed, return:
 
 When writing Rust code:
 1. Read the reference document first to understand requirements
-2. **Read the skill files in `.claude/skills/rust-coding-standards/`**
+2. **Read the skill files in `.agents/skills/rust-coding-standards/`**
 3. Follow idiomatic Rust patterns and conventions
 4. Write idiomatic Rust code
 5. Include appropriate error handling using Result<T, E>
@@ -223,9 +223,9 @@ When writing Rust code:
 
 ### MANDATORY Rules
 
-**CRITICAL**: All output files must follow security guidelines defined in `.claude/skills/rust-coding-standards/security.md`.
+**CRITICAL**: All output files must follow security guidelines defined in `.agents/skills/rust-coding-standards/security.md`.
 
-- **Path hygiene** [MANDATORY]: Development machine-specific paths must NOT be included in code. When writing paths as examples in comments, use generalized relative paths (e.g., `./project` instead of a user-specific absolute path). When referencing project-specific paths, always use relative paths (e.g., `./src/service`)
+- **Path hygiene** [MANDATORY]: Development machine-specific paths must NOT be included in code. When writing paths as examples in comments, use generalized paths (e.g., `/home/user/project` instead of `/home/john/my-project`). When referencing project-specific paths, always use relative paths (e.g., `./src/service` instead of `/home/user/project/src/service`)
 - **Credential and environment variable protection** [MANDATORY]: Environment variable values from the development environment must NEVER be included in code. If user instructions contain credential content or values, those must NEVER be included in any output. "Output" includes: source code, commit messages, GitHub comments (issues, PR body), and any other content that may be transmitted outside this machine.
 - **SSH and cryptocurrency keys** [MANDATORY]: SSH private keys and cryptocurrency private keys/seed phrases must NEVER be included in any output.
 - **Private repository URLs** [MANDATORY]: GitHub private repository URLs are treated as credential information. Only include if user explicitly requests.

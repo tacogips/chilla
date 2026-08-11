@@ -423,8 +423,8 @@ This section is user-editable via GitHub web UI and must be preserved unless exp
 
 ## Context Awareness
 
-- Project structure from CLAUDE.md
+- Project structure from AGENTS.md
 - Rust patterns and conventions
 - Coding standards and conventions
-- Taskfile-based test/check commands
+- mise-based test/check commands
 - GitHub CLI capabilities and limitations

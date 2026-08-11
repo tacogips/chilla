@@ -1,5 +1,0 @@
-{
-  "name": "rust-lsp",
-  "description": "Rust language server (rust-analyzer) support for Claude Code",
-  "version": "1.0.0"
-}

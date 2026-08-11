@@ -1,0 +1,3 @@
+interface:
+  display_name: "secure-github-action"
+  short_description: "Use this skill when creating or modifying GitHub Actions workflow files (.github/workflows/*.yml). Ensures all actions are pinned by commit SHA, permissions are minimized, script injection is prevented, and other supply chain security best practices are applied."

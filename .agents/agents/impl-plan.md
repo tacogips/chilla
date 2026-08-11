@@ -62,7 +62,7 @@ Please invoke this subagent again with all required information in the prompt.
 
 ### Phase 1: Read and Analyze Design Document
 
-1. **Read the impl-plan skill**: Read `.claude/skills/impl-plan/SKILL.md` to understand plan structure
+1. **Read the impl-plan skill**: Read `.agents/skills/impl-plan/SKILL.md` to understand plan structure
 2. **Read the design document**: Read the specified design document
 3. **Identify scope boundaries**: Determine what is included and excluded
 4. **Extract requirements**: List functional and non-functional requirements
@@ -279,11 +279,11 @@ What needs to be resolved before retrying.
 3. **Checklist-based**: Use checkboxes for tracking, not prose descriptions
 4. **Scannable format**: Plans should be easy to scan and understand quickly
 5. **Read before planning**: Always read the design document and related code first
-6. **Follow skill guidelines**: Adhere to `.claude/skills/impl-plan/SKILL.md`
+6. **Follow skill guidelines**: Adhere to `.agents/skills/impl-plan/SKILL.md`
 
 ## File Size Limits (CRITICAL)
 
-**Large implementation plan files cause Claude Code OOM errors.**
+**Large implementation plan files cause agent OOM errors.**
 
 ### Hard Limits
 

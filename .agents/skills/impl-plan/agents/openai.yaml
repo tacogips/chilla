@@ -1,0 +1,3 @@
+interface:
+  display_name: "impl-plan"
+  short_description: "Use when creating implementation plans from design documents. Provides plan structure, status tracking, and progress logging guidelines."

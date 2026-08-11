@@ -40,13 +40,15 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan | Created | Design Reference |
 | ---- | ------- | ---------------- |
-| - | - | - |
+| `official-homebrew-cask.md` | 2026-07-15 | `design-docs/specs/design-macos-dmg-release.md#official-homebrew-cask-distribution` |
 
 ## Completed Plans
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
 | `design-implementation-review-remediation.md` | 2026-07-03 | `design-docs/specs/design-implementation-review.md` |
+| `verbose-diagnostic-logging-core.md` | 2026-07-29 | `design-docs/specs/command.md#verbose-diagnostic-contract`; `design-docs/specs/architecture.md#opt-in-startup-and-file-io-diagnostics` |
+| `verbose-diagnostic-logging-io.md` | 2026-07-29 | `design-docs/specs/architecture.md#file-io-observability` |
 | `github-pr-diff-viewer.md` | 2026-07-03 | `design-docs/specs/architecture.md#github-diff-viewer-architecture`; `design-docs/specs/command.md#github-diff-url-contract` |
 | `numeric-view-shortcuts.md` | 2026-07-03 | `design-docs/specs/architecture.md#shared-presentation-shortcut-model`; `design-docs/specs/design-markdown-workbench.md#view-switching-shortcuts`; `design-docs/specs/design-csv-viewer.md#entry-and-activation` |
 | `local-git-diff-viewer.md` | 2026-07-03 | `design-docs/specs/architecture.md#github-diff-viewer-architecture`; `design-docs/specs/command.md#local-git-diff-startup-contract` |

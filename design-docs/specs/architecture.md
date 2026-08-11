@@ -184,6 +184,77 @@ Expected behavior:
 - Large documents should degrade primarily in editor rendering cost, not in TOC extraction cost.
 - File watch event handling should avoid triggering redundant Mermaid rerenders when the preview is hidden.
 
+## Opt-In Startup And File-I/O Diagnostics
+
+This section defines the Rust-owned diagnostic path enabled by the `--verbose` command contract in `design-docs/specs/command.md`.
+
+### Scope And Boundaries
+
+- Diagnostics are process-global and initialized once in Rust before Tauri application construction.
+- The implementation uses only the Rust standard library: one-time global state, a bounded non-blocking record queue, a background sink worker, wall-clock and monotonic timing, and terminal detection.
+- No frontend contract change is required. The first existing `get_startup_context` invocation is the frontend-ready marker.
+- Diagnostic instrumentation is limited to CLI/bootstrap, Tauri startup, document and general file-preview loading, document commands, and watcher-triggered file reads.
+- Disabled diagnostics must return before timestamp construction, path formatting, metadata collection, or writer locking and must not create any filesystem artifact.
+
+### Startup Data Flow
+
+1. `src-tauri/src/main.rs` captures the process-start monotonic time before CLI work.
+2. A non-fallible CLI normalization phase identifies and removes `--verbose` before argument-count-sensitive startup parsing. It also recognizes an information-only `--help` or `--version` outcome without performing filesystem resolution.
+3. Information-only outcomes retain their current output and exit without initializing diagnostics. For every other verbose invocation, diagnostic state is initialized before fallible startup-target classification, canonicalization, or metadata access.
+4. The existing target parser then resolves the normalized arguments. Diagnostics record CLI parse completion or failure and duration; parse failures retain their original user-facing text and exit code while path-resolution failures can retain their underlying OS details.
+5. A successful `StartupTarget::File` arms a one-time startup-load marker for its canonical path. `StartupTarget::FileSet` arms it for the first canonical path in CLI order. Directory, current-directory, GitHub, and local Git-diff targets do not arm a file-load marker.
+6. `src-tauri/src/lib.rs` records entry into app construction and the start and completion of Tauri builder setup.
+7. The Tauri setup/window lifecycle records when the main window and webview are available.
+8. The first `get_startup_context` command records frontend readiness once, even if the command is invoked again.
+9. The first `open_document` or `open_file_preview` completion whose input exactly matches the armed canonical path consumes the marker and records startup-file load success or failure with duration. A different interactive file open does not consume or relabel the marker. Lower-level file-operation records provide the I/O evidence for the same load.
+
+Phase markers use the process-start monotonic clock for ordering and duration. Each output line also includes Unix-epoch time for correlation with external system logs. A phase failure is recorded before the existing error is mapped, returned, or otherwise handled.
+
+### File-I/O Observability
+
+The instrumented boundaries are:
+
+- `src-tauri/src/document/service.rs` for document open, read, and metadata work.
+- `src-tauri/src/viewer/path_utils.rs` for canonicalization and metadata operations used during CLI startup-target resolution and file-preview validation.
+- `src-tauri/src/viewer/service.rs` for non-Markdown preview reads and metadata operations used by startup and interactive file opening.
+- `src-tauri/src/viewer/epub.rs` for delegated EPUB archive open and archive-entry reads before I/O errors are converted into preview parse errors.
+- `src-tauri/src/commands/document.rs` for frontend-ready and startup-load outcome markers, plus command errors observed before translation to UI-facing strings; command markers do not duplicate service-level filesystem records.
+- `src-tauri/src/watcher/service.rs` for watcher-triggered reload outcomes, including failures the UI may not surface; the delegated document service remains the owner of its underlying filesystem records.
+
+Each actual filesystem operation emits one completion record rather than duplicating the same event at every calling layer. Records include:
+
+- operation name and full path;
+- duration from immediately before the operation to its result;
+- byte size from successful read output or metadata when available;
+- success or failure outcome;
+- the underlying OS error text and raw OS error code when available.
+
+Missing size is represented explicitly for failed operations. Diagnostic code observes results without changing error types, retry behavior, UI mapping, watcher behavior, or file contents.
+
+### Sink And Failure Policy
+
+- The primary sink is `~/Library/Logs/chilla/chilla-verbose-<pid>.log`, created only for a verbose app-starting invocation whose `HOME` value is absolute and whose home, `Library`, `Logs`, and `chilla` components are physical directories rather than symlinks. Missing, relative, non-directory, or symlinked components disable the file sink before diagnostic creation or retention deletion. An existing filename or symlink is never followed or truncated; bounded exclusive retries append `-<collision>` before `.log`.
+- On Unix, the application log directory is restricted to mode `0700` and each newly created diagnostic file to mode `0600`.
+- Separate exclusively created process files prevent concurrent launches from interleaving or truncating each other's records.
+- Each process log is capped at 10 MiB. Before a record would exceed that ceiling, the logger writes and mirrors one `verbose_log_limit_reached` record that fits within the ceiling, then suppresses later records for that process.
+- Each active process holds an exclusive advisory lock on its log. After the first current-process record is written, a separate best-effort worker checks at most 256 directory entries for at most 25 ms. It removes matching regular `chilla-verbose-<pid>[-<collision>].log` files older than 14 days only after acquiring that file's lock. Cleanup preserves active/locked files and ignores symlinks, non-regular files, malformed names, unrelated entries, metadata failures, lock failures, and deletion failures.
+- The file and optional terminal mirror receive the identical formatted line. Quotes, backslashes, and every control character are escaped before either sink receives the line.
+- Terminal mirroring requires verbose mode and at least one attached standard stream. Stderr is preferred when `stderr.is_terminal()`; stdout is used only when stderr is detached and `stdout.is_terminal()`. When neither stream is a TTY, no terminal sink is used.
+- Instrumented application threads format each record once and use a non-blocking send to a 1,024-record queue. File creation, retention, file writes, flushes, and terminal writes occur only on background workers. If the queue is full, records are dropped without blocking application work and the sink emits an explicit `verbose_log_records_dropped` marker when capacity becomes available.
+- Home-directory lookup, worker creation, directory creation, file creation, lock poisoning, queue disconnection, and write failures are non-fatal. The unavailable sink is skipped; an available TTY mirror may continue.
+- Normal return and explicit CLI error exits request a drain, but wait no longer than 250 ms for sink shutdown. A stalled filesystem or terminal must not indefinitely block application exit.
+
+### Validation And Rollout Constraints
+
+- Parser tests cover quiet defaults and `--verbose` combined with bare, single-file, directory, multi-file, GitHub URL, local Git revision/range, and GitHub-cache-bypass startup forms.
+- Parser and path-resolution tests prove that information-only outcomes create no sink, verbose diagnostics are active before fallible canonicalization and metadata access, and original CLI error text and exit codes remain unchanged.
+- Logger-focused tests cover disabled no-op behavior, stable record fields, graceful sink failure, terminal-stream selection, collision and symlink safety, private Unix permissions, control-character escaping, identical file/terminal formatting through controllable sinks, relative-home rejection, bounded cleanup, non-blocking queue saturation, dropped-record signaling, and bounded shutdown.
+- Startup-load tests cover File and FileSet arming, exact canonical-path matching, unrelated interactive opens, success/failure consumption, and non-file targets.
+- File-I/O tests cover successful and failed startup path resolution in `src-tauri/src/viewer/path_utils.rs`, document reads, general preview reads in `src-tauri/src/viewer/service.rs`, delegated EPUB archive open/entry reads, and watcher-triggered reload failures without duplicate operation records.
+- Runtime validation compares a verbose terminal launch, a non-verbose terminal launch, and a no-terminal-equivalent launch. It verifies the help text and the documented file path pattern.
+- The feature ships as a Rust-only additive diagnostic option with no new dependency, persisted application setting, IPC payload, or default-output change.
+- Multi-file rotation, remote upload, and general-purpose application logging remain outside this design. The bounded per-file ceiling and age-based cleanup above are the complete retention policy for this diagnostic surface.
+
 ## CSV Preview Architecture
 
 This section defines the architecture for CSV as a structured file-view preview kind.

@@ -1,0 +1,3 @@
+interface:
+  display_name: "supply-chain-secure-install"
+  short_description: "Use when adding, updating, or auditing Cargo dependencies. Provides supply chain attack countermeasures including Cargo.lock verification, cargo-audit, cargo-deny, cargo-vet, build.rs security, and CI/CD pipeline hardening. Adapted from Shai-Hulud npm attack lessons."

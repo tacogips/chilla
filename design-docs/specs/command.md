@@ -23,6 +23,7 @@ The target command surface defines no named subcommands. The binary accepts eith
 | `chilla <git_dir> <base>..<head>` | Local Git repository directory and two-dot range | Open local Git diff viewer mode for a direct base-to-head comparison |
 | `chilla <git_dir> <base>...<head>` | Local Git repository directory and three-dot range | Open local Git diff viewer mode for merge-base-to-head comparison |
 | `chilla <file_path> <file_path> ...` | Two or more file paths | Open file view mode with the left pane constrained to the provided files only |
+| `chilla --verbose [startup arguments]` | Global diagnostic flag plus any supported startup form | Start normally and record verbose startup and file-I/O diagnostics |
 | `chilla --help` | None | Show CLI help |
 | `chilla --version` | None | Show application version |
 
@@ -34,6 +35,7 @@ The positional arguments are named `path` in product messaging and accept relati
 |------|------|---------|-------------|
 | `--help` | boolean | `false` | Show CLI help and exit without starting the desktop app |
 | `--version` | boolean | `false` | Show application version and exit without starting the desktop app |
+| `--verbose` | boolean | `false` | Write startup and file-I/O diagnostics to `~/Library/Logs/chilla/chilla-verbose-<pid>[-<collision>].log`; also mirror the same records to an attached terminal |
 | `--no-github-diff-cache` | boolean | `false` | Bypass the GitHub diff cache for a GitHub diff URL startup target |
 | `--no-pr-diff-cache` | boolean | `false` | Compatibility alias for `--no-github-diff-cache` |
 
@@ -64,6 +66,11 @@ The positional arguments are named `path` in product messaging and accept relati
 - `chilla <git_dir> <base>..<head>` starts in local Git diff viewer mode for a direct base-to-head range.
 - `chilla <git_dir> <base>...<head>` starts in local Git diff viewer mode for a merge-base-to-head range.
 - `chilla <file_a> <file_b> ...` starts in file view mode with an explicit file-set selector that contains only the canonicalized requested files.
+- `--verbose` is a global modifier for app-starting invocations. It may appear before, between, or after startup arguments and must be removed before the existing argument-count and target-classification rules run.
+- Removing `--verbose` must leave every existing startup form unchanged, including bare, single-file, directory, multi-file, GitHub URL, local Git revision, and `--no-github-diff-cache` invocations.
+- Only the long form `--verbose` is defined. `-v` remains unsupported so it cannot be confused with version behavior or acquire an undocumented compatibility contract.
+- Repeated `--verbose` occurrences are idempotent: diagnostics are enabled once and all occurrences are removed before startup classification.
+- `--help` and `--version` remain information-only exits. Combining either with `--verbose` does not launch the desktop app or create a verbose log.
 - GitHub diff URLs are valid only as a single positional startup target in this slice. Combining a GitHub diff URL with local paths is invalid CLI usage.
 - Local Git diff startup is recognized when the first positional argument resolves to a directory inside a Git repository and the second positional argument is not an existing file path.
 - If both positional arguments resolve to files, explicit file-set startup wins.
@@ -77,6 +84,22 @@ The positional arguments are named `path` in product messaging and accept relati
 - For GitHub diff viewer mode, startup context includes the canonical source URL and parsed owner/repository/source identity. Diff retrieval occurs through the Tauri backend after app startup so loading and network errors can be shown in the workspace.
 - For local Git diff viewer mode, startup context includes the detected repository root, the originally requested Git directory, source kind, and normalized revision selector. Diff retrieval occurs through the Tauri backend after app startup so Git and revision errors can be shown in the workspace.
 - Markdown mode still recognizes `.md`, `.markdown`, and `.mdown` as Markdown inputs.
+
+### Verbose Diagnostic Contract
+
+Verbose diagnostics are an opt-in troubleshooting surface, not a change to normal application logging.
+
+- When `--verbose` is absent, no verbose log directory or file is created, no new terminal output is emitted, and existing startup and file-I/O behavior remains unchanged.
+- When `--verbose` is present, `HOME` is absolute, and the home plus `Library/Logs/chilla` path components are physical directories rather than symlinks, the app writes newline-delimited diagnostic records to `~/Library/Logs/chilla/chilla-verbose-<pid>.log`, or a deterministic `-<collision>` suffix when an existing entry already owns that process filename. An unsafe home path disables the file sink before diagnostic creation or retention deletion.
+- Each process log is capped at 10 MiB. The final record reports `verbose_log_limit_reached`, after which that process suppresses further diagnostic records. After the first current-process record, a background cleanup checks at most 256 entries for at most 25 ms and removes matching regular verbose logs older than 14 days only when they are not actively locked; active logs, symlinks, and unrelated entries are never retention targets.
+- Each record carries a Unix-epoch timestamp, elapsed time since process start, an event name, an outcome, and event-specific fields. Completed phases also carry their duration.
+- The same complete line is mirrored to stderr when stderr is a TTY, otherwise to stdout when stdout is a TTY. When neither stream is a TTY, no terminal write is attempted. Finder and `.app` launches therefore retain file diagnostics without depending on a terminal.
+- Application threads enqueue records without blocking into a bounded 1,024-record background sink. Queue saturation drops records and later emits `verbose_log_records_dropped`; file or terminal backpressure never blocks startup, UI commands, watcher callbacks, or measured file operations.
+- Failure to resolve a safe home directory, start the sink worker, create the log directory, create the file, lock the writer, enqueue, or write a record must never prevent startup or file operations. The file sink may degrade to the permitted TTY sink or become silent. Shutdown drains for at most 250 ms.
+- Startup records cover process start, CLI parse completion or failure, Tauri builder setup, window/webview creation, the first `get_startup_context` invocation as the frontend-ready marker, and startup-target load completion or failure.
+- File open, read, and metadata records include the operation, full path, elapsed duration, byte size when known, success or failure, and the underlying OS error message and raw OS error code when available.
+- Diagnostic records may contain full local paths because that is the feature's troubleshooting purpose. They must not contain file contents, environment values, credentials, authorization headers, or GitHub tokens.
+- Help output must document both `--verbose` and the `~/Library/Logs/chilla/chilla-verbose-<pid>[-<collision>].log` location pattern.
 
 ### GitHub Diff URL Contract
 

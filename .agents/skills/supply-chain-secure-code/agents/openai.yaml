@@ -1,0 +1,3 @@
+interface:
+  display_name: "supply-chain-secure-code"
+  short_description: "Use when writing Rust code that interacts with dependencies, handles credentials, executes commands, or manages configuration. Provides supply chain attack countermeasures at the code level including safe dependency usage, credential handling, subprocess hardening, and build.rs/proc-macro awareness. Adapted from Shai-Hulud npm attack lessons."

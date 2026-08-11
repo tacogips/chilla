@@ -6,10 +6,10 @@
   },
   "hash": "6c2d40b5cb5b08bb155c7862fcffe9bb3f3af0e725b6c8fd6c2f80862a4b4193",
   "metadata": {
-    "generated_at": "2026-08-10T20:22:19.715102+09:00",
+    "generated_at": "2026-08-12T02:32:23.85689+09:00",
     "generated_by": "ign update",
     "template_name": "rust-v1",
     "template_version": "1.0.0",
-    "ign_version": "0.1.20"
+    "ign_version": "0.1.25"
   }
 }

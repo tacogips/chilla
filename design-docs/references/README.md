@@ -21,6 +21,9 @@ This directory contains reference materials for system design and implementation
 | GitHub REST API commits | https://docs.github.com/rest/commits/commits | Official GitHub REST API reference for commit and compare retrieval |
 | GitHub REST API pulls | https://docs.github.com/rest/pulls/pulls | Official GitHub REST API reference for pull request metadata and changed files |
 | Task Documentation | https://taskfile.dev/ | Official go-task documentation |
+| Homebrew Acceptable Casks | https://docs.brew.sh/Acceptable-Casks | Official eligibility, notability, and rejection policy for cask submissions |
+| Adding Software to Homebrew | https://docs.brew.sh/Adding-Software-to-Homebrew#casks | Official cask authoring, validation, and submission workflow |
+| Homebrew Cask Cookbook | https://docs.brew.sh/Cask-Cookbook | Official cask stanza order and DSL reference |
 | qraftbox DiffView.svelte | sibling qraftbox checkout: `client-legacy/components/DiffView.svelte` | Local behavioral reference for PR diff mode controls, file diff rendering, and navigation buttons |
 | qraftbox diff types | sibling qraftbox checkout: `client-legacy/src/types/diff.ts` | Local reference for diff file, hunk/chunk, change-line, and view-mode shape |
 | qraftbox GitHub PR service | sibling qraftbox checkout: `src/server/github/pr-service.ts` | Local reference for GitHub PR metadata service boundaries |

@@ -15,6 +15,7 @@ Notable items that do not fit into architecture or client categories.
 ### Design Reference
 
 - See `design-docs/specs/design-macos-dmg-release.md` for the release-shape decision that keeps the current Darwin tarball contract but adds a separate Tauri `app,dmg` distribution path for signed/notarized macOS builds.
+- The same design now defines the migration from `tacogips/tap` to the official Homebrew Cask repository, including the external notability gate and the requirement not to advertise tap-free installation before upstream acceptance.
 
 ## Markdown Workbench Notes
 

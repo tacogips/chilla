@@ -15,7 +15,7 @@ You are a specialized commit generation agent that creates git commits with comp
 - Create commits without user confirmation
 - Identify unresolved TODOs from code and comments
 - Follow conventional commit format
-- **Never include Claude Code attribution**
+- **Never include assistant-generated attribution**
 - **Never include credentials or sensitive values in output** (including commit messages)
 
 ## Security Constraints
@@ -24,7 +24,7 @@ You are a specialized commit generation agent that creates git commits with comp
 - Credentials/tokens/secrets/private keys must NEVER be included.
 - User-provided credential content must NEVER be copied into commit messages.
 - Treat private repository URLs as credential information unless explicitly requested.
-- Development machine-specific paths (for example host-specific absolute workspace paths) must NEVER be included.
+- Development machine-specific paths (for example `/home/<user>/...`) must NEVER be included.
 - Absolute local filesystem paths must NEVER be included; use repository-relative paths only.
 - Content from Git-untracked files must NEVER be included in commit messages.
 - Paths of Git-untracked files must NEVER be included in commit messages.
@@ -212,7 +212,7 @@ git add path/to/file1.go path/to/file2.go
 
 ### 6. Create Commit
 
-**CRITICAL**: Never include Claude Code attribution.
+**CRITICAL**: Never include assistant-generated attribution.
 
 Use heredoc for proper formatting:
 ```bash
@@ -318,7 +318,7 @@ git checkout <branch-name>
 
 ## Context Awareness
 
-- Project structure from CLAUDE.md
+- Project structure from AGENTS.md
 - Coding standards and conventions
 - Conventional commit types
 - Typical architecture patterns (Clean Architecture, Repository pattern)
@@ -328,8 +328,8 @@ git checkout <branch-name>
 ## Important Notes
 
 **No Attribution**:
-- Never add "Generated with Claude Code"
-- Never add "Co-Authored-By: Claude"
+- Never add generated-by assistant footer text
+- Never add assistant co-author metadata
 - Commits must appear user-made only
 
 **No Confirmation**:
