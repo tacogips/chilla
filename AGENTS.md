@@ -139,15 +139,15 @@ This repository was originally generated from `ign-template`'s `rust-v1` templat
 - **Languages**: Rust for Tauri/backend work, TypeScript for frontend/app work
 - **Frontend Runtime / Package Manager**: Bun
 - **Desktop Framework**: Tauri
-- **Build Tools**: Cargo for Rust, Bun for frontend scripts, go-task for automation
-- **Environment Manager**: Nix flakes + direnv
-- **Development Shell**: Run `nix develop` or use direnv to activate
-- **Rust Toolchain**: Managed via rust-toolchain.toml and fenix
+- **Build Tools**: Cargo for Rust, Bun for frontend scripts, mise for automation
+- **Environment Manager**: mise
+- **Tool Setup**: Run `mise install`
+- **Rust Toolchain**: Managed through `mise.toml`
 
 ## Expected Project Structure
 ```
 .
-├── flake.nix              # Nix flake configuration for mixed Rust/Bun development
+├── mise.toml              # Tool versions and project tasks
 ├── Cargo.toml             # Root Rust manifest if shared Rust code exists at repo root
 ├── package.json           # Bun frontend package manifest
 ├── bun.lockb / bun.lock   # Bun lock file
@@ -174,7 +174,7 @@ This repository was originally generated from `ign-template`'s `rust-v1` templat
 - `rustfmt` - Rust formatter
 - `cargo-nextest` - Fast test runner
 - `tauri` - Tauri CLI, typically via `bunx tauri` or Cargo integration
-- `task` - Task runner (go-task)
+- `mise` - Tool manager and task runner
 
 ## Rust Code Development
 
@@ -299,8 +299,8 @@ When implementing from a plan:
 5. When all tasks complete, move plan to `impl-plans/completed/`
 
 ## Task Management
-- Use `task` command for build automation
-- Define tasks in `Taskfile.yml` (to be created as needed)
+- Use `mise run` for build automation
+- Define tasks in `mise.toml` (to be created as needed)
 
 ## Git Workflow
 - Create meaningful commit messages
@@ -356,9 +356,7 @@ Example subtask format:
 - This repository is based on `https://github.com/tacogips/ign-template/tree/main/rust-v1`
 - TypeScript-oriented agent assets were imported and adapted from `https://github.com/tacogips/ign-template/tree/main/bun-ts-v1`
 - The application domain is a Tauri + Bun Markdown viewer/editor
-- This project uses Nix flakes for reproducible development environments
-- Use direnv for automatic environment activation
-- Private environment variables should be managed in `tacogips/kinko` and loaded via `kinko direnv export`; `.envrc.private` is not sourced by default
-- All development dependencies are managed through flake.nix
-- Rust toolchain is managed via rust-toolchain.toml and fenix
+- This project uses mise for reproducible development environments
+- Run secret-dependent commands through `kinko exec`; never commit secret values
+- All development tools, tasks, and the Rust toolchain are managed through `mise.toml`
 - Frontend verification should prefer Bun scripts when available

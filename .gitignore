@@ -9,12 +9,12 @@
 # Cargo lock (optional - uncomment if you want to ignore)
 # Cargo.lock
 
-## nix/git
+## Environment
 .pre-commit-config.yaml
-**/.direnv
 **/.env
-**/.envrc.private*
 **/*.private*
+
+mise.local.toml
 
 ## large files
 **/*.zip

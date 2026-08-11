@@ -96,7 +96,7 @@ For most macOS users, prefer the Homebrew Cask or direct DMG install paths above
 
 ## Run
 
-From an installed binary or `nix run`, the CLI shape is:
+From an installed binary, the CLI shape is:
 
 ```bash
 chilla [path]
@@ -115,14 +115,14 @@ chilla movie.mp4
 During development:
 
 ```bash
-task dev
+mise run dev
 ```
 
-`nix run` can be used in the same style:
+The development task accepts paths in the same style:
 
 ```bash
-nix run . --
-nix run . -- README.md
+mise run dev --
+mise run dev -- README.md
 ```
 
 ## Captures
@@ -288,7 +288,7 @@ Key runtime contracts:
 ├── src-tauri/           # Rust + Tauri backend
 ├── design-docs/         # design notes and specs
 ├── impl-plans/          # implementation plans
-├── Taskfile.yml         # common development commands
+├── mise.toml         # common development commands
 ├── package.json         # Bun scripts
 └── flake.nix            # Nix development environment
 ```
@@ -300,25 +300,25 @@ Key runtime contracts:
 - Nix with flakes enabled
 - direnv optional but recommended
 
-The repository is set up for `nix develop`, which provides Bun, Cargo, Tauri-related build dependencies, and the Rust toolchain.
+The repository is set up for `mise install`, which provides Bun, Cargo, Tauri-related build dependencies, and the Rust toolchain.
 
 ### Enter the dev shell
 
 ```bash
-nix develop
+mise install
 ```
 
 ### Common commands
 
 ```bash
-task dev
-task build
-task nix-build
-task test
-task test-tauri-e2e-linux
-task check
-task clippy
-task fmt
+mise run dev
+mise run build
+mise run nix-build
+mise run test
+mise run test-tauri-e2e-linux
+mise run check
+mise run clippy
+mise run fmt
 ```
 
 Equivalent package-manager commands:
@@ -332,8 +332,8 @@ bun run test:tauri:e2e:linux
 CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-`task build` compiles the Tauri backend with Cargo `--release`.
-`task nix-build` builds the default flake package via `nix build .#chilla`, which also uses crane's release-profile Cargo path for the packaged desktop binary.
+`mise run build` compiles the Tauri backend with Cargo `--release`.
+`mise run tauri-build` creates the packaged desktop binary with Tauri's release build.
 
 ### Linux desktop E2E
 
@@ -346,7 +346,7 @@ bun run test:tauri:e2e:linux
 
 Notes:
 
-- `WebKitWebDriver` is expected on `PATH`. The Nix dev shell provides it via `webkitgtk_4_1`.
+- `WebKitWebDriver` is expected on `PATH`. The mise environment provides it via `webkitgtk_4_1`.
 - If `DISPLAY` is not set, the runner falls back to `Xvfb` when available.
 - The smoke test opens the real workspace, filters to `README.md`, and verifies the rendered Markdown preview.
 
@@ -355,7 +355,7 @@ Notes:
 The repository now also contains a separate Tauri macOS bundle flow for direct `.app` and `.dmg` builds:
 
 ```bash
-task bundle-macos-dmg
+mise run bundle-macos-dmg
 ```
 
 That path uses `src-tauri/tauri.macos.release.conf.json` and is intended for Apple Developer ID signing/notarization on a local macOS release machine. Apple certificate material should stay in the local keychain and password manager, not in GitHub Actions secrets.
@@ -370,7 +370,7 @@ The local release task expects these environment variables to be exported by the
 Publish signed/notarized macOS release assets from the local machine with:
 
 ```bash
-task release-macos-dmg-local -- v0.1.11
+mise run release-macos-dmg-local -- v0.1.11
 ```
 
 Repository-local GitHub Actions build unsigned `.app`/`.dmg` artifacts only for validation. They do not sign, notarize, or publish trusted release assets.
