@@ -10,8 +10,11 @@ pub mod markdown;
 pub mod media_stream;
 pub mod mp4_faststart;
 pub mod syntax_highlight;
+pub mod verbose_log;
 pub mod viewer;
 pub mod watcher;
+
+use std::time::Instant;
 
 use tauri::Manager;
 
@@ -24,16 +27,45 @@ use watcher::service::WatcherService;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(startup_target: StartupTarget) -> Result<(), String> {
-    tauri::Builder::default()
+    verbose_log::record_event("application_run_entry", "success");
+    let builder_started_at = verbose_log::is_enabled().then(Instant::now);
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_opener::init());
+    if let Some(started_at) = builder_started_at {
+        verbose_log::record_phase("tauri_builder_setup", started_at, "success");
+    }
+
+    let setup_started_at = verbose_log::is_enabled().then(Instant::now);
+    builder
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let document_service = DocumentService::new();
             let viewer_service = ViewerService::new();
             let watcher_service = WatcherService::new();
-            let media_stream_service = MediaStreamService::new()?;
-            let startup_context = viewer_service.startup_context(&startup_target)?;
+            let media_stream_service = match MediaStreamService::new() {
+                Ok(service) => service,
+                Err(error) => {
+                    if let Some(started_at) = setup_started_at {
+                        verbose_log::record_phase_message(
+                            "tauri_setup",
+                            started_at,
+                            "failure",
+                            &error.to_string(),
+                        );
+                    }
+                    return Err(error.into());
+                }
+            };
+            let startup_context = match viewer_service.startup_context(&startup_target) {
+                Ok(context) => context,
+                Err(error) => {
+                    if let Some(started_at) = setup_started_at {
+                        verbose_log::record_app_error("tauri_setup", None, started_at, &error);
+                    }
+                    return Err(error.into());
+                }
+            };
 
             app.manage(AppState::new(
                 startup_context,
@@ -43,6 +75,18 @@ pub fn run(startup_target: StartupTarget) -> Result<(), String> {
                 watcher_service,
                 media_stream_service,
             ));
+
+            if let Some(started_at) = setup_started_at {
+                verbose_log::record_phase("tauri_setup", started_at, "success");
+            }
+            let window_outcome = if app.get_webview_window("main").is_some() {
+                "success"
+            } else {
+                "unavailable"
+            };
+            if let Some(started_at) = setup_started_at {
+                verbose_log::record_phase("main_window_webview", started_at, window_outcome);
+            }
 
             Ok(())
         })

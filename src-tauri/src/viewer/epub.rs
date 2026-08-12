@@ -2,16 +2,20 @@ use std::{
     borrow::Cow,
     collections::{BTreeSet, HashMap},
     fs::File,
-    io::Read,
+    io::{Read, Seek},
     path::Path,
+    time::Instant,
 };
 
 use base64::Engine;
 use roxmltree::{Document, Node, NodeType};
-use zip::{result::ZipError, ZipArchive};
+use zip::{read::ZipFile, result::ZipError, ZipArchive};
 
-use crate::error::{AppError, AppResult};
 use crate::viewer::types::EpubNavigationItem;
+use crate::{
+    error::{AppError, AppResult},
+    verbose_log::{self, VerboseIoOutcome},
+};
 
 #[derive(Debug)]
 pub struct RenderedEpub {
@@ -47,8 +51,8 @@ struct RenderContext<'a> {
 }
 
 pub fn render_epub(path: &Path) -> AppResult<RenderedEpub> {
-    let file = File::open(path).map_err(|source| AppError::io("open", path, source))?;
-    let mut archive = ZipArchive::new(file).map_err(|source| {
+    let file = observed_open_epub(path).map_err(|source| AppError::io("open", path, source))?;
+    let mut archive = observed_open_zip_archive(file, path).map_err(|source| {
         AppError::epub_parse(path, format!("failed to open zip archive: {source}"))
     })?;
 
@@ -126,6 +130,122 @@ pub fn render_epub(path: &Path) -> AppResult<RenderedEpub> {
     Ok(RenderedEpub { html, toc })
 }
 
+fn observed_open_epub(path: &Path) -> std::io::Result<File> {
+    if !verbose_log::is_enabled() {
+        return File::open(path);
+    }
+
+    let started_at = Instant::now();
+    let result = File::open(path);
+    match &result {
+        Ok(_) => verbose_log::record_io(
+            "open_epub_archive",
+            path,
+            started_at,
+            VerboseIoOutcome::Success { size_bytes: None },
+        ),
+        Err(error) => verbose_log::record_io(
+            "open_epub_archive",
+            path,
+            started_at,
+            VerboseIoOutcome::Failure { error },
+        ),
+    }
+    result
+}
+
+fn observed_open_zip_archive<R: Read + Seek>(
+    reader: R,
+    epub_path: &Path,
+) -> Result<ZipArchive<R>, ZipError> {
+    if !verbose_log::is_enabled() {
+        return ZipArchive::new(reader);
+    }
+
+    let started_at = Instant::now();
+    let result = ZipArchive::new(reader);
+    match &result {
+        Ok(_) => verbose_log::record_io(
+            "open_epub_zip_archive",
+            epub_path,
+            started_at,
+            VerboseIoOutcome::Success { size_bytes: None },
+        ),
+        Err(ZipError::Io(error)) => verbose_log::record_io(
+            "open_epub_zip_archive",
+            epub_path,
+            started_at,
+            VerboseIoOutcome::Failure { error },
+        ),
+        Err(
+            ZipError::InvalidArchive(_) | ZipError::UnsupportedArchive(_) | ZipError::FileNotFound,
+        ) => {}
+    }
+    result
+}
+
+fn observed_lookup_epub_entry<'a, R: Read + Seek>(
+    archive: &'a mut ZipArchive<R>,
+    entry_path: &str,
+    epub_path: &Path,
+) -> Result<ZipFile<'a>, ZipError> {
+    if !verbose_log::is_enabled() {
+        return archive.by_name(entry_path);
+    }
+
+    let started_at = Instant::now();
+    let result = archive.by_name(entry_path);
+    match &result {
+        Ok(entry) => verbose_log::record_io(
+            "lookup_epub_archive_entry",
+            epub_path,
+            started_at,
+            VerboseIoOutcome::Success {
+                size_bytes: Some(entry.size()),
+            },
+        ),
+        Err(ZipError::Io(error)) => verbose_log::record_io(
+            "lookup_epub_archive_entry",
+            epub_path,
+            started_at,
+            VerboseIoOutcome::Failure { error },
+        ),
+        Err(
+            ZipError::InvalidArchive(_) | ZipError::UnsupportedArchive(_) | ZipError::FileNotFound,
+        ) => {}
+    }
+    result
+}
+
+fn observed_read_epub_entry(entry: &mut impl Read, epub_path: &Path) -> std::io::Result<Vec<u8>> {
+    if !verbose_log::is_enabled() {
+        let mut bytes = Vec::new();
+        entry.read_to_end(&mut bytes)?;
+        return Ok(bytes);
+    }
+
+    let started_at = Instant::now();
+    let mut bytes = Vec::new();
+    let result = entry.read_to_end(&mut bytes);
+    match &result {
+        Ok(_) => verbose_log::record_io(
+            "read_epub_archive_entry",
+            epub_path,
+            started_at,
+            VerboseIoOutcome::Success {
+                size_bytes: Some(bytes.len() as u64),
+            },
+        ),
+        Err(error) => verbose_log::record_io(
+            "read_epub_archive_entry",
+            epub_path,
+            started_at,
+            VerboseIoOutcome::Failure { error },
+        ),
+    }
+    result.map(|_| bytes)
+}
+
 fn read_zip_string(
     archive: &mut ZipArchive<File>,
     entry_path: &str,
@@ -148,20 +268,19 @@ fn read_zip_bytes(
     entry_path: &str,
     epub_path: &Path,
 ) -> AppResult<Vec<u8>> {
-    let mut entry = archive.by_name(entry_path).map_err(|source| {
-        AppError::epub_parse(
-            epub_path,
-            format!("missing archive entry `{entry_path}`: {source}"),
-        )
-    })?;
-    let mut bytes = Vec::new();
-    entry.read_to_end(&mut bytes).map_err(|source| {
+    let mut entry =
+        observed_lookup_epub_entry(archive, entry_path, epub_path).map_err(|source| {
+            AppError::epub_parse(
+                epub_path,
+                format!("missing archive entry `{entry_path}`: {source}"),
+            )
+        })?;
+    observed_read_epub_entry(&mut entry, epub_path).map_err(|source| {
         AppError::epub_parse(
             epub_path,
             format!("failed to read archive entry `{entry_path}`: {source}"),
         )
-    })?;
-    Ok(bytes)
+    })
 }
 
 fn try_read_zip_bytes(
@@ -169,7 +288,7 @@ fn try_read_zip_bytes(
     entry_path: &str,
     epub_path: &Path,
 ) -> AppResult<Option<Vec<u8>>> {
-    let mut entry = match archive.by_name(entry_path) {
+    let mut entry = match observed_lookup_epub_entry(archive, entry_path, epub_path) {
         Ok(entry) => entry,
         Err(ZipError::FileNotFound) => return Ok(None),
         Err(source) => {
@@ -180,14 +299,14 @@ fn try_read_zip_bytes(
         }
     };
 
-    let mut bytes = Vec::new();
-    entry.read_to_end(&mut bytes).map_err(|source| {
-        AppError::epub_parse(
-            epub_path,
-            format!("failed to read archive entry `{entry_path}`: {source}"),
-        )
-    })?;
-    Ok(Some(bytes))
+    observed_read_epub_entry(&mut entry, epub_path)
+        .map(Some)
+        .map_err(|source| {
+            AppError::epub_parse(
+                epub_path,
+                format!("failed to read archive entry `{entry_path}`: {source}"),
+            )
+        })
 }
 
 fn parse_container_rootfile_path(container_xml: &str, epub_path: &Path) -> AppResult<String> {
@@ -1496,12 +1615,79 @@ fn escape_html_attribute(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{
+        collections::HashMap,
+        fs,
+        io::{self, Cursor, Read, Seek, SeekFrom, Write},
+        path::{Path, PathBuf},
+        sync::{
+            atomic::{AtomicBool, AtomicU64, Ordering},
+            Arc,
+        },
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use zip::{result::ZipError, write::FileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
     use super::{
         is_allowed_epub_attribute, is_allowed_epub_element, rewrite_anchor_href,
         should_skip_epub_element_subtree, EpubPackage, RenderContext,
     };
+    use crate::{error::AppError, verbose_log};
+
+    static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    struct ToggleIoReader {
+        inner: Cursor<Vec<u8>>,
+        fail_io: Arc<AtomicBool>,
+    }
+
+    impl Read for ToggleIoReader {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            if self.fail_io.load(Ordering::Relaxed) {
+                return Err(io::Error::from_raw_os_error(5));
+            }
+            self.inner.read(buffer)
+        }
+    }
+
+    impl Seek for ToggleIoReader {
+        fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+            if self.fail_io.load(Ordering::Relaxed) {
+                return Err(io::Error::from_raw_os_error(5));
+            }
+            self.inner.seek(position)
+        }
+    }
+
+    impl TestDir {
+        fn new() -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let process_id = std::process::id();
+            let counter = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir()
+                .join(format!("chilla-epub-tests-{process_id}-{unique}-{counter}"));
+            fs::create_dir_all(&path).expect("create EPUB test directory");
+            Self { path }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
 
     fn empty_package() -> EpubPackage {
         EpubPackage {
@@ -1552,5 +1738,266 @@ mod tests {
             rewrite_anchor_href("https://example.com", &context).unwrap(),
             Some("https://example.com".to_string())
         );
+    }
+
+    #[test]
+    fn render_epub_records_open_and_entry_reads_without_changing_quiet_result() {
+        let test_dir = TestDir::new();
+        let path = test_dir.path().join("observed.epub");
+        write_minimal_epub(&path);
+        let canonical_path = path.canonicalize().expect("canonical EPUB path");
+
+        let (quiet_result, quiet_lines) =
+            verbose_log::with_disabled_test_sink(|| super::render_epub(&canonical_path));
+        let quiet_rendered = quiet_result.expect("quiet EPUB render");
+        let (verbose_result, verbose_lines) =
+            verbose_log::with_test_sink(|| super::render_epub(&canonical_path));
+        let verbose_rendered = verbose_result.expect("verbose EPUB render");
+
+        assert_eq!(verbose_rendered.html, quiet_rendered.html);
+        assert_eq!(verbose_rendered.toc, quiet_rendered.toc);
+        assert!(quiet_lines.is_empty());
+
+        let open_records = verbose_lines
+            .iter()
+            .filter(|line| line.contains("operation=\"open_epub_archive\""))
+            .collect::<Vec<_>>();
+        assert_eq!(open_records.len(), 1);
+        assert!(open_records[0].contains("outcome=\"success\""));
+        assert!(open_records[0].contains("duration_ms="));
+        assert!(open_records[0].contains(&format!("path=\"{}\"", canonical_path.display())));
+        assert!(open_records[0].contains("size_bytes=unavailable"));
+
+        let archive_records = verbose_lines
+            .iter()
+            .filter(|line| line.contains("operation=\"open_epub_zip_archive\""))
+            .collect::<Vec<_>>();
+        assert_eq!(archive_records.len(), 1);
+        assert!(archive_records[0].contains("outcome=\"success\""));
+        assert!(archive_records[0].contains("duration_ms="));
+        assert!(archive_records[0].contains(&format!("path=\"{}\"", canonical_path.display())));
+        assert!(archive_records[0].contains("size_bytes=unavailable"));
+
+        let lookup_records = verbose_lines
+            .iter()
+            .filter(|line| line.contains("operation=\"lookup_epub_archive_entry\""))
+            .collect::<Vec<_>>();
+        assert_eq!(lookup_records.len(), 3);
+        assert!(lookup_records.iter().all(|line| {
+            line.contains("outcome=\"success\"")
+                && line.contains("duration_ms=")
+                && line.contains(&format!("path=\"{}\"", canonical_path.display()))
+                && line.contains("size_bytes=")
+                && !line.contains("size_bytes=unavailable")
+        }));
+
+        let read_records = verbose_lines
+            .iter()
+            .filter(|line| line.contains("operation=\"read_epub_archive_entry\""))
+            .collect::<Vec<_>>();
+        assert_eq!(read_records.len(), 3);
+        assert!(read_records.iter().all(|line| {
+            line.contains("outcome=\"success\"")
+                && line.contains("duration_ms=")
+                && line.contains(&format!("path=\"{}\"", canonical_path.display()))
+                && line.contains("size_bytes=")
+                && !line.contains("size_bytes=unavailable")
+        }));
+    }
+
+    #[test]
+    fn render_epub_records_open_failure_before_app_error_mapping() {
+        let test_dir = TestDir::new();
+        let missing_path = test_dir.path().join("missing.epub");
+
+        let (error, lines) = verbose_log::with_test_sink(|| {
+            super::render_epub(&missing_path).expect_err("missing EPUB should fail")
+        });
+
+        assert!(matches!(error, AppError::Io { action: "open", .. }));
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("operation=\"open_epub_archive\""));
+        assert!(lines[0].contains("outcome=\"failure\""));
+        assert!(lines[0].contains("duration_ms="));
+        assert!(lines[0].contains(&format!("path=\"{}\"", missing_path.display())));
+        assert!(lines[0].contains("size_bytes=unavailable"));
+        assert!(lines[0].contains("error="));
+        assert!(lines[0].contains("raw_os_error="));
+        assert!(!lines[0].contains("raw_os_error=unavailable"));
+    }
+
+    #[test]
+    fn corrupted_archive_entry_read_is_recorded_before_epub_error_mapping() {
+        let test_dir = TestDir::new();
+        let path = test_dir.path().join("corrupt.epub");
+        write_corrupt_epub_entry(&path);
+        let canonical_path = path.canonicalize().expect("canonical EPUB path");
+
+        let (error, lines) = verbose_log::with_test_sink(|| {
+            let file = super::observed_open_epub(&canonical_path).expect("open corrupt EPUB");
+            let mut archive = ZipArchive::new(file).expect("open corrupt ZIP structure");
+            super::read_zip_bytes(&mut archive, "payload.bin", &canonical_path)
+                .expect_err("corrupt entry read should fail")
+        });
+
+        assert!(matches!(error, AppError::EpubParse { .. }));
+        let read_failure = lines
+            .iter()
+            .find(|line| {
+                line.contains("operation=\"read_epub_archive_entry\"")
+                    && line.contains("outcome=\"failure\"")
+            })
+            .expect("archive entry read failure record");
+        assert!(read_failure.contains("duration_ms="));
+        assert!(read_failure.contains(&format!("path=\"{}\"", canonical_path.display())));
+        assert!(read_failure.contains("size_bytes=unavailable"));
+        assert!(read_failure.contains("error="));
+        assert!(read_failure.contains("raw_os_error=unavailable"));
+    }
+
+    #[test]
+    fn zip_archive_construction_io_failure_is_recorded_before_mapping() {
+        let test_dir = TestDir::new();
+        let epub_path = test_dir.path().join("construction-io.epub");
+        let fail_io = Arc::new(AtomicBool::new(true));
+        let reader = ToggleIoReader {
+            inner: Cursor::new(Vec::new()),
+            fail_io,
+        };
+
+        let (error, lines) =
+            verbose_log::with_test_sink(|| {
+                match super::observed_open_zip_archive(reader, &epub_path) {
+                    Err(ZipError::Io(error)) => error,
+                    Err(other) => panic!("expected ZIP I/O error, got {other}"),
+                    Ok(_) => panic!("expected ZIP archive construction to fail"),
+                }
+            });
+
+        assert_eq!(error.raw_os_error(), Some(5));
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("operation=\"open_epub_zip_archive\""));
+        assert!(lines[0].contains("outcome=\"failure\""));
+        assert!(lines[0].contains("duration_ms="));
+        assert!(lines[0].contains(&format!("path=\"{}\"", epub_path.display())));
+        assert!(lines[0].contains("size_bytes=unavailable"));
+        assert!(lines[0].contains("error="));
+        assert!(lines[0].contains("raw_os_error=5"));
+    }
+
+    #[test]
+    fn archive_entry_lookup_io_failure_is_recorded_before_mapping() {
+        let test_dir = TestDir::new();
+        let path = test_dir.path().join("lookup-io.epub");
+        write_minimal_epub(&path);
+        let canonical_path = path.canonicalize().expect("canonical EPUB path");
+        let archive_bytes = fs::read(&canonical_path).expect("read EPUB fixture");
+        let fail_io = Arc::new(AtomicBool::new(false));
+        let reader = ToggleIoReader {
+            inner: Cursor::new(archive_bytes),
+            fail_io: Arc::clone(&fail_io),
+        };
+        let mut archive = ZipArchive::new(reader).expect("open EPUB fixture");
+        fail_io.store(true, Ordering::Relaxed);
+
+        let (error, lines) =
+            verbose_log::with_test_sink(|| {
+                match super::observed_lookup_epub_entry(
+                    &mut archive,
+                    "META-INF/container.xml",
+                    &canonical_path,
+                ) {
+                    Err(ZipError::Io(error)) => error,
+                    Err(other) => panic!("expected ZIP I/O error, got {other}"),
+                    Ok(_) => panic!("expected archive entry lookup to fail"),
+                }
+            });
+
+        assert_eq!(error.raw_os_error(), Some(5));
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("operation=\"lookup_epub_archive_entry\""));
+        assert!(lines[0].contains("outcome=\"failure\""));
+        assert!(lines[0].contains("duration_ms="));
+        assert!(lines[0].contains(&format!("path=\"{}\"", canonical_path.display())));
+        assert!(lines[0].contains("size_bytes=unavailable"));
+        assert!(lines[0].contains("error="));
+        assert!(lines[0].contains("raw_os_error=5"));
+    }
+
+    fn write_minimal_epub(path: &Path) {
+        let file = fs::File::create(path).expect("create EPUB fixture");
+        let mut archive = ZipWriter::new(file);
+        let options = FileOptions::default().compression_method(CompressionMethod::Deflated);
+
+        archive
+            .start_file("META-INF/container.xml", options)
+            .expect("start container entry");
+        archive
+            .write_all(
+                br#"<?xml version="1.0"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf"/>
+  </rootfiles>
+</container>"#,
+            )
+            .expect("write container entry");
+
+        archive
+            .start_file("OEBPS/content.opf", options)
+            .expect("start package entry");
+        archive
+            .write_all(
+                br#"<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Observed EPUB</dc:title>
+  </metadata>
+  <manifest>
+    <item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chapter"/>
+  </spine>
+</package>"#,
+            )
+            .expect("write package entry");
+
+        archive
+            .start_file("OEBPS/chapter.xhtml", options)
+            .expect("start chapter entry");
+        archive
+            .write_all(
+                br#"<?xml version="1.0"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head><title>Observed Chapter</title></head>
+  <body><h1>Observed Chapter</h1><p>EPUB body.</p></body>
+</html>"#,
+            )
+            .expect("write chapter entry");
+        archive.finish().expect("finish EPUB fixture");
+    }
+
+    fn write_corrupt_epub_entry(path: &Path) {
+        const PAYLOAD: &[u8] = b"chilla-corrupt-epub-entry-payload";
+
+        let file = fs::File::create(path).expect("create corrupt EPUB fixture");
+        let mut archive = ZipWriter::new(file);
+        let options = FileOptions::default().compression_method(CompressionMethod::Stored);
+        archive
+            .start_file("payload.bin", options)
+            .expect("start corrupt payload entry");
+        archive
+            .write_all(PAYLOAD)
+            .expect("write corrupt payload entry");
+        archive.finish().expect("finish corrupt EPUB fixture");
+
+        let mut bytes = fs::read(path).expect("read corrupt EPUB fixture");
+        let payload_offset = bytes
+            .windows(PAYLOAD.len())
+            .position(|window| window == PAYLOAD)
+            .expect("locate stored payload");
+        bytes[payload_offset] ^= 0xff;
+        fs::write(path, bytes).expect("corrupt stored payload");
     }
 }

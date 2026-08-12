@@ -83,6 +83,44 @@ The docs should distinguish:
 - the new DMG release flow intended for signed/notarized direct downloads
 - the fact that `homebrew-tap` remains a consumer repository that only needs URL/SHA updates after the new artifact is published
 
+## Official Homebrew Cask Distribution
+
+The final Homebrew distribution target is the official `Homebrew/homebrew-cask`
+repository. Once accepted there, the supported install command becomes:
+
+```bash
+brew install --cask chilla
+```
+
+This path must not require `brew tap tacogips/tap`. The custom tap remains the
+fallback until the official cask is merged and available through Homebrew's API.
+Repository installation documentation must not claim the official command works
+before that upstream state is verified.
+
+The official cask should consume the stable GitHub release DMG and preserve the
+current Apple Silicon constraint until an Intel or universal artifact is published.
+Its required release contract is:
+
+- stable versioned GitHub release URL
+- immutable SHA-256 for the selected DMG
+- `chilla.app` installed through the `app` artifact stanza
+- optional CLI symlink from the app bundle through the `binary` stanza
+- GitHub latest-release livecheck
+- no Gatekeeper workaround or signing caveat
+
+Before submission, the selected release must be verified with `codesign` and
+`spctl` as Developer ID signed and notarized. The candidate cask must pass the
+official new-cask audit, style, install, and uninstall checks.
+
+Homebrew's notability policy is an external acceptance gate. For a cask submitted
+by the owner of its source repository, the audit rejects the submission while all
+three metrics remain below 90 forks, 90 watchers, and 225 stars. Reaching any one
+of those thresholds satisfies the automated notability condition. An upstream pull
+request must not be opened while this mandatory gate fails because Homebrew
+documents that such submissions will be rejected. Once eligible, the contribution
+should contain one cask and follow the official repository's minimal-diff and
+validation requirements.
+
 ## Scope
 
 Included in this slice:
@@ -98,6 +136,9 @@ Excluded from this slice:
 - immediate migration of `homebrew-tap` to a DMG- or app-based cask
 - certificate issuance or Apple account setup
 - release signing validation on CI without real secrets
+
+The official Homebrew migration is tracked separately in
+`impl-plans/active/official-homebrew-cask.md`.
 
 ## References
 

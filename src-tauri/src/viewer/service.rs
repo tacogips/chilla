@@ -1,17 +1,23 @@
-use std::{fs, path::Path};
+use std::{
+    fs,
+    io::{Read, Seek, SeekFrom},
+    path::Path,
+    time::Instant,
+};
 
 use crate::{
     cli::StartupTarget,
     document::service::DocumentService,
     error::{AppError, AppResult},
     syntax_highlight::{self, SyntaxUiTheme},
+    verbose_log::{self, VerboseIoOutcome},
     viewer::csv::{parse_csv_preview, CsvPreviewLimits},
     viewer::directory_listing,
     viewer::epub::render_epub,
     viewer::html::{escape_html_attribute, escape_html_text, format_file_size},
     viewer::path_utils::{
         canonicalize_directory_path, canonicalize_file_path, canonicalize_path, display_path,
-        file_name, last_modified_string, parent_directory_path,
+        file_name, last_modified_string, observed_metadata, parent_directory_path,
     },
     viewer::preview_detection::{
         fallback_media_mime_type, is_csv_path, is_markdown_path, is_text_preview_extension,
@@ -121,8 +127,7 @@ impl ViewerService {
             return self.open_markdown_preview(&file_path, ui_theme);
         }
 
-        let detected_mime_type =
-            tree_magic_mini::from_filepath(&file_path).unwrap_or("application/octet-stream");
+        let detected_mime_type = detect_mime_type(&file_path);
         let mime_type = fallback_media_mime_type(&file_path, detected_mime_type)
             .unwrap_or(detected_mime_type)
             .to_string();
@@ -251,7 +256,8 @@ impl ViewerService {
         mime_type: String,
         ui_theme: SyntaxUiTheme,
     ) -> AppResult<FilePreview> {
-        let file_bytes = fs::read(path).map_err(|source| AppError::io("read", path, source))?;
+        let file_bytes =
+            observed_read(path).map_err(|source| AppError::io("read", path, source))?;
         let source_text = String::from_utf8_lossy(&file_bytes);
         let encoding_notice = lossy_utf8_notice(&file_bytes);
         let file_type = syntax_highlight::describe_file_syntax(path);
@@ -282,7 +288,8 @@ impl ViewerService {
         mime_type: String,
         ui_theme: SyntaxUiTheme,
     ) -> AppResult<FilePreview> {
-        let file_bytes = fs::read(path).map_err(|source| AppError::io("read", path, source))?;
+        let file_bytes =
+            observed_read(path).map_err(|source| AppError::io("read", path, source))?;
         let source_text = String::from_utf8_lossy(&file_bytes);
         let encoding_notice = lossy_utf8_notice(&file_bytes);
         let source_owned = source_text.into_owned();
@@ -349,7 +356,7 @@ impl ViewerService {
                 escape_html_text(&mime_type),
             ),
             last_modified: last_modified_string(path)?,
-            size_bytes: fs::metadata(path)
+            size_bytes: observed_metadata(path)
                 .map_err(|source| AppError::io("read metadata for", path, source))?
                 .len(),
             message,
@@ -367,7 +374,7 @@ fn lossy_utf8_notice(bytes: &[u8]) -> &'static str {
 
 pub fn resolve_startup_target(path: &Path) -> AppResult<StartupTarget> {
     let canonical_path = canonicalize_path(path)?;
-    let metadata = fs::metadata(&canonical_path)
+    let metadata = observed_metadata(&canonical_path)
         .map_err(|source| AppError::io("read metadata for", &canonical_path, source))?;
 
     if metadata.is_dir() {
@@ -377,6 +384,76 @@ pub fn resolve_startup_target(path: &Path) -> AppResult<StartupTarget> {
     } else {
         Err(AppError::UnsupportedPathKind(display_path(&canonical_path)))
     }
+}
+
+fn observed_read(path: &Path) -> std::io::Result<Vec<u8>> {
+    if !verbose_log::is_enabled() {
+        return fs::read(path);
+    }
+
+    let started_at = Instant::now();
+    let result = fs::read(path);
+    match &result {
+        Ok(bytes) => verbose_log::record_io(
+            "read",
+            path,
+            started_at,
+            VerboseIoOutcome::Success {
+                size_bytes: Some(bytes.len() as u64),
+            },
+        ),
+        Err(error) => verbose_log::record_io(
+            "read",
+            path,
+            started_at,
+            VerboseIoOutcome::Failure { error },
+        ),
+    }
+    result
+}
+
+fn detect_mime_type(path: &Path) -> &'static str {
+    if !verbose_log::is_enabled() {
+        return tree_magic_mini::from_filepath(path).unwrap_or("application/octet-stream");
+    }
+
+    observed_mime_type(path)
+        .ok()
+        .flatten()
+        .unwrap_or("application/octet-stream")
+}
+
+fn observed_mime_type(path: &Path) -> std::io::Result<Option<&'static str>> {
+    const MIME_PREFIX_LIMIT_BYTES: usize = 2 * 1024;
+
+    let started_at = Instant::now();
+    let result = (|| {
+        let mut file = fs::File::open(path)?;
+        let mut bytes = Vec::with_capacity(MIME_PREFIX_LIMIT_BYTES);
+        (&mut file)
+            .take(MIME_PREFIX_LIMIT_BYTES as u64)
+            .read_to_end(&mut bytes)?;
+        file.seek(SeekFrom::Start(0))?;
+        Ok((tree_magic_mini::from_file(&file), bytes.len() as u64))
+    })();
+
+    match &result {
+        Ok((_, size_bytes)) => verbose_log::record_io(
+            "detect_mime",
+            path,
+            started_at,
+            VerboseIoOutcome::Success {
+                size_bytes: Some(*size_bytes),
+            },
+        ),
+        Err(error) => verbose_log::record_io(
+            "detect_mime",
+            path,
+            started_at,
+            VerboseIoOutcome::Failure { error },
+        ),
+    }
+    result.map(|(mime_type, _)| mime_type)
 }
 
 #[cfg(test)]
@@ -391,7 +468,9 @@ mod tests {
     use super::{fallback_media_mime_type, ViewerService};
     use crate::{
         cli::StartupTarget,
+        error::AppError,
         syntax_highlight::SyntaxUiTheme,
+        verbose_log,
         viewer::types::{
             BrowserRoot, CsvRowCountStatus, DirectoryListSort, DirectorySortDirection,
             DirectorySortField, FilePreview, WorkspaceMode,
@@ -410,8 +489,11 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos();
+            let process_id = std::process::id();
             let counter = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!("chilla-viewer-tests-{unique}-{counter}"));
+            let path = std::env::temp_dir().join(format!(
+                "chilla-viewer-tests-{process_id}-{unique}-{counter}"
+            ));
             fs::create_dir_all(&path).expect("create temp test directory");
             Self { path }
         }
@@ -1135,6 +1217,167 @@ mod tests {
             }
             _ => panic!("expected text preview for TOML"),
         }
+    }
+
+    #[test]
+    fn text_preview_records_validation_read_and_metadata_once_per_operation() {
+        let test_dir = TestDir::new();
+        let path = test_dir.path().join("observed.txt");
+        let contents = "diagnostic text\n";
+        fs::write(&path, contents).expect("write text");
+        let canonical_path = path.canonicalize().expect("canonical path");
+
+        let (preview, lines) = verbose_log::with_test_sink(|| {
+            ViewerService::new()
+                .open_file_preview(&path, SyntaxUiTheme::Dark)
+                .expect("text preview")
+        });
+
+        assert!(matches!(preview, FilePreview::Text { .. }));
+        assert_eq!(
+            lines
+                .iter()
+                .filter(|line| line.contains("operation=\"canonicalize\""))
+                .count(),
+            1
+        );
+        assert_eq!(
+            lines
+                .iter()
+                .filter(|line| line.contains("operation=\"detect_mime\""))
+                .count(),
+            1
+        );
+        assert_eq!(
+            lines
+                .iter()
+                .filter(|line| line.contains("operation=\"read\""))
+                .count(),
+            1
+        );
+        assert_eq!(
+            lines
+                .iter()
+                .filter(|line| line.contains("operation=\"read_metadata\""))
+                .count(),
+            2
+        );
+        assert_eq!(
+            lines
+                .iter()
+                .filter(|line| line.contains("operation=\"read_modified_time\""))
+                .count(),
+            1
+        );
+        assert!(lines.iter().all(|line| {
+            line.contains(&format!("path=\"{}\"", canonical_path.display()))
+                && line.contains("outcome=\"success\"")
+        }));
+    }
+
+    #[test]
+    fn verbose_mime_detection_matches_quiet_file_classification() {
+        let test_dir = TestDir::new();
+        let fixtures: [(&str, &[u8]); 6] = [
+            ("notes.txt", b"plain text\n"),
+            (
+                "photo.png",
+                &[137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82],
+            ),
+            (
+                "clip.mp4",
+                &[0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109],
+            ),
+            ("podcast.mp3", &[73, 68, 51, 4, 0, 0, 0, 0, 0, 0]),
+            (
+                "notes.pdf",
+                b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
+            ),
+            ("asset.bin", &[0, 159, 146, 150]),
+        ];
+
+        for (file_name, contents) in fixtures {
+            let path = test_dir.path().join(file_name);
+            fs::write(&path, contents).expect("write MIME fixture");
+
+            let (quiet_mime_type, quiet_lines) =
+                verbose_log::with_disabled_test_sink(|| super::detect_mime_type(&path));
+            let (verbose_mime_type, verbose_lines) =
+                verbose_log::with_test_sink(|| super::detect_mime_type(&path));
+
+            assert_eq!(
+                verbose_mime_type, quiet_mime_type,
+                "verbose MIME detection changed classification for {file_name}"
+            );
+            assert!(quiet_lines.is_empty());
+            assert_eq!(verbose_lines.len(), 1);
+            assert!(verbose_lines[0].contains("operation=\"detect_mime\""));
+            assert!(verbose_lines[0].contains("outcome=\"success\""));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mime_detection_open_failure_is_recorded_and_preserves_binary_fallback() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let test_dir = TestDir::new();
+        let path = test_dir.path().join("unreadable.bin");
+        fs::write(&path, [0_u8, 159, 146, 150]).expect("write binary");
+        let canonical_path = path.canonicalize().expect("canonical path");
+        let original_permissions = fs::metadata(&path)
+            .expect("read original permissions")
+            .permissions();
+        let mut unreadable_permissions = original_permissions.clone();
+        unreadable_permissions.set_mode(0o000);
+        fs::set_permissions(&path, unreadable_permissions).expect("make fixture unreadable");
+
+        let (preview, lines) = verbose_log::with_test_sink(|| {
+            ViewerService::new()
+                .open_file_preview(&path, SyntaxUiTheme::Dark)
+                .expect("fallback binary preview")
+        });
+
+        fs::set_permissions(&path, original_permissions).expect("restore fixture permissions");
+
+        assert!(matches!(preview, FilePreview::Binary { .. }));
+        let mime_failure = lines
+            .iter()
+            .find(|line| {
+                line.contains("operation=\"detect_mime\"") && line.contains("outcome=\"failure\"")
+            })
+            .expect("MIME detection failure record");
+        assert!(mime_failure.contains("duration_ms="));
+        assert!(mime_failure.contains(&format!("path=\"{}\"", canonical_path.display())));
+        assert!(mime_failure.contains("size_bytes=unavailable"));
+        assert!(mime_failure.contains("error="));
+        assert!(mime_failure.contains("raw_os_error="));
+        assert!(!mime_failure.contains("raw_os_error=unavailable"));
+    }
+
+    #[test]
+    fn startup_resolution_records_canonicalize_failure_once() {
+        let test_dir = TestDir::new();
+        let path = test_dir.path().join("missing.md");
+
+        let (error, lines) = verbose_log::with_test_sink(|| {
+            super::resolve_startup_target(&path).expect_err("missing path should fail")
+        });
+
+        assert!(matches!(
+            error,
+            AppError::Io {
+                action: "canonicalize",
+                ..
+            }
+        ));
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("operation=\"canonicalize\""));
+        assert!(lines[0].contains("outcome=\"failure\""));
+        assert!(lines[0].contains(&format!("path=\"{}\"", path.display())));
+        assert!(lines[0].contains("size_bytes=unavailable"));
+        assert!(lines[0].contains("error="));
+        assert!(lines[0].contains("raw_os_error="));
     }
 
     #[test]

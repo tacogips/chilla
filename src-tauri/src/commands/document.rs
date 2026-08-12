@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 use tauri::State;
 
@@ -9,6 +12,7 @@ use crate::{
     github_pr_diff::{GitHubPrDiffService, GitHubPrTarget, PrDiffFileText, PrDiffSnapshot},
     markdown::render_markdown,
     syntax_highlight::SyntaxUiTheme,
+    verbose_log,
     viewer::types::{
         DirectoryListSort, DirectoryPage, ExplicitFileSetPage, FilePreview, StartupContext,
     },
@@ -16,6 +20,25 @@ use crate::{
 
 fn format_command_error(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+fn handle_open_file_preview_join_error(
+    path: &Path,
+    command_started_at: Option<Instant>,
+    startup_started_at: Option<Instant>,
+    error: impl std::fmt::Display,
+) -> String {
+    let error = format_command_error(error);
+    if let Some(started_at) = command_started_at {
+        verbose_log::record_phase_message(
+            "open_file_preview_command",
+            started_at,
+            "failure",
+            &error,
+        );
+    }
+    verbose_log::complete_startup_load(path, startup_started_at, "failure");
+    error
 }
 
 fn register_media_stream_url(
@@ -111,6 +134,7 @@ pub fn render_markdown_preview(
 
 #[tauri::command]
 pub fn get_startup_context(state: State<'_, AppState>) -> Result<StartupContext, String> {
+    verbose_log::mark_frontend_ready();
     Ok(state.startup_context())
 }
 
@@ -205,18 +229,65 @@ pub async fn open_file_preview(
     path: String,
     state: State<'_, AppState>,
 ) -> Result<FilePreview, String> {
+    let command_started_at = verbose_log::is_enabled().then(Instant::now);
+    let startup_started_at = verbose_log::startup_load_started(Path::new(&path));
     let theme = state.syntax_ui_theme();
     let viewer_service = state.viewer_service();
     let task_path = path.clone();
 
-    let preview = tauri::async_runtime::spawn_blocking(move || {
+    let preview_result = match tauri::async_runtime::spawn_blocking(move || {
         viewer_service.open_file_preview(Path::new(&task_path), theme)
     })
     .await
-    .map_err(format_command_error)?
-    .map_err(format_command_error)?;
+    {
+        Ok(preview_result) => preview_result,
+        Err(error) => {
+            return Err(handle_open_file_preview_join_error(
+                Path::new(&path),
+                command_started_at,
+                startup_started_at,
+                error,
+            ));
+        }
+    };
 
-    attach_media_stream_url(preview, &state)
+    let preview = match preview_result {
+        Ok(preview) => preview,
+        Err(error) => {
+            if let Some(started_at) = command_started_at {
+                verbose_log::record_app_error(
+                    "open_file_preview_command",
+                    Some(Path::new(&path)),
+                    started_at,
+                    &error,
+                );
+            }
+            verbose_log::complete_startup_load(Path::new(&path), startup_started_at, "failure");
+            return Err(format_command_error(error));
+        }
+    };
+
+    match attach_media_stream_url(preview, &state) {
+        Ok(preview) => {
+            if let Some(started_at) = command_started_at {
+                verbose_log::record_phase("open_file_preview_command", started_at, "success");
+            }
+            verbose_log::complete_startup_load(Path::new(&path), startup_started_at, "success");
+            Ok(preview)
+        }
+        Err(error) => {
+            if let Some(started_at) = command_started_at {
+                verbose_log::record_phase_message(
+                    "open_file_preview_command",
+                    started_at,
+                    "failure",
+                    &error,
+                );
+            }
+            verbose_log::complete_startup_load(Path::new(&path), startup_started_at, "failure");
+            Err(error)
+        }
+    }
 }
 
 #[tauri::command]
@@ -226,23 +297,43 @@ pub fn stop_document_watch(state: State<'_, AppState>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn open_document(path: String, state: State<'_, AppState>) -> Result<DocumentSnapshot, String> {
+    let command_started_at = verbose_log::is_enabled().then(Instant::now);
+    let startup_started_at = verbose_log::startup_load_started(Path::new(&path));
     let theme = state.syntax_ui_theme();
     let document_service = state.document_service();
-    let snapshot = document_service
+    let result = document_service
         .open(Path::new(&path), theme)
-        .map_err(format_command_error)?;
+        .and_then(|snapshot| {
+            state.watcher_service().watch_active_document(
+                PathBuf::from(&snapshot.path),
+                state.app_handle(),
+                document_service,
+                state.syntax_ui_theme_handle(),
+            )?;
+            Ok(snapshot)
+        });
 
-    state
-        .watcher_service()
-        .watch_active_document(
-            PathBuf::from(&snapshot.path),
-            state.app_handle(),
-            document_service,
-            state.syntax_ui_theme_handle(),
-        )
-        .map_err(format_command_error)?;
-
-    Ok(snapshot)
+    match result {
+        Ok(snapshot) => {
+            if let Some(started_at) = command_started_at {
+                verbose_log::record_phase("open_document_command", started_at, "success");
+            }
+            verbose_log::complete_startup_load(Path::new(&path), startup_started_at, "success");
+            Ok(snapshot)
+        }
+        Err(error) => {
+            if let Some(started_at) = command_started_at {
+                verbose_log::record_app_error(
+                    "open_document_command",
+                    Some(Path::new(&path)),
+                    started_at,
+                    &error,
+                );
+            }
+            verbose_log::complete_startup_load(Path::new(&path), startup_started_at, "failure");
+            Err(format_command_error(error))
+        }
+    }
 }
 
 #[tauri::command]
@@ -276,4 +367,38 @@ pub fn reload_document(
         .document_service()
         .reload(Path::new(&path), theme)
         .map_err(format_command_error)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        io,
+        path::Path,
+        time::{Duration, Instant},
+    };
+
+    use super::handle_open_file_preview_join_error;
+    use crate::verbose_log;
+
+    #[test]
+    fn open_file_preview_join_failure_is_recorded_and_preserves_error_text() {
+        let command_started_at = Instant::now()
+            .checked_sub(Duration::from_millis(2))
+            .expect("test instant");
+        let path = Path::new("./join-failure.md");
+
+        let (error, lines) = verbose_log::with_test_sink(|| {
+            handle_open_file_preview_join_error(
+                path,
+                Some(command_started_at),
+                None,
+                io::Error::other("preview worker failed"),
+            )
+        });
+
+        assert_eq!(error, "preview worker failed");
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("event=\"open_file_preview_command\" outcome=\"failure\""));
+        assert!(lines[0].contains("error=\"preview worker failed\""));
+    }
 }

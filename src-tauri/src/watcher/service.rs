@@ -12,6 +12,7 @@ use crate::{
     error::{AppError, AppResult},
     events::DOCUMENT_REFRESHED_EVENT,
     syntax_highlight::SyntaxUiTheme,
+    verbose_log,
 };
 
 struct ActiveWatcher {
@@ -87,9 +88,15 @@ impl WatcherService {
                     .map(|guard| *guard)
                     .unwrap_or_default();
 
-                if let Ok(snapshot) =
-                    document_service_for_callback.reload(&watched_path_for_callback, ui_theme)
-                {
+                let reload_started_at = verbose_log::is_enabled().then(Instant::now);
+                let reload_result =
+                    document_service_for_callback.reload(&watched_path_for_callback, ui_theme);
+                record_reload_outcome(
+                    &watched_path_for_callback,
+                    reload_started_at,
+                    &reload_result,
+                );
+                if let Ok(snapshot) = reload_result {
                     let _ = app_handle_for_callback.emit(DOCUMENT_REFRESHED_EVENT, snapshot);
                 }
             })?;
@@ -120,6 +127,19 @@ impl WatcherService {
     }
 }
 
+fn record_reload_outcome<T>(path: &Path, started_at: Option<Instant>, result: &AppResult<T>) {
+    let Some(started_at) = started_at else {
+        return;
+    };
+
+    match result {
+        Ok(_) => verbose_log::record_path_phase("watcher_reload", path, started_at, "success"),
+        Err(error) => {
+            verbose_log::record_app_error("watcher_reload", Some(path), started_at, error);
+        }
+    }
+}
+
 fn paths_match(candidate: &Path, watched_path: &Path) -> bool {
     if candidate == watched_path {
         return true;
@@ -139,9 +159,14 @@ fn paths_match(candidate: &Path, watched_path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{io, path::Path, time::Instant};
 
-    use super::paths_match;
+    use crate::{
+        error::{AppError, AppResult},
+        verbose_log,
+    };
+
+    use super::{paths_match, record_reload_outcome};
 
     #[test]
     fn paths_match_accepts_same_directory_replacement_path_without_canonicalizing() {
@@ -157,5 +182,36 @@ mod tests {
             Path::new("/tmp/chilla-other/notes.md"),
             Path::new("/tmp/chilla/notes.md")
         ));
+    }
+
+    #[test]
+    fn watcher_reload_records_one_semantic_success_without_file_io_duplication() {
+        let path = Path::new("/tmp/chilla/notes.md");
+        let result: AppResult<()> = Ok(());
+        let (_, lines) = verbose_log::with_test_sink(|| {
+            record_reload_outcome(path, Some(Instant::now()), &result);
+        });
+
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("event=\"watcher_reload\" outcome=\"success\""));
+        assert!(lines[0].contains("path=\"/tmp/chilla/notes.md\""));
+        assert!(!lines[0].contains("event=\"file_io\""));
+    }
+
+    #[test]
+    fn watcher_reload_records_one_swallowed_semantic_failure() {
+        let path = Path::new("/tmp/chilla/missing.md");
+        let error = AppError::io("read", path, io::Error::from(io::ErrorKind::NotFound));
+        let result: AppResult<()> = Err(error);
+        let (_, lines) = verbose_log::with_test_sink(|| {
+            record_reload_outcome(path, Some(Instant::now()), &result);
+        });
+
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("event=\"watcher_reload\" outcome=\"failure\""));
+        assert!(lines[0].contains("path=\"/tmp/chilla/missing.md\""));
+        assert!(lines[0].contains("error="));
+        assert!(lines[0].contains("raw_os_error=unavailable"));
+        assert!(!lines[0].contains("event=\"file_io\""));
     }
 }
