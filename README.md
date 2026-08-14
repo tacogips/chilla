@@ -196,6 +196,8 @@ Global shortcuts:
 - `Shift+P`: switch Markdown raw/preview pane
 - `1`: select raw view for Markdown or CSV
 - `2`: select Markdown preview or formatted CSV view when available
+- `+` / `-`: zoom the rendered Markdown or file preview in/out by 10% (50%-300%)
+- `Ctrl+mouse wheel`: zoom the rendered preview under the pointer
 - `Shift+S`: toggle light/dark theme
 
 File tree shortcuts:
@@ -370,7 +372,7 @@ The local release task expects these environment variables to be exported by the
 Publish signed/notarized macOS release assets from the local machine with:
 
 ```bash
-mise run release-macos-dmg-local -- v0.1.11
+mise run release-macos-dmg-local -- v0.1.12
 ```
 
 Repository-local GitHub Actions build unsigned `.app`/`.dmg` artifacts only for validation. They do not sign, notarize, or publish trusted release assets.

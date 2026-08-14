@@ -647,3 +647,32 @@ File-view image flow:
 - Cargo verification should cover HEIC / HEIF extension-to-MIME classification and `open_file_preview` routing into image preview behavior.
 - Mixed-stack runtime verification should launch the debug app after implementation and exercise a Markdown document that references a local HEIC / HEIF image plus direct file-view preview of the same asset.
 - Cargo commands must be run with `CARGO_TERM_QUIET=true`.
+
+---
+
+## Shared Rendered Preview Zoom
+
+Rendered HTML previews use one frontend-owned zoom model for Markdown and direct
+image-file previews. The behavior stays inside the shared `PreviewPane`; it does
+not change the Rust preview payload or introduce a Tauri command.
+
+### Interaction Contract
+
+- `+` increases the active rendered preview zoom by 10 percentage points.
+- `-` decreases the active rendered preview zoom by 10 percentage points.
+- `Ctrl` plus mouse-wheel up or down applies the same increment or decrement
+  while the pointer is over the rendered preview.
+- Preview zoom is clamped from 50% through 300%.
+- Keyboard zoom is ignored while the user is typing in an editable control.
+- Handled wheel events suppress the WebView's native page zoom.
+- The preview header exposes the current percentage so the state remains visible.
+
+The zoom applies to the whole rendered content tree. This keeps Markdown text,
+diagrams, tables, and embedded images in the same visual scale and lets direct
+image previews grow beyond the pane width with normal pane scrolling.
+
+### Scope Boundary
+
+Raw Markdown and CSV editors are not zoom targets. PDF keeps its embedded viewer
+controls, EPUB keeps its pagination model, and audio/video playback shortcuts are
+unchanged. No persisted preference or cross-window synchronization is required.

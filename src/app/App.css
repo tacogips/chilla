@@ -671,6 +671,24 @@ button {
   line-height: 1.5;
 }
 
+.preview__header-detail {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.preview__zoom {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.preview__zoom-surface {
+  transform: scale(var(--preview-zoom-scale));
+  transform-origin: top left;
+}
+
 /* Override github-markdown-css colour tokens so the preview follows
    data-theme instead of the OS prefers-color-scheme media query.
    Specificity (0,3,0) + !important on painted properties guarantees

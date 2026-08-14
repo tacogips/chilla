@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "solid-js/web";
-import { mermaidThemeVariables, PreviewPane } from "./PreviewPane";
+import {
+  mermaidThemeVariables,
+  nextPreviewZoom,
+  PreviewPane,
+} from "./PreviewPane";
 
 vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc(path: string) {
@@ -29,9 +33,9 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
   },
 }));
 
-describe("PreviewPane", () => {
-  let dispose: VoidFunction | undefined;
+let dispose: VoidFunction | undefined;
 
+describe("PreviewPane", () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>';
   });
@@ -291,7 +295,114 @@ describe("PreviewPane", () => {
     );
     expect(document.body.textContent).not.toContain("Rendered HTML");
   });
+
+  it("zooms with plus and minus keyboard shortcuts", () => {
+    renderPreview();
+
+    expect(previewZoomText()).toBe("100%");
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "+" }));
+    expect(previewZoomText()).toBe("110%");
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "-" }));
+    expect(previewZoomText()).toBe("100%");
+  });
+
+  it("ignores preview zoom shortcuts from editable targets", () => {
+    renderPreview();
+    const input = document.createElement("input");
+    document.body.append(input);
+
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: "+" }),
+    );
+
+    expect(previewZoomText()).toBe("100%");
+  });
+
+  it("handles Ctrl+wheel over the preview without changing ordinary wheel behavior", () => {
+    renderPreview();
+    const preview = document.querySelector<HTMLElement>(".pane__body.preview");
+
+    if (preview === null) {
+      throw new Error("missing preview body");
+    }
+
+    const zoomIn = new WheelEvent("wheel", {
+      cancelable: true,
+      ctrlKey: true,
+      deltaY: -1,
+    });
+    preview.dispatchEvent(zoomIn);
+    expect(zoomIn.defaultPrevented).toBe(true);
+    expect(previewZoomText()).toBe("110%");
+
+    const zoomOut = new WheelEvent("wheel", {
+      cancelable: true,
+      ctrlKey: true,
+      deltaY: 1,
+    });
+    preview.dispatchEvent(zoomOut);
+    expect(zoomOut.defaultPrevented).toBe(true);
+    expect(previewZoomText()).toBe("100%");
+
+    const ordinaryWheel = new WheelEvent("wheel", {
+      cancelable: true,
+      deltaY: -1,
+    });
+    preview.dispatchEvent(ordinaryWheel);
+    expect(ordinaryWheel.defaultPrevented).toBe(false);
+    expect(previewZoomText()).toBe("100%");
+  });
+
+  it("clamps zoom and scales the whole rendered content surface", () => {
+    renderPreview('<p>Text</p><img src="https://example.com/image.png" />');
+
+    for (let step = 0; step < 30; step += 1) {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "+" }));
+    }
+    expect(previewZoomText()).toBe("300%");
+
+    const surface = document.querySelector<HTMLElement>(
+      ".preview__zoom-surface",
+    );
+    expect(surface?.style.getPropertyValue("--preview-zoom-scale")).toBe("3");
+    expect(surface?.querySelector("img")).not.toBeNull();
+
+    for (let step = 0; step < 30; step += 1) {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "-" }));
+    }
+    expect(previewZoomText()).toBe("50%");
+
+    expect(nextPreviewZoom(300, "in")).toBe(300);
+    expect(nextPreviewZoom(50, "out")).toBe(50);
+  });
 });
+
+function renderPreview(html = "<p>Preview content</p>"): void {
+  const root = document.getElementById("root");
+
+  if (root === null) {
+    throw new Error("missing test root");
+  }
+
+  dispose = render(
+    () => (
+      <PreviewPane
+        colorScheme="dark"
+        documentPath={null}
+        html={html}
+        selectedAnchorId={null}
+        visible={true}
+      />
+    ),
+    root,
+  );
+}
+
+function previewZoomText(): string | null {
+  return document.querySelector(".preview__zoom")?.textContent ?? null;
+}
 
 async function waitFor(
   assertion: () => void,

@@ -4,7 +4,15 @@ import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import "github-markdown-css/github-markdown.css";
-import { createEffect, on, onCleanup, onMount, type JSX } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  on,
+  onCleanup,
+  onMount,
+  type JSX,
+} from "solid-js";
+import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import type { ColorScheme } from "../../lib/theme";
 import {
   isDefaultBrowserUrl,
@@ -19,6 +27,30 @@ interface PreviewPaneProps {
   readonly documentPath: string | null;
   readonly colorScheme: ColorScheme;
   readonly subtitle?: string;
+}
+
+type PreviewZoomDirection = "in" | "out";
+
+const PREVIEW_ZOOM_STEP = 10;
+const PREVIEW_ZOOM_MIN = 50;
+const PREVIEW_ZOOM_MAX = 300;
+
+export function nextPreviewZoom(
+  current: number,
+  direction: PreviewZoomDirection,
+): number {
+  const adjustment =
+    direction === "in" ? PREVIEW_ZOOM_STEP : -PREVIEW_ZOOM_STEP;
+  return Math.min(
+    PREVIEW_ZOOM_MAX,
+    Math.max(PREVIEW_ZOOM_MIN, current + adjustment),
+  );
+}
+
+function previewZoomStyle(zoom: number): JSX.CSSProperties {
+  return {
+    "--preview-zoom-scale": String(zoom / 100),
+  };
 }
 
 interface MarkdownThemePalette {
@@ -540,12 +572,19 @@ export async function enhancePreviewContent(
 
 export function PreviewPane(props: PreviewPaneProps) {
   let containerRef: HTMLDivElement | undefined;
+  let previewRef: HTMLDivElement | undefined;
   let enhancementRunId = 0;
+  const [zoom, setZoom] = createSignal(100);
+
+  const adjustZoom = (direction: PreviewZoomDirection) => {
+    setZoom((current) => nextPreviewZoom(current, direction));
+  };
 
   onMount(() => {
     const container = containerRef;
+    const preview = previewRef;
 
-    if (container === undefined) {
+    if (container === undefined || preview === undefined) {
       return;
     }
 
@@ -569,10 +608,42 @@ export function PreviewPane(props: PreviewPaneProps) {
       });
     };
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        !props.visible ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        isEditableKeyboardTarget(event.target)
+      ) {
+        return;
+      }
+
+      if (event.key !== "+" && event.key !== "-") {
+        return;
+      }
+
+      event.preventDefault();
+      adjustZoom(event.key === "+" ? "in" : "out");
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!props.visible || !event.ctrlKey || event.deltaY === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      adjustZoom(event.deltaY < 0 ? "in" : "out");
+    };
+
     container.addEventListener("click", handleClick);
+    window.addEventListener("keydown", handleKeyDown);
+    preview.addEventListener("wheel", handleWheel, { passive: false });
 
     onCleanup(() => {
       container.removeEventListener("click", handleClick);
+      window.removeEventListener("keydown", handleKeyDown);
+      preview.removeEventListener("wheel", handleWheel);
     });
   });
 
@@ -626,16 +697,25 @@ export function PreviewPane(props: PreviewPaneProps) {
     <section class={`pane${props.visible ? "" : " pane--hidden"}`}>
       <header class="pane__header">
         <span class="pane__title">Preview</span>
-        <span>{props.subtitle ?? "Rendered HTML"}</span>
+        <span class="preview__header-detail">
+          <span>{props.subtitle ?? "Rendered HTML"}</span>
+          <span class="preview__zoom" aria-live="polite">
+            {zoom()}%
+          </span>
+        </span>
       </header>
       <div
+        ref={previewRef}
         class="pane__body preview"
         style={previewThemeStyle(props.colorScheme)}
       >
         <div
           ref={containerRef}
-          class="preview__content markdown-body"
-          style={previewThemeStyle(props.colorScheme)}
+          class="preview__content preview__zoom-surface markdown-body"
+          style={{
+            ...previewThemeStyle(props.colorScheme),
+            ...previewZoomStyle(zoom()),
+          }}
           innerHTML={props.html}
         />
       </div>
