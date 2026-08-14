@@ -104,6 +104,13 @@ test -d "$app_path"
 test -n "$dmg_path"
 test -f "$dmg_path"
 
+xcrun notarytool submit "$dmg_path" \
+  --apple-id "$APPLE_ID" \
+  --password "$APPLE_PASSWORD" \
+  --team-id "$APPLE_TEAM_ID" \
+  --wait
+xcrun stapler staple "$dmg_path"
+
 codesign --verify --deep --strict --verbose=2 "$app_path"
 xcrun stapler validate "$app_path"
 xcrun stapler validate "$dmg_path"
