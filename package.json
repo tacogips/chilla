@@ -1,6 +1,6 @@
 {
   "name": "chilla",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -15,7 +15,7 @@
     "lint:ts": "bun run lint:biome && bun run typecheck",
     "format": "biome format --write src scripts tests vite.config.ts vitest.config.ts",
     "format:check": "biome format --check src scripts tests vite.config.ts vitest.config.ts",
-    "test": "bun test ./src/features/file-view/sort.test.ts ./src/features/preview/preview-assets.test.ts ./src/features/toc/heading-tree.test.ts ./src/features/workspace/openFiles.test.ts",
+    "test": "bun test ./src/features/file-view/sort.test.ts ./src/features/preview/preview-assets.test.ts ./src/features/toc/heading-tree.test.ts ./src/features/workspace/openFiles.test.ts ./src/features/workspace/workspacePreviewModel.test.ts",
     "test:dom": "vitest run --config vitest.config.ts",
     "test:tauri:e2e:linux": "bash scripts/run-tauri-e2e-linux.sh",
     "tauri": "tauri"

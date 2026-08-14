@@ -104,6 +104,18 @@ function textDiffFile(
   };
 }
 
+function svgDiffFile(
+  path = "icon.svg",
+  fullText:
+    | string
+    | null = '<svg xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="8" /></svg>',
+): PrDiffFile {
+  return {
+    ...textDiffFile(path, "<svg>"),
+    full_text: fullText,
+  };
+}
+
 function binaryDiffFile(path: string): PrDiffFile {
   return {
     path,
@@ -678,6 +690,191 @@ describe("PrDiffWorkspace", () => {
       );
       expect(document.body.textContent).toContain("loaded");
     });
+  });
+
+  it("shows image mode only for SVG paths and renders encoded SVG content", async () => {
+    const svgText =
+      '<svg xmlns="http://www.w3.org/2000/svg"><text x="0" y="12">safe &amp; isolated</text></svg>';
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([textDiffFile("README.md"), svgDiffFile("ICON.SVG", svgText)]),
+    );
+
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-path="ICON.SVG"]')).not.toBeNull();
+    });
+    expect(document.querySelector('[aria-label="SVG image"]')).toBeNull();
+
+    click('[data-path="ICON.SVG"]');
+    await waitFor(() => {
+      expect(document.querySelector('[aria-label="SVG image"]')).not.toBeNull();
+    });
+    click('[aria-label="SVG image"]');
+
+    await waitFor(() => {
+      const image = document.querySelector<HTMLImageElement>(
+        '.pr-diff-image img[alt="Rendered preview of ICON.SVG"]',
+      );
+      expect(image?.getAttribute("src")).toBe(
+        `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`,
+      );
+      expect(document.querySelector(".pr-diff-image svg")).toBeNull();
+    });
+  });
+
+  it("loads complete SVG text lazily when image mode is selected", async () => {
+    const svgText =
+      '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0" /></svg>';
+    let resolveText!: (value: {
+      readonly full_text: string;
+      readonly full_text_truncated: boolean;
+    }) => void;
+    loadPrDiffMock.mockResolvedValue(snapshot([svgDiffFile("icon.svg", null)]));
+    loadPrDiffFileTextMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveText = resolve;
+      }),
+    );
+
+    renderWorkspace();
+    await waitFor(() => {
+      expect(document.querySelector('[data-path="icon.svg"]')).not.toBeNull();
+    });
+    click('[data-path="icon.svg"]');
+    click('[aria-label="SVG image"]');
+
+    await waitFor(() => {
+      expect(loadPrDiffFileTextMock).toHaveBeenCalledWith(
+        "https://raw.githubusercontent.com/tacogips/chilla/main/icon.svg",
+      );
+      expect(document.body.textContent).toContain("Loading SVG image...");
+      expect(document.querySelector(".pr-diff-image img")).toBeNull();
+    });
+
+    resolveText({ full_text: svgText, full_text_truncated: false });
+    await waitFor(() => {
+      expect(
+        document.querySelector<HTMLImageElement>(".pr-diff-image img")?.src,
+      ).toContain(encodeURIComponent(svgText));
+    });
+  });
+
+  it("shows explicit SVG image fallbacks for load failures and truncated content", async () => {
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([
+        svgDiffFile("broken.svg", null),
+        {
+          ...svgDiffFile("truncated.svg"),
+          full_text_truncated: true,
+        },
+      ]),
+    );
+    loadPrDiffFileTextMock.mockRejectedValue(new Error("raw content failed"));
+
+    renderWorkspace();
+    await waitFor(() => {
+      expect(document.querySelector('[data-path="broken.svg"]')).not.toBeNull();
+    });
+    click('[data-path="broken.svg"]');
+    click('[aria-label="SVG image"]');
+    await waitFor(() => {
+      expect(document.body.textContent).toContain(
+        "Unable to load SVG image: raw content failed",
+      );
+      expect(document.querySelector(".pr-diff-image img")).toBeNull();
+    });
+
+    click('[data-path="truncated.svg"]');
+    click('[aria-label="SVG image"]');
+    await waitFor(() => {
+      expect(document.body.textContent).toContain(
+        "SVG image preview is unavailable because the file content is truncated.",
+      );
+      expect(document.querySelector(".pr-diff-image img")).toBeNull();
+    });
+  });
+
+  it("shows explicit unavailable SVG image fallbacks", async () => {
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([
+        {
+          ...svgDiffFile("deleted.svg", null),
+          status: PrFileStatus.Deleted,
+          raw_url: null,
+        },
+        {
+          ...svgDiffFile("unavailable.svg", null),
+          raw_url: null,
+        },
+      ]),
+    );
+
+    renderWorkspace();
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-path="deleted.svg"]'),
+      ).not.toBeNull();
+    });
+    click('[data-path="deleted.svg"]');
+    click('[aria-label="SVG image"]');
+    expect(document.body.textContent).toContain(
+      "SVG image preview is unavailable for deleted files.",
+    );
+
+    click('[data-path="unavailable.svg"]');
+    click('[aria-label="SVG image"]');
+    expect(document.body.textContent).toContain(
+      "SVG image content is unavailable.",
+    );
+    expect(loadPrDiffFileTextMock).not.toHaveBeenCalled();
+  });
+
+  it("supports shortcut 4 and SVG-aware Tab cycling", async () => {
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([svgDiffFile("icon.svg"), textDiffFile("plain.txt")]),
+    );
+
+    renderWorkspace();
+    await waitFor(() => {
+      expect(document.querySelector('[data-path="icon.svg"]')).not.toBeNull();
+    });
+    click('[data-path="icon.svg"]');
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "4" }));
+    await waitFor(() => {
+      expect(
+        document.querySelector('[aria-label="SVG image review"]'),
+      ).not.toBeNull();
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+    expect(
+      document.querySelector('[aria-label="Left/right diff"]'),
+    ).not.toBeNull();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+    expect(document.querySelector('[aria-label="Stack diff"]')).not.toBeNull();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+    expect(
+      document.querySelector('[aria-label="Full file diff"]'),
+    ).not.toBeNull();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+    expect(
+      document.querySelector('[aria-label="SVG image review"]'),
+    ).not.toBeNull();
+
+    click('[data-path="plain.txt"]');
+    await waitFor(() => {
+      expect(
+        document.querySelector('[aria-label="Left/right diff"]'),
+      ).not.toBeNull();
+      expect(document.querySelector('[aria-label="SVG image"]')).toBeNull();
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "4" }));
+    expect(
+      document.querySelector('[aria-label="Left/right diff"]'),
+    ).not.toBeNull();
   });
 
   it("loads full file text for large text files without patch chunks", async () => {

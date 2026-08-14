@@ -129,7 +129,7 @@ Screens that expose a finite view-mode control should support direct numeric sel
 
 Design contract:
 
-- Git diff keeps its existing three-state mapping: `1` selects left/right, `2` selects stack, and `3` selects full-file diff.
+- Git diff keeps its existing text-mode mapping: `1` selects left/right, `2` selects stack, and `3` selects full-file diff. `4` selects rendered image review only when the current file is SVG.
 - Markdown uses the same direct-selection pattern for its two-state document presentation control: `1` selects raw source and `2` selects preview.
 - CSV uses the same two-state mapping in file view mode: `1` selects raw source and `2` selects formatted table when formatted output is available.
 - Numeric indexes that do not map to an available option are no-ops. For example, `3` does not change Markdown or CSV presentation, and `2` does not force CSV formatted mode when parsing or safety limits make it unavailable.
@@ -463,7 +463,7 @@ This projection is intentionally different from tree diff browsers. It preserves
 
 ### Diff Modes
 
-Chilla should expose three user-facing diff modes for all GitHub diff source kinds:
+Chilla should expose three text-oriented diff modes for all GitHub diff source kinds:
 
 | Chilla mode | qraftbox reference | Behavior |
 |-------------|--------------------|----------|
@@ -472,6 +472,33 @@ Chilla should expose three user-facing diff modes for all GitHub diff source kin
 | Full-file | qraftbox `full-file` behavior, adapted to chilla | Shows latest file content when available, highlights changed regions, and marks deleted locations without rendering deleted content as current file text |
 
 Full-file mode may require lazy full-text retrieval from a GitHub raw URL. Missing raw URLs, binary files, deleted files, or too-large files should show explicit placeholders instead of failing the whole diff workspace.
+
+### SVG Image Review
+
+SVG files should render as images in direct file preview and should also be reviewable as rendered images without removing the existing XML/text diff modes.
+
+Direct file-preview rules:
+
+- A case-insensitive `.svg` extension is authoritative for direct preview and maps to `image/svg+xml`, even when content-based MIME detection reports XML or generic text.
+- SVG is removed from the generic text-extension fallback so a valid SVG path does not become a syntax-highlighted XML preview.
+- The existing `FilePreview::Image` payload and frontend image preview path are reused; no SVG markup is injected into the application DOM.
+- SVG selection uses the fast image-preview debounce applied to other image extensions.
+
+- An image mode is available only when the selected changed-file path has a case-insensitive `.svg` extension.
+- The mode renders the latest SVG file content in an image element. It does not inject the SVG markup into the application DOM.
+- GitHub-backed SVG files reuse the existing lazy full-file retrieval boundary; the frontend does not fetch raw GitHub URLs directly.
+- Local Git worktree, commit, and range reviews reuse the full text already hydrated by the Rust Git diff service.
+- Deleted SVG files, unavailable content, truncated content, and retrieval failures show an explicit image-review placeholder rather than a broken image or partial rendering.
+- Left/right, stack, and full-file text review remain available for SVG files.
+- `4` selects SVG image mode when available. `Tab` includes image mode in its cycle only for an SVG selection.
+- Selecting a non-SVG file while image mode is active returns the workspace to left/right mode.
+
+The image source should use an encoded `data:image/svg+xml` URL (or an equivalently isolated image resource) so SVG scripts and document-level markup are not inserted into the application document. The existing Tauri content security policy already permits image data URLs.
+
+Validation requirements:
+
+- Frontend tests cover SVG mode availability, rendered image source/alt text, lazy full-text loading, unavailable/truncated fallbacks, `4`, and SVG-aware `Tab` cycling.
+- Existing text diff tests continue to pass, including SVG syntax highlighting.
 
 ### Diff Workspace Paging Shortcuts
 
@@ -576,7 +603,7 @@ The diff workspace must distinguish source kind without duplicating rendering lo
 
 - GitHub sources keep the GitHub jump action and GitHub-specific metadata.
 - Local Git sources show repository-relative labels, commit or range labels, and no GitHub jump action.
-- Shared controls for left/right, stack, and full-file modes remain available for every source kind when the file payload supports them.
+- Shared controls for left/right, stack, and full-file modes remain available for every source kind when the file payload supports them; SVG selections additionally expose rendered image review.
 - Loading and error copy should name the source: pull request, GitHub commit, GitHub compare, local changes, local commit, or local range.
 - Any adapter-specific behavior stays behind Rust and TypeScript source adapters; Cursor CLI or codex-agent execution behavior is not part of this product surface.
 
@@ -631,7 +658,7 @@ File-view image flow:
 - Normalize `.heic`, `.heif`, `.heics`, and `.heifs` as HEIC / HEIF image inputs.
 - Prefer standards-based MIME labels such as `image/heic`, `image/heif`, `image/heic-sequence`, and `image/heif-sequence` when detected or inferred.
 - Existing raster image support remains unchanged for APNG, GIF, JPEG, PNG, and WebP.
-- Detection changes must not cause SVG or text-like files to bypass their existing sanitization and preview paths.
+- Detection changes for HEIC / HEIF must not cause unrelated text-like files to bypass their existing sanitization paths. SVG is intentionally routed through the isolated image-preview path defined in SVG Image Review.
 
 ### Conversion And Runtime Constraints
 

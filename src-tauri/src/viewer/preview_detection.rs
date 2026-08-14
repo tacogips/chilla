@@ -15,7 +15,7 @@ const TEXTUAL_APPLICATION_MIME_TYPES: [&str; 10] = [
     "application/yaml",
 ];
 /// When magic(1) reports `application/octet-stream` but the path is a known text config/data suffix.
-const TEXT_PREVIEW_EXTENSIONS: [&str; 10] = [
+const TEXT_PREVIEW_EXTENSIONS: [&str; 9] = [
     "toml",
     "json",
     "jsonc",
@@ -23,11 +23,10 @@ const TEXT_PREVIEW_EXTENSIONS: [&str; 10] = [
     "yml",
     "xml",
     "lock",
-    "svg",
     "webmanifest",
     "gradle",
 ];
-const IMAGE_EXTENSION_MIME_TYPES: [(&str, &str); 10] = [
+const IMAGE_EXTENSION_MIME_TYPES: [(&str, &str); 11] = [
     ("apng", "image/apng"),
     ("gif", "image/gif"),
     ("heic", "image/heic"),
@@ -37,6 +36,7 @@ const IMAGE_EXTENSION_MIME_TYPES: [(&str, &str); 10] = [
     ("jpeg", "image/jpeg"),
     ("jpg", "image/jpeg"),
     ("png", "image/png"),
+    ("svg", "image/svg+xml"),
     ("webp", "image/webp"),
 ];
 const VIDEO_EXTENSION_MIME_TYPES: [(&str, &str); 5] = [
@@ -135,4 +135,44 @@ pub(super) fn fallback_media_mime_type<'a>(
         .find_map(|(candidate_extension, candidate_mime_type)| {
             (extension == *candidate_extension).then_some(*candidate_mime_type)
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{fallback_media_mime_type, is_text_preview_extension};
+    use std::path::Path;
+
+    #[test]
+    fn svg_extension_falls_back_to_image_mime_for_non_image_detection() {
+        let cases = [
+            ("diagram.svg", "application/xml"),
+            ("diagram.svg", "text/xml"),
+            ("diagram.svg", "application/octet-stream"),
+            ("diagram.SVG", "application/xml"),
+            ("diagram.SVG", "text/xml"),
+            ("diagram.SVG", "application/octet-stream"),
+        ];
+
+        for (file_name, detected_mime_type) in cases {
+            assert_eq!(
+                fallback_media_mime_type(Path::new(file_name), detected_mime_type),
+                Some("image/svg+xml"),
+                "expected SVG image fallback for {file_name} detected as {detected_mime_type}"
+            );
+        }
+    }
+
+    #[test]
+    fn correct_svg_image_mime_is_preserved_without_fallback() {
+        assert_eq!(
+            fallback_media_mime_type(Path::new("diagram.svg"), "image/svg+xml"),
+            None
+        );
+    }
+
+    #[test]
+    fn svg_extension_is_not_a_generic_text_preview_extension() {
+        assert!(!is_text_preview_extension(Path::new("diagram.svg")));
+        assert!(!is_text_preview_extension(Path::new("diagram.SVG")));
+    }
 }

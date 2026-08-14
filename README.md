@@ -170,8 +170,8 @@ Markdown source can be edited in the raw pane and saved back to disk. If the fil
 - Mermaid hydration on the frontend after preview render
 - Local Markdown image resolution with HEIC / HEIF image fallback and open-in-default-app affordance when the WebView cannot render an image
 - Direct image-file previews for common raster formats and HEIC / HEIF files that the platform WebView can decode
-- GitHub diff URL viewer for pull requests, commits, and compares with changed-file browsing, GitHub jump action, cached diff loading, and diff modes for left/right, stack, and full-file review
-- Local Git diff viewer for uncommitted repository changes and commit/range startup diffs using the same diff modes
+- GitHub diff URL viewer for pull requests, commits, and compares with changed-file browsing, GitHub jump action, cached diff loading, text modes for left/right, stack, and full-file review, plus rendered SVG image review
+- Local Git diff viewer for uncommitted repository changes and commit/range startup diffs using the same review modes
 - Automatic refresh of opened Markdown documents when the file changes on disk, including common atomic-replace save patterns
 - Direct CSV view selection with `1` for raw source and `2` for formatted table when available
 - Theme toggle with frontend CSS variables and backend syntax-theme synchronization
@@ -252,11 +252,13 @@ Diff viewer:
 - `1`: left/right diff
 - `2`: stack diff
 - `3`: full-file view
-- `Tab`: cycle diff modes in the same order
+- `4`: rendered image view for SVG files
+- `Tab`: cycle diff modes in the same order, including image view for SVG files
 - `Ctrl+D`: page the selected diff file view down
 - `Ctrl+U`: page the selected diff file view up
 - `O`: open the pull request, commit, or compare source in GitHub when reviewing a GitHub diff
 - Full-file view shows the latest file content, highlights added and modified lines, and marks deleted locations with a thin red line without rendering deleted content.
+- SVG image view renders the latest complete SVG in an isolated image without replacing the existing XML/text review modes.
 
 ## Architecture
 
@@ -372,7 +374,7 @@ The local release task expects these environment variables to be exported by the
 Publish signed/notarized macOS release assets from the local machine with:
 
 ```bash
-mise run release-macos-dmg-local -- v0.1.12
+mise run release-macos-dmg-local -- v0.1.13
 ```
 
 Repository-local GitHub Actions build unsigned `.app`/`.dmg` artifacts only for validation. They do not sign, notarize, or publish trusted release assets.

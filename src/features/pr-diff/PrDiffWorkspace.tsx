@@ -36,7 +36,7 @@ import {
 } from "./prDiffBrowserEntries";
 export { buildDirectoryEntries } from "./prDiffBrowserEntries";
 
-type DiffViewMode = "left_right" | "full_file" | "stack";
+type DiffViewMode = "left_right" | "full_file" | "stack" | "image";
 interface PrDiffWorkspaceProps {
   readonly target: DiffWorkspaceTarget;
 }
@@ -49,6 +49,14 @@ interface LazyFileTextState {
 
 const MIN_DIFF_PAGE_SCROLL_PX = 80;
 const DIFF_PAGE_SCROLL_RATIO = 0.45;
+
+function isSvgPath(path: string): boolean {
+  return path.toLowerCase().endsWith(".svg");
+}
+
+function svgImageDataUrl(svgText: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
+}
 
 type FullFileLineKind = "context" | "add" | "modify";
 type FullFileRow =
@@ -304,11 +312,82 @@ function ModeIcon(props: { readonly mode: DiffViewMode }) {
     );
   }
 
+  if (props.mode === "image") {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="1.75" y="2.25" width="12.5" height="11.5" rx="1" />
+        <circle cx="5.25" cy="5.75" r="1.25" />
+        <path d="m3.5 11 2.75-2.75 2 2 1.5-1.5 2.75 2.75" />
+      </svg>
+    );
+  }
+
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <rect x="2" y="2.5" width="12" height="11" rx="1" />
       <path d="M4.5 5.5h7M4.5 8h7M4.5 10.5h5" />
     </svg>
+  );
+}
+
+function SvgImageDiff(props: {
+  readonly file: PrDiffFile;
+  readonly loading: boolean;
+  readonly error: string | null;
+}) {
+  const [failedSource, setFailedSource] = createSignal<string | null>(null);
+  const imageSource = createMemo(() => {
+    if (
+      props.file.status === PrFileStatus.Deleted ||
+      props.file.full_text === null ||
+      props.file.full_text_truncated
+    ) {
+      return null;
+    }
+
+    return svgImageDataUrl(props.file.full_text);
+  });
+
+  const unavailableMessage = createMemo(() => {
+    if (props.loading) {
+      return "Loading SVG image...";
+    }
+    if (props.error !== null) {
+      return `Unable to load SVG image: ${props.error}`;
+    }
+    if (props.file.status === PrFileStatus.Deleted) {
+      return "SVG image preview is unavailable for deleted files.";
+    }
+    if (props.file.full_text_truncated) {
+      return "SVG image preview is unavailable because the file content is truncated.";
+    }
+    if (props.file.full_text === null) {
+      return "SVG image content is unavailable.";
+    }
+    if (failedSource() === imageSource()) {
+      return "SVG image could not be rendered.";
+    }
+    return null;
+  });
+
+  return (
+    <div class="pr-diff-image" aria-label="SVG image review">
+      <Show
+        when={unavailableMessage() === null && imageSource() !== null}
+        fallback={
+          <div class="pr-diff-image__placeholder" role="status">
+            {unavailableMessage()}
+          </div>
+        }
+      >
+        <img
+          class="pr-diff-image__preview"
+          src={imageSource() ?? ""}
+          alt={`Rendered preview of ${props.file.path}`}
+          onError={() => setFailedSource(imageSource())}
+        />
+      </Show>
+    </div>
   );
 }
 
@@ -919,13 +998,14 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
   };
 
   const ensureFullFileText = (file: PrDiffFile) => {
+    const lazyState = lazyFileText()[file.path];
     if (
       file.full_text !== null ||
       file.raw_url === null ||
       file.is_binary ||
-      lazyFileText()[file.path]?.loading === true ||
-      (lazyFileText()[file.path]?.text !== undefined &&
-        lazyFileText()[file.path]?.text !== null)
+      lazyState?.loading === true ||
+      (lazyState?.text !== undefined && lazyState.text !== null) ||
+      (lazyState?.error !== undefined && lazyState.error !== null)
     ) {
       return;
     }
@@ -967,8 +1047,15 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
 
   createEffect(() => {
     const file = selectedFile();
-    if (mode() === "full_file" && file !== null) {
+    if ((mode() === "full_file" || mode() === "image") && file !== null) {
       ensureFullFileText(file);
+    }
+  });
+
+  createEffect(() => {
+    const file = selectedFile();
+    if (mode() === "image" && (file === null || !isSvgPath(file.path))) {
+      setMode("left_right");
     }
   });
 
@@ -1132,13 +1219,17 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
 
       if (event.key === "Tab") {
         event.preventDefault();
-        setMode((value) =>
-          value === "left_right"
-            ? "stack"
-            : value === "stack"
-              ? "full_file"
-              : "left_right",
-        );
+        const availableModes: readonly DiffViewMode[] =
+          selectedFile() !== null && isSvgPath(selectedFile()?.path ?? "")
+            ? ["left_right", "stack", "full_file", "image"]
+            : ["left_right", "stack", "full_file"];
+        setMode((value) => {
+          const currentIndex = availableModes.indexOf(value);
+          return (
+            availableModes[(currentIndex + 1) % availableModes.length] ??
+            "left_right"
+          );
+        });
         return;
       }
 
@@ -1157,6 +1248,14 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
       if (event.key === "3") {
         event.preventDefault();
         setMode("full_file");
+        return;
+      }
+
+      if (event.key === "4") {
+        if (selectedFile() !== null && isSvgPath(selectedFile()?.path ?? "")) {
+          event.preventDefault();
+          setMode("image");
+        }
         return;
       }
 
@@ -1392,6 +1491,23 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
                 </button>
               )}
             </For>
+            <Show
+              when={
+                selectedFile() !== null && isSvgPath(selectedFile()?.path ?? "")
+              }
+            >
+              <button
+                type="button"
+                class={`workspace__mode${
+                  mode() === "image" ? " workspace__mode--active" : ""
+                }`}
+                title="SVG image"
+                aria-label="SVG image"
+                onClick={() => setMode("image")}
+              >
+                <ModeIcon mode="image" />
+              </button>
+            </Show>
           </div>
         </header>
         <Show when={errorMessage() !== null}>
@@ -1441,7 +1557,9 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
                   >
                     <Show
                       when={
-                        getFile().chunks.length > 0 || mode() === "full_file"
+                        getFile().chunks.length > 0 ||
+                        mode() === "full_file" ||
+                        mode() === "image"
                       }
                       fallback={
                         <div class="empty">
@@ -1463,6 +1581,13 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
                           }
                         >
                           <LeftRightDiff file={getFile()} />
+                        </Show>
+                        <Show when={mode() === "image"}>
+                          <SvgImageDiff
+                            file={getFile()}
+                            loading={selectedLazyTextState()?.loading ?? false}
+                            error={selectedLazyTextState()?.error ?? null}
+                          />
                         </Show>
                         <Show when={mode() === "full_file"}>
                           <FullFileDiff

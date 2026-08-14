@@ -46,6 +46,7 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `svg-image-review.md` | 2026-08-14 | `design-docs/specs/architecture.md#svg-image-review` |
 | `rendered-preview-zoom.md` | 2026-08-14 | `design-docs/specs/architecture.md#shared-rendered-preview-zoom` |
 | `design-implementation-review-remediation.md` | 2026-07-03 | `design-docs/specs/design-implementation-review.md` |
 | `verbose-diagnostic-logging-core.md` | 2026-07-29 | `design-docs/specs/command.md#verbose-diagnostic-contract`; `design-docs/specs/architecture.md#opt-in-startup-and-file-io-diagnostics` |

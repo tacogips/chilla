@@ -8,7 +8,7 @@ export function selectionPreviewDebounceMsForPath(filePath: string): number {
     return SELECTION_PREVIEW_DEBOUNCE_FAST_MS;
   }
 
-  if (/\.(pdf|png|apng|jpe?g|gif|webp|heics?|heifs?)$/i.test(filePath)) {
+  if (/\.(pdf|png|apng|jpe?g|gif|webp|heics?|heifs?|svg)$/i.test(filePath)) {
     return SELECTION_PREVIEW_DEBOUNCE_FAST_MS;
   }
 
