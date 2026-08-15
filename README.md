@@ -169,7 +169,7 @@ Markdown source can be edited in the raw pane and saved back to disk. If the fil
 - Backend-owned Markdown parsing in Rust
 - Mermaid hydration on the frontend after preview render
 - Local Markdown image resolution with HEIC / HEIF image fallback and open-in-default-app affordance when the WebView cannot render an image
-- Direct image-file previews for common raster formats and HEIC / HEIF files that the platform WebView can decode
+- Direct image-file previews for AVIF, APNG, BMP/DIB, GIF, HEIC/HEIF, ICO, JPEG, PNG, SVG, TIFF, and WebP files that the platform WebView can decode
 - GitHub diff URL viewer for pull requests, commits, and compares with changed-file browsing, GitHub jump action, cached diff loading, text modes for left/right, stack, and full-file review, plus rendered SVG image review
 - Local Git diff viewer for uncommitted repository changes and commit/range startup diffs using the same review modes
 - Automatic refresh of opened Markdown documents when the file changes on disk, including common atomic-replace save patterns
@@ -227,8 +227,8 @@ Video preview:
 Image preview:
 
 - Markdown image links resolve local image paths relative to the Markdown document, including `.heic`, `.heif`, `.heics`, and `.heifs` files.
-- Direct file previews classify HEIC / HEIF files as images instead of generic binary files.
-- HEIC / HEIF display depends on the platform WebView decoder; when an image cannot render, chilla shows a fallback with an option to open the file in the default app.
+- Direct file previews classify AVIF, APNG, BMP/DIB, GIF, HEIC/HEIF, ICO, JPEG (`.jpg`, `.jpeg`, `.jpe`, `.jfif`), PNG, SVG, TIFF, and WebP files as images instead of generic binary or text files.
+- Display support depends on the platform WebView decoder; when an image cannot render, chilla shows a fallback with an option to open the file in the default app.
 
 CSV preview:
 
@@ -374,7 +374,7 @@ The local release task expects these environment variables to be exported by the
 Publish signed/notarized macOS release assets from the local machine with:
 
 ```bash
-mise run release-macos-dmg-local -- v0.1.13
+mise run release-macos-dmg-local -- v0.1.14
 ```
 
 Repository-local GitHub Actions build unsigned `.app`/`.dmg` artifacts only for validation. They do not sign, notarize, or publish trusted release assets.

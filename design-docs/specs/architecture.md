@@ -618,6 +618,28 @@ The diff workspace must distinguish source kind without duplicating rendering lo
 
 ---
 
+## Direct Image Format Coverage
+
+Direct file preview should classify common image extensions as images even when content-based MIME detection returns a generic binary or unrelated textual MIME. WebP is already part of this contract.
+
+The case-insensitive extension-to-MIME fallback covers:
+
+- APNG, PNG, GIF, JPEG (`.jpg`, `.jpeg`, `.jpe`, `.jfif`), WebP, and SVG.
+- AVIF, BMP (`.bmp`, `.dib`), ICO, and TIFF (`.tif`, `.tiff`).
+- HEIC / HEIF and their sequence variants as defined below.
+
+Rust remains authoritative for direct file classification and returns the existing `FilePreview::Image` payload. Frontend extension matching only selects the shorter image-preview debounce and must stay aligned with the backend list. No new Tauri command or payload shape is introduced.
+
+Classification does not promise that every platform WebView can decode every format. A decoder failure must use the existing explicit image error state and open-in-default-app action rather than reclassifying the source as text or binary. Formats without broadly usable WebView decoding, such as camera RAW, PSD, and JPEG XL, remain outside this direct-render list.
+
+Validation requirements:
+
+- Rust unit tests cover each extension-to-MIME fallback, including case-insensitive paths and misleading generic/text MIME detection.
+- Frontend unit tests cover fast selection timing for each supported image suffix and preserve the default timing for unrelated text files.
+- Runtime verification launches the desktop app and confirms WebP plus at least one newly classified format reaches the image preview path.
+
+---
+
 ## HEIC / HEIF Image Display Architecture
 
 This section defines the design target for displaying HEIC and HEIF images in Markdown previews and file-view image previews.

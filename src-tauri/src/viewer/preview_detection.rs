@@ -26,17 +26,25 @@ const TEXT_PREVIEW_EXTENSIONS: [&str; 9] = [
     "webmanifest",
     "gradle",
 ];
-const IMAGE_EXTENSION_MIME_TYPES: [(&str, &str); 11] = [
+const IMAGE_EXTENSION_MIME_TYPES: [(&str, &str); 19] = [
     ("apng", "image/apng"),
+    ("avif", "image/avif"),
+    ("bmp", "image/bmp"),
+    ("dib", "image/bmp"),
     ("gif", "image/gif"),
     ("heic", "image/heic"),
     ("heics", "image/heic-sequence"),
     ("heif", "image/heif"),
     ("heifs", "image/heif-sequence"),
+    ("ico", "image/vnd.microsoft.icon"),
+    ("jpe", "image/jpeg"),
     ("jpeg", "image/jpeg"),
+    ("jfif", "image/jpeg"),
     ("jpg", "image/jpeg"),
     ("png", "image/png"),
     ("svg", "image/svg+xml"),
+    ("tif", "image/tiff"),
+    ("tiff", "image/tiff"),
     ("webp", "image/webp"),
 ];
 const VIDEO_EXTENSION_MIME_TYPES: [(&str, &str); 5] = [
@@ -143,31 +151,55 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn svg_extension_falls_back_to_image_mime_for_non_image_detection() {
+    fn supported_image_extensions_fall_back_to_expected_mime_case_insensitively() {
         let cases = [
-            ("diagram.svg", "application/xml"),
-            ("diagram.svg", "text/xml"),
-            ("diagram.svg", "application/octet-stream"),
-            ("diagram.SVG", "application/xml"),
-            ("diagram.SVG", "text/xml"),
-            ("diagram.SVG", "application/octet-stream"),
+            ("apng", "image/apng"),
+            ("avif", "image/avif"),
+            ("bmp", "image/bmp"),
+            ("dib", "image/bmp"),
+            ("gif", "image/gif"),
+            ("heic", "image/heic"),
+            ("heics", "image/heic-sequence"),
+            ("heif", "image/heif"),
+            ("heifs", "image/heif-sequence"),
+            ("ico", "image/vnd.microsoft.icon"),
+            ("jpe", "image/jpeg"),
+            ("jpeg", "image/jpeg"),
+            ("jfif", "image/jpeg"),
+            ("jpg", "image/jpeg"),
+            ("png", "image/png"),
+            ("svg", "image/svg+xml"),
+            ("tif", "image/tiff"),
+            ("tiff", "image/tiff"),
+            ("webp", "image/webp"),
         ];
 
-        for (file_name, detected_mime_type) in cases {
+        for (extension, expected_mime_type) in cases {
+            let lowercase_path = format!("preview.{extension}");
             assert_eq!(
-                fallback_media_mime_type(Path::new(file_name), detected_mime_type),
-                Some("image/svg+xml"),
-                "expected SVG image fallback for {file_name} detected as {detected_mime_type}"
+                fallback_media_mime_type(Path::new(&lowercase_path), "application/octet-stream"),
+                Some(expected_mime_type),
+                "expected image fallback for {lowercase_path}"
+            );
+
+            let uppercase_path = format!("preview.{}", extension.to_ascii_uppercase());
+            assert_eq!(
+                fallback_media_mime_type(Path::new(&uppercase_path), "text/plain"),
+                Some(expected_mime_type),
+                "expected case-insensitive image fallback for {uppercase_path}"
             );
         }
     }
 
     #[test]
-    fn correct_svg_image_mime_is_preserved_without_fallback() {
-        assert_eq!(
-            fallback_media_mime_type(Path::new("diagram.svg"), "image/svg+xml"),
-            None
-        );
+    fn detected_image_mime_is_preserved_without_extension_fallback() {
+        for detected_mime_type in ["image/svg+xml", "image/webp", "image/avif", "image/tiff"] {
+            assert_eq!(
+                fallback_media_mime_type(Path::new("preview.unknown"), detected_mime_type),
+                None,
+                "expected detected image MIME to remain authoritative: {detected_mime_type}"
+            );
+        }
     }
 
     #[test]
