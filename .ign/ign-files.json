@@ -1,5 +1,6 @@
 {
   "files": [
+    ".pre-commit-config.yaml",
     ".agents/agents/check-and-test-after-modify.md",
     ".agents/agents/git-commit.md",
     ".agents/agents/git-pr.md",
