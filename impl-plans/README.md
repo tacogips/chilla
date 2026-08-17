@@ -40,6 +40,7 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan | Created | Design Reference |
 | ---- | ------- | ---------------- |
+| `two-column-shortcut-help.md` | 2026-08-17 | `design-docs/specs/architecture.md#keyboard-shortcut-help-layout` |
 | `official-homebrew-cask.md` | 2026-07-15 | `design-docs/specs/design-macos-dmg-release.md#official-homebrew-cask-distribution` |
 
 ## Completed Plans

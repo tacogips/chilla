@@ -142,6 +142,24 @@ Shortcut validation rules:
 - Markdown editing remains the highest-risk editable surface; typing digits in the editor must insert text rather than switch views.
 - Existing non-numeric shortcuts, including save/open, TOC toggles, preview toggles, file-browser navigation, and git diff navigation, retain their current behavior.
 
+### Keyboard Shortcut Help Layout
+
+The global keyboard-shortcut help remains a modal dialog owned by the Solid.js
+frontend. On desktop-width windows, its shortcut sections are presented in two
+balanced columns so the complete reference uses horizontal space and requires less
+vertical scrolling.
+
+Layout contract:
+
+- The dialog title and typing-safety footer span the full dialog width.
+- Shortcut sections flow through a two-column section container without splitting
+  an individual section between columns.
+- The dialog retains its existing keyboard semantics, focus behavior, accessible
+  dialog labelling, shortcut content, colors, and row-level key/description layout.
+- A narrow-window media query returns the section container to one column so the
+  dialog does not force cramped shortcut descriptions or horizontal scrolling.
+- The change is frontend presentation only and does not add or modify Tauri IPC.
+
 ### Markdown and TOC Parsing
 
 Rust performs Markdown parsing to minimize duplicate parsing logic and keep expensive transformations close to the file-watch and persistence layers.

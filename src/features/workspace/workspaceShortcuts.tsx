@@ -200,27 +200,29 @@ export function renderShortcutKeys(keys: readonly string[]) {
 
 export function ShortcutSectionList() {
   return (
-    <For each={SHORTCUT_SECTIONS}>
-      {(section) => (
-        <section class="shortcuts-help__section">
-          <h3 class="shortcuts-help__heading">{section.title}</h3>
-          <ul class="shortcuts-help__list">
-            <For each={section.shortcuts}>
-              {(shortcut) => (
-                <li class="shortcuts-help__row">
-                  <span class="shortcuts-help__keys">
-                    {renderShortcutKeys(shortcut.keys)}
-                  </span>
-                  <span class="shortcuts-help__desc">
-                    {shortcut.description}
-                  </span>
-                </li>
-              )}
-            </For>
-          </ul>
-        </section>
-      )}
-    </For>
+    <div class="shortcuts-help__sections">
+      <For each={SHORTCUT_SECTIONS}>
+        {(section) => (
+          <section class="shortcuts-help__section">
+            <h3 class="shortcuts-help__heading">{section.title}</h3>
+            <ul class="shortcuts-help__list">
+              <For each={section.shortcuts}>
+                {(shortcut) => (
+                  <li class="shortcuts-help__row">
+                    <span class="shortcuts-help__keys">
+                      {renderShortcutKeys(shortcut.keys)}
+                    </span>
+                    <span class="shortcuts-help__desc">
+                      {shortcut.description}
+                    </span>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </section>
+        )}
+      </For>
+    </div>
   );
 }
 

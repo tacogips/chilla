@@ -2137,7 +2137,8 @@ button {
 .shortcuts-help {
   position: relative;
   z-index: 1;
-  width: min(100%, 26rem);
+  box-sizing: border-box;
+  width: min(100%, 56rem);
   max-height: min(88vh, 36rem);
   overflow: auto;
   margin: 0;
@@ -2157,7 +2158,14 @@ button {
   color: var(--text);
 }
 
+.shortcuts-help__sections {
+  column-count: 2;
+  column-fill: balance;
+  column-gap: 1.5rem;
+}
+
 .shortcuts-help__section {
+  break-inside: avoid;
   margin: 0 0 1rem;
 }
 
@@ -2236,6 +2244,12 @@ button {
   font-size: 0.68rem;
   line-height: 1.4;
   color: var(--text-subtle);
+}
+
+@media (max-width: 720px) {
+  .shortcuts-help__sections {
+    column-count: 1;
+  }
 }
 
 @media (max-width: 1080px) {

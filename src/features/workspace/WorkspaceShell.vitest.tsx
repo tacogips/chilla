@@ -458,6 +458,26 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       expect(document.body.textContent).toContain(
         "Select Preview view (Markdown) or Formatted view (CSV)",
       );
+
+      const dialog = document.querySelector<HTMLElement>(
+        '.shortcuts-help[role="dialog"]',
+      );
+      const sectionLayout = dialog?.querySelector<HTMLElement>(
+        ".shortcuts-help__sections",
+      );
+      const sections = sectionLayout?.querySelectorAll(
+        ":scope > .shortcuts-help__section",
+      );
+
+      expect(dialog?.getAttribute("aria-modal")).toBe("true");
+      expect(dialog?.getAttribute("aria-labelledby")).toBe(
+        "shortcuts-help-title",
+      );
+      expect(sections).toHaveLength(3);
+      expect(sectionLayout?.querySelector(".shortcuts-help__title")).toBeNull();
+      expect(
+        sectionLayout?.querySelector(".shortcuts-help__footer"),
+      ).toBeNull();
     });
   });
 
