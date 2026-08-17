@@ -1,6 +1,6 @@
 # Two-Column Shortcut Help Implementation Plan
 
-**Status**: In Progress
+**Status**: Completed
 **Design Reference**: `design-docs/specs/architecture.md#keyboard-shortcut-help-layout`
 **Created**: 2026-08-17
 **Last Updated**: 2026-08-17
@@ -85,8 +85,8 @@ export function ShortcutsHelpDialog(props: {
 | Feature | Depends On | Status |
 | --- | --- | --- |
 | Two-column help | Existing shortcut help modal | Available |
-| v0.1.16 release | Implementation and verification | Ready |
-| Homebrew cask update | Signed/notarized GitHub DMG asset | Blocked |
+| v0.1.16 release | Implementation and verification | Completed |
+| Homebrew cask update | Signed/notarized GitHub DMG asset | Completed |
 
 ## Completion Criteria
 
@@ -95,9 +95,9 @@ export function ShortcutsHelpDialog(props: {
 - [x] Existing modal semantics and shortcut content remain unchanged
 - [x] Frontend formatting, typecheck, unit tests, focused DOM tests, and repository verification pass
 - [x] Debug app is rebuilt and launched for runtime validation
-- [ ] Version 0.1.16 is committed, pushed, tagged, and published
-- [ ] Signed/notarized macOS DMG is attached to the GitHub release
-- [ ] `tacogips/homebrew-tap` cask is updated and pushed
+- [x] Version 0.1.16 is committed, pushed, tagged, and published
+- [x] Signed/notarized macOS DMG is attached to the GitHub release
+- [x] `tacogips/homebrew-tap` cask is updated and pushed
 
 ## Progress Log
 
@@ -128,3 +128,17 @@ empty log.
 **Notes**: `mise run verify` passed with 39 Bun tests and 163 Rust tests. The
 focused `WorkspaceShell.vitest.tsx` suite passed 11 tests. A separate full DOM run
 reported two unrelated EPUB harness failures because `localStorage` was unavailable.
+
+### Session: 2026-08-17 (release)
+
+**Tasks Completed**: Committed and pushed chilla commit `0c37f79`; published tag
+and GitHub release `v0.1.16`; built, Developer ID signed, notarized, stapled, and
+Gatekeeper-validated the app and DMG; published Homebrew tap commit `2f4e2f1`;
+passed cask style, online audit, fetch, upgrade, codesign, and Gatekeeper checks.
+
+**Tasks In Progress**: None.
+
+**Blockers**: None.
+
+**Notes**: The published DMG SHA-256 is
+`c6e3764c54d8171d2c84c405f42a13be97d7c6a888a58c718440053f76a48379`.
