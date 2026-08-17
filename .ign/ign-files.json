@@ -34,7 +34,6 @@
     ".agents/skills/supply-chain-secure-publish/agents/openai.yaml",
     ".claude",
     ".gitignore",
-    ".pre-commit-config.yaml",
     "AGENTS.md",
     "CLAUDE.md",
     "Cargo.toml",

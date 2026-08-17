@@ -23,8 +23,6 @@ biome = "latest"
 rust = "1.92.0"
 rust-analyzer = "latest"
 taplo = "latest"
-gitleaks = "latest"
-pre-commit = "latest"
 "cargo:cargo-nextest" = "latest"
 "cargo:cargo-audit" = "latest"
 
