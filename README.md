@@ -376,7 +376,7 @@ The local release task expects these environment variables to be exported by the
 Publish signed/notarized macOS release assets from the local machine with:
 
 ```bash
-mise run release-macos-dmg-local -- v0.1.14
+mise run release-macos-dmg-local -- v0.1.15
 ```
 
 Repository-local GitHub Actions build unsigned `.app`/`.dmg` artifacts only for validation. They do not sign, notarize, or publish trusted release assets.
