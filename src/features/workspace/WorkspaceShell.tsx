@@ -465,7 +465,10 @@ export function WorkspaceShell() {
     }
   };
 
-  const previewSelectedFile = async (path: string) => {
+  const previewSelectedFile = async (
+    path: string,
+    clearOnFailure = false,
+  ): Promise<string | null> => {
     const requestId = ++previewRequestId;
 
     try {
@@ -473,7 +476,7 @@ export function WorkspaceShell() {
         const doc = await openDocument(path);
 
         if (requestId !== previewRequestId) {
-          return;
+          return null;
         }
 
         startTransition(() => {
@@ -496,7 +499,7 @@ export function WorkspaceShell() {
         const nextPreview = await openFilePreview(path);
 
         if (requestId !== previewRequestId) {
-          return;
+          return null;
         }
 
         startTransition(() => {
@@ -516,14 +519,20 @@ export function WorkspaceShell() {
           setErrorMessage(null);
         });
       }
+
+      return null;
     } catch (error: unknown) {
       if (requestId !== previewRequestId) {
-        return;
+        return null;
       }
 
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to open file",
-      );
+      const message =
+        error instanceof Error ? error.message : "Failed to open file";
+      if (clearOnFailure) {
+        clearDocumentArea();
+      }
+      setErrorMessage(message);
+      return message;
     }
   };
 
@@ -658,29 +667,67 @@ export function WorkspaceShell() {
     }
   };
 
-  const handleReloadCurrent = async () => {
+  const handleReloadCurrent = async (): Promise<void> => {
+    const errors: string[] = [];
+    const currentDirectory = directoryState();
+    const requestedSelectedPath = selectedBrowserPath();
+
+    if (currentDirectory !== null) {
+      try {
+        if (currentDirectory.listingKind === "explicit_file_set") {
+          const sourcePaths = currentDirectory.explicit_source_paths;
+          if (sourcePaths !== null) {
+            await loadExplicitFileSetState(
+              sourcePaths,
+              requestedSelectedPath,
+              currentDirectory.sort,
+              currentDirectory.query,
+            );
+          }
+        } else {
+          await loadDirectoryState(
+            currentDirectory.current_directory_path,
+            requestedSelectedPath,
+            currentDirectory.sort,
+            currentDirectory.query,
+          );
+        }
+      } catch (error: unknown) {
+        errors.push(
+          error instanceof Error
+            ? `Failed to refresh file list: ${error.message}`
+            : "Failed to refresh file list",
+        );
+      }
+    }
+
     const doc = markdownDoc();
 
     if (doc !== null) {
-      try {
-        const nextSnapshot = await reloadDocument(doc.path);
-        applyMarkdownSnapshot(nextSnapshot);
-        setErrorMessage(null);
-      } catch (error: unknown) {
-        setErrorMessage(
-          error instanceof Error ? error.message : "Failed to reload file",
-        );
+      if (!markdownIsDirty()) {
+        try {
+          const nextSnapshot = await reloadDocument(doc.path);
+          applyMarkdownSnapshot(nextSnapshot);
+        } catch (error: unknown) {
+          clearDocumentArea();
+          errors.push(
+            error instanceof Error ? error.message : "Failed to reload file",
+          );
+        }
       }
+    } else {
+      const path = previewPath(filePreview());
 
-      return;
+      if (path !== null) {
+        clearSelectionPreviewDebounce();
+        const previewError = await previewSelectedFile(path, true);
+        if (previewError !== null) {
+          errors.push(previewError);
+        }
+      }
     }
 
-    const path = previewPath(filePreview());
-
-    if (path !== null) {
-      clearSelectionPreviewDebounce();
-      await previewSelectedFile(path);
-    }
+    setErrorMessage(errors.length > 0 ? errors.join(" ") : null);
   };
 
   const currentSelectedPath = () => selectedBrowserPath() ?? currentOpenPath();
@@ -988,6 +1035,7 @@ export function WorkspaceShell() {
     return null;
   });
   const hasOpenDocument = () => md() !== null || fp() !== null;
+  const canReloadCurrent = () => directoryState() !== null || hasOpenDocument();
   const hasTocDocument = createMemo(
     () => md() !== null || fp()?.kind === "epub",
   );
@@ -1309,7 +1357,7 @@ export function WorkspaceShell() {
       }
 
       if (matchesShortcut(event, "r")) {
-        if (!hasOpenDocument()) {
+        if (!canReloadCurrent()) {
           return;
         }
         event.preventDefault();
@@ -1385,7 +1433,7 @@ export function WorkspaceShell() {
           colorScheme={colorScheme()}
           csvPaneMode={csvPaneMode()}
           csvPreview={csvPreview()}
-          hasOpenDocument={hasOpenDocument()}
+          canReloadCurrent={canReloadCurrent()}
           hasTocDocument={hasTocDocument()}
           isTocOpen={isTocOpen()}
           markdownOpen={md() !== null}

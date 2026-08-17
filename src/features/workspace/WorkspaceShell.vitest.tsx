@@ -10,8 +10,10 @@ import type {
 const documentMocks = vi.hoisted(() => ({
   getStartupContext: vi.fn(),
   listDirectory: vi.fn(),
+  listExplicitFileSet: vi.fn(),
   openDocument: vi.fn(),
   openFilePreview: vi.fn(),
+  reloadDocument: vi.fn(),
   listenDocumentRefreshed: vi.fn(),
   stopDocumentWatch: vi.fn(),
 }));
@@ -74,8 +76,10 @@ vi.mock("../../lib/tauri/document", async (importOriginal) => {
     ...actual,
     getStartupContext: documentMocks.getStartupContext,
     listDirectory: documentMocks.listDirectory,
+    listExplicitFileSet: documentMocks.listExplicitFileSet,
     openDocument: documentMocks.openDocument,
     openFilePreview: documentMocks.openFilePreview,
+    reloadDocument: documentMocks.reloadDocument,
     listenDocumentRefreshed: documentMocks.listenDocumentRefreshed,
     stopDocumentWatch: documentMocks.stopDocumentWatch,
   };
@@ -122,6 +126,18 @@ function directoryStartupContext(
   };
 }
 
+function explicitFileSetStartupContext(): StartupContext {
+  return {
+    initial_mode: "file_view",
+    browser_root: {
+      kind: "explicit_file_set",
+      file_count: 2,
+      selected_file_path: "/workspace/data.csv",
+      source_order_paths: ["/workspace/data.csv", "/workspace/other.csv"],
+    },
+  };
+}
+
 function directoryPage(filePath: string): DirectoryPage {
   const fileName = filePath.slice(filePath.lastIndexOf("/") + 1);
   return {
@@ -139,6 +155,38 @@ function directoryPage(filePath: string): DirectoryPage {
       },
     ],
     total_entry_count: 1,
+    offset: 0,
+    limit: 200,
+    has_more: false,
+  };
+}
+
+function directoryPageWithPaths(filePaths: readonly string[]): DirectoryPage {
+  return {
+    current_directory_path: "/workspace",
+    parent_directory_path: "/",
+    entries: filePaths.map((filePath) => ({
+      path: filePath,
+      canonical_path: filePath,
+      name: filePath.slice(filePath.lastIndexOf("/") + 1),
+      directory_hint: "",
+      is_directory: false,
+      size_bytes: 24,
+      modified_at_unix_ms: 0,
+    })),
+    total_entry_count: filePaths.length,
+    offset: 0,
+    limit: 200,
+    has_more: false,
+  };
+}
+
+function emptyDirectoryPage(): DirectoryPage {
+  return {
+    current_directory_path: "/workspace",
+    parent_directory_path: "/",
+    entries: [],
+    total_entry_count: 0,
     offset: 0,
     limit: 200,
     has_more: false,
@@ -191,6 +239,19 @@ function csvPreview(
   };
 }
 
+function textPreview(): Extract<FilePreview, { kind: "text" }> {
+  return {
+    kind: "text",
+    path: "/workspace/keep.txt",
+    file_name: "keep.txt",
+    mime_type: "text/plain",
+    file_type: "Plain text",
+    html: '<section class="file-preview"><pre>keep</pre></section>',
+    size_bytes: 4,
+    last_modified: "2026-08-17T00:00:00Z",
+  };
+}
+
 function modeButton(ariaLabel: string): HTMLButtonElement {
   const button = document.querySelector<HTMLButtonElement>(
     `button[aria-label="${ariaLabel}"]`,
@@ -216,8 +277,10 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     document.body.innerHTML = '<div id="root"></div>';
     documentMocks.getStartupContext.mockReset();
     documentMocks.listDirectory.mockReset();
+    documentMocks.listExplicitFileSet.mockReset();
     documentMocks.openDocument.mockReset();
     documentMocks.openFilePreview.mockReset();
+    documentMocks.reloadDocument.mockReset();
     documentMocks.listenDocumentRefreshed.mockReset();
     documentMocks.stopDocumentWatch.mockReset();
     documentMocks.listenDocumentRefreshed.mockResolvedValue(() => {});
@@ -397,4 +460,189 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       );
     });
   });
+
+  it("refreshes a directory when no file is open", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.listDirectory
+      .mockResolvedValueOnce(directoryPage("/workspace/old.txt"))
+      .mockResolvedValueOnce(directoryPage("/workspace/new.txt"));
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("old.txt");
+    });
+
+    const reloadButton = modeButton("Refresh workspace");
+    expect(reloadButton.disabled).toBe(false);
+    reloadButton.click();
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("new.txt");
+      expect(document.body.textContent).not.toContain("old.txt");
+      expect(documentMocks.listDirectory).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("refreshes an explicit file-set listing and its active preview", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      explicitFileSetStartupContext(),
+    );
+    documentMocks.listExplicitFileSet
+      .mockResolvedValueOnce(directoryPage("/workspace/data.csv"))
+      .mockResolvedValueOnce(directoryPage("/workspace/other.csv"));
+    documentMocks.openFilePreview.mockResolvedValue(csvPreview());
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("data.csv");
+    });
+    modeButton("Refresh workspace").click();
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("other.csv");
+      expect(documentMocks.listExplicitFileSet).toHaveBeenCalledTimes(2);
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("preserves the selected file when it remains in the refreshed listing", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/keep.txt"),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPageWithPaths(["/workspace/first.txt", "/workspace/keep.txt"]),
+    );
+    documentMocks.openFilePreview.mockResolvedValue(textPreview());
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("keep");
+    });
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "L", shiftKey: true }),
+    );
+    modeButton("Refresh workspace").click();
+
+    await waitFor(() => {
+      const selected = document.querySelector<HTMLButtonElement>(
+        'button[data-path="/workspace/keep.txt"]',
+      );
+      expect(selected?.classList.contains("file-browser__button--active")).toBe(
+        true,
+      );
+    });
+  });
+
+  it("refreshes the listing and active Markdown file together", async () => {
+    const refreshedSnapshot = {
+      ...markdownSnapshot(),
+      source_text: "# Updated",
+      html: '<h1 id="updated">Updated</h1>',
+      revision_token: "rev-2",
+      last_modified: "2026-08-17T00:00:00Z",
+    };
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/note.md"),
+    );
+    documentMocks.listDirectory
+      .mockResolvedValueOnce(directoryPage("/workspace/note.md"))
+      .mockResolvedValueOnce(directoryPage("/workspace/renamed.txt"));
+    documentMocks.openDocument.mockResolvedValue(markdownSnapshot());
+    documentMocks.reloadDocument.mockResolvedValue(refreshedSnapshot);
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("Body");
+    });
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "L", shiftKey: true }),
+    );
+    modeButton("Refresh workspace").click();
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("renamed.txt");
+      expect(document.body.textContent).toContain("Updated");
+      expect(documentMocks.reloadDocument).toHaveBeenCalledWith(
+        "/workspace/note.md",
+      );
+    });
+  });
+
+  it("does not overwrite unsaved Markdown while refreshing the listing", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/note.md"),
+    );
+    documentMocks.listDirectory
+      .mockResolvedValueOnce(directoryPage("/workspace/note.md"))
+      .mockResolvedValueOnce(directoryPage("/workspace/fresh.txt"));
+    documentMocks.openDocument.mockResolvedValue(markdownSnapshot());
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expectActiveMode("Markdown preview");
+    });
+    modeButton("Raw Markdown source").click();
+    const editor = await waitForElement<HTMLTextAreaElement>(
+      ".markdown-source-editor",
+    );
+    editor.value = "# Unsaved";
+    editor.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "L", shiftKey: true }),
+    );
+    modeButton("Refresh workspace").click();
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("fresh.txt");
+      expect(editor.value).toBe("# Unsaved");
+      expect(documentMocks.reloadDocument).not.toHaveBeenCalled();
+    });
+  });
+
+  it("clears a clean active file that disappeared during refresh", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/note.md"),
+    );
+    documentMocks.listDirectory
+      .mockResolvedValueOnce(directoryPage("/workspace/note.md"))
+      .mockResolvedValueOnce(emptyDirectoryPage());
+    documentMocks.openDocument.mockResolvedValue(markdownSnapshot());
+    documentMocks.reloadDocument.mockRejectedValue(
+      new Error("File no longer exists"),
+    );
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("Body");
+    });
+    modeButton("Refresh workspace").click();
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("Please select a file.");
+      expect(document.body.textContent).toContain("File no longer exists");
+      expect(document.body.textContent).not.toContain("Body");
+    });
+  });
 });
+
+async function waitForElement<T extends Element>(selector: string): Promise<T> {
+  let element: T | null = null;
+  await waitFor(() => {
+    element = document.querySelector<T>(selector);
+    expect(element).not.toBeNull();
+  });
+
+  if (element === null) {
+    throw new Error(`missing element ${selector}`);
+  }
+
+  return element;
+}

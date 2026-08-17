@@ -46,6 +46,7 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `revision-aware-local-refresh.md` | 2026-08-17 | `design-docs/specs/architecture.md#revision-aware-local-refresh`; `design-docs/specs/architecture.md#direct-image-drag-panning` |
 | `direct-image-format-coverage.md` | 2026-08-15 | `design-docs/specs/architecture.md#direct-image-format-coverage` |
 | `svg-image-review.md` | 2026-08-14 | `design-docs/specs/architecture.md#svg-image-review` |
 | `rendered-preview-zoom.md` | 2026-08-14 | `design-docs/specs/architecture.md#shared-rendered-preview-zoom` |

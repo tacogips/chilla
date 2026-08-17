@@ -4,10 +4,15 @@ import { createMemo } from "solid-js";
 interface PdfFilePreviewPaneProps {
   readonly path: string;
   readonly fileName: string;
+  readonly revision: string;
 }
 
 export function PdfFilePreviewPane(props: PdfFilePreviewPaneProps) {
-  const pdfSrc = createMemo(() => convertFileSrc(props.path));
+  const pdfSrc = createMemo(() => {
+    const url = new URL(convertFileSrc(props.path));
+    url.searchParams.set("revision", props.revision);
+    return url.toString();
+  });
 
   return (
     <section class="pane">

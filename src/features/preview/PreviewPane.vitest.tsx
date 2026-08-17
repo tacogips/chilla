@@ -377,9 +377,83 @@ describe("PreviewPane", () => {
     expect(nextPreviewZoom(300, "in")).toBe(300);
     expect(nextPreviewZoom(50, "out")).toBe(50);
   });
+
+  it("pans a direct image in the same direction as a left-button drag", () => {
+    renderPreview('<img src="https://example.com/image.png" />', true);
+    const preview = previewBodyWithPointerCapture();
+    preview.scrollLeft = 100;
+    preview.scrollTop = 80;
+
+    const pointerDown = pointerEvent("pointerdown", 7, 20, 30);
+    preview.dispatchEvent(pointerDown);
+    expect(pointerDown.defaultPrevented).toBe(true);
+
+    const pointerMove = pointerEvent("pointermove", 7, 45, 55);
+    preview.dispatchEvent(pointerMove);
+    expect(pointerMove.defaultPrevented).toBe(true);
+    expect(preview.scrollLeft).toBe(75);
+    expect(preview.scrollTop).toBe(55);
+
+    preview.dispatchEvent(pointerEvent("pointerup", 7, 45, 55));
+    preview.dispatchEvent(pointerEvent("pointermove", 7, 70, 80));
+    expect(preview.scrollLeft).toBe(75);
+    expect(preview.scrollTop).toBe(55);
+  });
+
+  it("does not drag-pan ordinary rendered content", () => {
+    renderPreview('<p id="selectable">Selectable text</p>');
+    const preview = previewBodyWithPointerCapture();
+    preview.scrollLeft = 100;
+    preview.scrollTop = 80;
+
+    const pointerDown = pointerEvent("pointerdown", 3, 20, 30);
+    preview.dispatchEvent(pointerDown);
+    preview.dispatchEvent(pointerEvent("pointermove", 3, 45, 55));
+
+    expect(pointerDown.defaultPrevented).toBe(false);
+    expect(preview.scrollLeft).toBe(100);
+    expect(preview.scrollTop).toBe(80);
+  });
+
+  it("ignores non-primary mouse buttons for direct-image drag panning", () => {
+    renderPreview('<img src="https://example.com/image.png" />', true);
+    const preview = previewBodyWithPointerCapture();
+    preview.scrollLeft = 100;
+    preview.scrollTop = 80;
+
+    const pointerDown = pointerEvent("pointerdown", 8, 20, 30, 2);
+    preview.dispatchEvent(pointerDown);
+    const pointerMove = pointerEvent("pointermove", 8, 45, 55, 2);
+    preview.dispatchEvent(pointerMove);
+
+    expect(pointerDown.defaultPrevented).toBe(false);
+    expect(pointerMove.defaultPrevented).toBe(false);
+    expect(preview.scrollLeft).toBe(100);
+    expect(preview.scrollTop).toBe(80);
+  });
+
+  it("ends image dragging on cancel and lost pointer capture", () => {
+    renderPreview('<img src="https://example.com/image.png" />', true);
+    const preview = previewBodyWithPointerCapture();
+
+    preview.dispatchEvent(pointerEvent("pointerdown", 4, 10, 10));
+    preview.dispatchEvent(pointerEvent("pointercancel", 4, 10, 10));
+    preview.dispatchEvent(pointerEvent("pointermove", 4, 30, 30));
+    expect(preview.scrollLeft).toBe(0);
+    expect(preview.scrollTop).toBe(0);
+
+    preview.dispatchEvent(pointerEvent("pointerdown", 5, 10, 10));
+    preview.dispatchEvent(pointerEvent("lostpointercapture", 5, 10, 10));
+    preview.dispatchEvent(pointerEvent("pointermove", 5, 30, 30));
+    expect(preview.scrollLeft).toBe(0);
+    expect(preview.scrollTop).toBe(0);
+  });
 });
 
-function renderPreview(html = "<p>Preview content</p>"): void {
+function renderPreview(
+  html = "<p>Preview content</p>",
+  dragPanEnabled = false,
+): void {
   const root = document.getElementById("root");
 
   if (root === null) {
@@ -391,6 +465,7 @@ function renderPreview(html = "<p>Preview content</p>"): void {
       <PreviewPane
         colorScheme="dark"
         documentPath={null}
+        dragPanEnabled={dragPanEnabled}
         html={html}
         selectedAnchorId={null}
         visible={true}
@@ -398,6 +473,42 @@ function renderPreview(html = "<p>Preview content</p>"): void {
     ),
     root,
   );
+}
+
+function pointerEvent(
+  type: string,
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+  button = 0,
+): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperties(event, {
+    button: { value: button },
+    clientX: { value: clientX },
+    clientY: { value: clientY },
+    isPrimary: { value: true },
+    pointerId: { value: pointerId },
+  });
+  return event;
+}
+
+function previewBodyWithPointerCapture(): HTMLElement {
+  const preview = document.querySelector<HTMLElement>(".pane__body.preview");
+  if (preview === null) {
+    throw new Error("missing preview body");
+  }
+
+  const capturedPointers = new Set<number>();
+  preview.setPointerCapture = (pointerId: number) => {
+    capturedPointers.add(pointerId);
+  };
+  preview.hasPointerCapture = (pointerId: number) =>
+    capturedPointers.has(pointerId);
+  preview.releasePointerCapture = (pointerId: number) => {
+    capturedPointers.delete(pointerId);
+  };
+  return preview;
 }
 
 function previewZoomText(): string | null {

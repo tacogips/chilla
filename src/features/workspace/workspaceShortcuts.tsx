@@ -72,7 +72,7 @@ export const SHORTCUT_SECTIONS: readonly {
         keys: ["Y"],
         description: "Copy selected file or directory absolute path",
       },
-      { keys: ["R"], description: "Reload current file" },
+      { keys: ["R"], description: "Refresh workspace and current file" },
       {
         keys: ["Shift", "T"],
         description: "Toggle table of contents (Markdown / EPUB)",

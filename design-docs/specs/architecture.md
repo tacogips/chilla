@@ -725,3 +725,69 @@ image previews grow beyond the pane width with normal pane scrolling.
 Raw Markdown and CSV editors are not zoom targets. PDF keeps its embedded viewer
 controls, EPUB keeps its pagination model, and audio/video playback shortcuts are
 unchanged. No persisted preference or cross-window synchronization is required.
+
+---
+
+## Revision-Aware Local Refresh
+
+Local file-view refresh is a workspace refresh, not only a document-body reload.
+When the user requests refresh, chilla re-reads the current directory listing and
+the currently open file from disk. Refresh remains available when a directory is
+open without an active file so newly created, removed, renamed, resized, or
+reordered entries can appear without navigating away and back.
+
+### Responsibility Split
+
+- Rust directory and preview services remain authoritative for filesystem reads.
+  They do not retain directory listings or local file contents between commands.
+- Solid.js coordinates one refresh request across the current directory or
+  explicit file set and the open preview while preserving the active sort,
+  filter, and selection when those paths still exist.
+- Browser-rendered resources whose URL would otherwise remain stable use the
+  file revision supplied by the backend to invalidate WebView caches. Image HTML
+  and PDF iframe URLs must therefore change when the source file modification
+  marker changes.
+- Audio and video refresh continue to use newly registered stream URLs. Markdown,
+  text, CSV, EPUB, and binary previews continue to rebuild their payloads from a
+  fresh backend read.
+
+### Consistency And Failure Behavior
+
+- Directory and file refresh are best-effort parts of the same user action. A
+  directory failure or file failure must produce an actionable UI error rather
+  than silently retaining a supposedly fresh result.
+- If an entry disappears, the refreshed directory listing is still applied. An
+  open preview that can no longer be read is cleared so stale content is not
+  presented as current.
+- Unsaved Markdown edits keep the existing conflict-safe behavior; refresh must
+  not silently overwrite a dirty editor buffer.
+- GitHub diff cache validation remains based on the remote target's `updated_at`
+  marker and is not part of local filesystem refresh.
+
+### Verification Expectations
+
+- Frontend tests cover directory-only refresh, combined directory/file refresh,
+  selection preservation, deleted-file cleanup, and revision-bearing PDF URLs.
+- Rust tests cover revision-bearing image preview HTML and fresh filesystem reads.
+- Mixed-stack checks cover Bun and Cargo toolchains, followed by a debug build and
+  local desktop launch.
+
+---
+
+## Direct Image Drag Panning
+
+Direct image-file previews, including SVG and raster formats, support pointer
+panning when zoomed content exceeds the visible preview area. Holding the primary
+mouse button and dragging moves the image in the same direction as the pointer,
+matching touch-screen content manipulation: dragging right decreases horizontal
+scroll offset and dragging down decreases vertical scroll offset.
+
+The interaction belongs to the shared frontend preview pane but is enabled only
+for direct image-file previews. Markdown and EPUB previews retain normal text
+selection and link interaction. A valid drag captures the pointer until primary
+button release, cancellation, or lost capture; it suppresses selection only while
+the drag is active. Existing wheel, keyboard, and zoom behavior remains unchanged.
+
+Frontend DOM tests cover horizontal and vertical movement, non-primary-button
+rejection, pointer termination, and the absence of drag handling in non-image
+rendered previews.

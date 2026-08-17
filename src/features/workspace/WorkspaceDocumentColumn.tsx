@@ -138,6 +138,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
         <PreviewPane
           colorScheme={props.colorScheme}
           documentPath={previewPath(props.filePreview)}
+          dragPanEnabled={props.filePreview?.kind === "image"}
           html={previewHtml(props.filePreview)}
           selectedAnchorId={null}
           subtitle={previewSubtitle(props.filePreview)}
@@ -149,6 +150,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
         <PdfFilePreviewPane
           path={pdfPreview()?.path ?? ""}
           fileName={pdfPreview()?.file_name ?? ""}
+          revision={pdfPreview()?.last_modified ?? ""}
         />
       </Show>
 

@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     }, STARTUP_TIMEOUT_MS);
 
     await driver
-      .findElement(By.css('button[aria-label="Reload current file"]'))
+      .findElement(By.css('button[aria-label="Refresh workspace"]'))
       .click();
     await waitForReaderReady();
     await ensureTocOpen();

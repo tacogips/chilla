@@ -170,9 +170,11 @@ Markdown source can be edited in the raw pane and saved back to disk. If the fil
 - Mermaid hydration on the frontend after preview render
 - Local Markdown image resolution with HEIC / HEIF image fallback and open-in-default-app affordance when the WebView cannot render an image
 - Direct image-file previews for AVIF, APNG, BMP/DIB, GIF, HEIC/HEIF, ICO, JPEG, PNG, SVG, TIFF, and WebP files that the platform WebView can decode
+- Touch-style left-button drag panning for direct SVG and raster image previews
 - GitHub diff URL viewer for pull requests, commits, and compares with changed-file browsing, GitHub jump action, cached diff loading, text modes for left/right, stack, and full-file review, plus rendered SVG image review
 - Local Git diff viewer for uncommitted repository changes and commit/range startup diffs using the same review modes
 - Automatic refresh of opened Markdown documents when the file changes on disk, including common atomic-replace save patterns
+- Revision-aware workspace refresh that re-reads the current directory or explicit file set and active local preview, including image and PDF cache invalidation
 - Direct CSV view selection with `1` for raw source and `2` for formatted table when available
 - Theme toggle with frontend CSS variables and backend syntax-theme synchronization
 - Custom undecorated desktop window chrome
@@ -191,7 +193,7 @@ Global shortcuts:
 - `Shift+L`: toggle file tree
 - `G`: toggle local Git diff for the opened repository
 - `Y`: copy the selected file or directory absolute path
-- `R`: reload the current file
+- `R`: refresh the current directory or explicit file set and active local file
 - `Shift+T`: toggle table of contents for Markdown
 - `Shift+P`: switch Markdown raw/preview pane
 - `1`: select raw view for Markdown or CSV

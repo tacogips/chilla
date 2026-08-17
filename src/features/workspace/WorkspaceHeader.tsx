@@ -35,7 +35,7 @@ interface WorkspaceHeaderProps {
   readonly canOpenGitDiff: boolean;
   readonly hasTocDocument: boolean;
   readonly isTocOpen: boolean;
-  readonly hasOpenDocument: boolean;
+  readonly canReloadCurrent: boolean;
   readonly colorScheme: ColorScheme;
   readonly appWindow: WorkspaceWindowControls | null;
   readonly onSelectMarkdownPane: (pane: MarkdownPane) => void;
@@ -180,9 +180,9 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
         <button
           class="button button--ghost workspace__icon-button"
           type="button"
-          disabled={!props.hasOpenDocument}
-          aria-label="Reload current file"
-          title={`Reload file (${SHORTCUT_LABELS.reload})`}
+          disabled={!props.canReloadCurrent}
+          aria-label="Refresh workspace"
+          title={`Refresh workspace (${SHORTCUT_LABELS.reload})`}
           onClick={props.onReloadCurrent}
         >
           <ReloadGlyph />

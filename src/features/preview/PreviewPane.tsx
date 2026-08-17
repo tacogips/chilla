@@ -27,6 +27,7 @@ interface PreviewPaneProps {
   readonly documentPath: string | null;
   readonly colorScheme: ColorScheme;
   readonly subtitle?: string;
+  readonly dragPanEnabled?: boolean;
 }
 
 type PreviewZoomDirection = "in" | "out";
@@ -636,14 +637,87 @@ export function PreviewPane(props: PreviewPaneProps) {
       adjustZoom(event.deltaY < 0 ? "in" : "out");
     };
 
+    let dragState:
+      | {
+          readonly pointerId: number;
+          readonly clientX: number;
+          readonly clientY: number;
+          readonly scrollLeft: number;
+          readonly scrollTop: number;
+        }
+      | undefined;
+
+    const finishDrag = (event: PointerEvent, releaseCapture: boolean) => {
+      if (dragState?.pointerId !== event.pointerId) {
+        return;
+      }
+
+      dragState = undefined;
+      if (releaseCapture && preview.hasPointerCapture(event.pointerId)) {
+        preview.releasePointerCapture(event.pointerId);
+      }
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        props.dragPanEnabled !== true ||
+        !props.visible ||
+        event.button !== 0 ||
+        !event.isPrimary
+      ) {
+        return;
+      }
+
+      dragState = {
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        scrollLeft: preview.scrollLeft,
+        scrollTop: preview.scrollTop,
+      };
+      preview.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const drag = dragState;
+      if (drag === undefined || drag.pointerId !== event.pointerId) {
+        return;
+      }
+
+      preview.scrollLeft = drag.scrollLeft - (event.clientX - drag.clientX);
+      preview.scrollTop = drag.scrollTop - (event.clientY - drag.clientY);
+      event.preventDefault();
+    };
+
+    const handlePointerUp = (event: PointerEvent) => finishDrag(event, true);
+    const handlePointerCancel = (event: PointerEvent) =>
+      finishDrag(event, true);
+    const handleLostPointerCapture = (event: PointerEvent) =>
+      finishDrag(event, false);
+
     container.addEventListener("click", handleClick);
     window.addEventListener("keydown", handleKeyDown);
     preview.addEventListener("wheel", handleWheel, { passive: false });
+    preview.addEventListener("pointerdown", handlePointerDown);
+    preview.addEventListener("pointermove", handlePointerMove);
+    preview.addEventListener("pointerup", handlePointerUp);
+    preview.addEventListener("pointercancel", handlePointerCancel);
+    preview.addEventListener("lostpointercapture", handleLostPointerCapture);
 
     onCleanup(() => {
+      dragState = undefined;
       container.removeEventListener("click", handleClick);
       window.removeEventListener("keydown", handleKeyDown);
       preview.removeEventListener("wheel", handleWheel);
+      preview.removeEventListener("pointerdown", handlePointerDown);
+      preview.removeEventListener("pointermove", handlePointerMove);
+      preview.removeEventListener("pointerup", handlePointerUp);
+      preview.removeEventListener("pointercancel", handlePointerCancel);
+      preview.removeEventListener(
+        "lostpointercapture",
+        handleLostPointerCapture,
+      );
     });
   });
 
