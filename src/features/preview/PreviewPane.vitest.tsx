@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import {
   mermaidThemeVariables,
@@ -54,6 +55,45 @@ describe("PreviewPane", () => {
     document.body.innerHTML = "";
   });
 
+  it("shows the selected basename and updates it reactively", () => {
+    const root = document.getElementById("root");
+
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+
+    const [fileName, setFileName] = createSignal("first-note.md");
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath="/workspace/first-note.md"
+          fileName={fileName()}
+          html="<p>Preview content</p>"
+          selectedAnchorId={null}
+          visible={true}
+        />
+      ),
+      root,
+    );
+
+    const headerFileName = root.querySelector(".preview__file-name");
+    expect(headerFileName?.textContent).toBe("first-note.md");
+    expect(headerFileName?.getAttribute("title")).toBe("first-note.md");
+    expect(root.querySelector(".pane__header")?.textContent).not.toContain(
+      "/workspace/",
+    );
+
+    setFileName("renamed-note-with-a-long-basename.md");
+
+    expect(headerFileName?.textContent).toBe(
+      "renamed-note-with-a-long-basename.md",
+    );
+    expect(headerFileName?.getAttribute("title")).toBe(
+      "renamed-note-with-a-long-basename.md",
+    );
+  });
+
   it("upgrades asciinema poster links into embedded players", async () => {
     const root = document.getElementById("root");
 
@@ -65,6 +105,7 @@ describe("PreviewPane", () => {
       () => (
         <PreviewPane
           colorScheme="dark"
+          fileName="sample.md"
           documentPath={null}
           html={[
             "<p>",
@@ -109,6 +150,7 @@ describe("PreviewPane", () => {
         <PreviewPane
           colorScheme="dark"
           documentPath={null}
+          fileName="sample.md"
           html={[
             '<p>Inline <span class="math math-inline">x^2</span> and block</p>',
             '<p><span class="math math-display">\\sum_{i=1}^n i</span></p>',
@@ -147,6 +189,7 @@ describe("PreviewPane", () => {
         <PreviewPane
           colorScheme="dark"
           documentPath={null}
+          fileName="sample.md"
           html={[
             "<p>",
             '<a href="https://example.com/demo">',
@@ -181,6 +224,7 @@ describe("PreviewPane", () => {
         <PreviewPane
           colorScheme="dark"
           documentPath="/docs/notes/guide.md"
+          fileName="guide.md"
           html='<p><img src="./images/photo.heic" alt="photo" /></p>'
           selectedAnchorId={null}
           visible={true}
@@ -225,6 +269,7 @@ describe("PreviewPane", () => {
         <PreviewPane
           colorScheme="dark"
           documentPath={null}
+          fileName="sample.md"
           html="<p>Mermaid theme probe</p>"
           selectedAnchorId={null}
           visible={true}
@@ -281,6 +326,7 @@ describe("PreviewPane", () => {
         <PreviewPane
           colorScheme="dark"
           documentPath={null}
+          fileName="sample.txt"
           html="<p>Plain text preview</p>"
           selectedAnchorId={null}
           subtitle="File type: text/plain | File size: 10 B"
@@ -355,7 +401,7 @@ describe("PreviewPane", () => {
     expect(previewZoomText()).toBe("100%");
   });
 
-  it("clamps zoom and scales the whole rendered content surface", () => {
+  it("clamps ordinary rendered content at 300% and scales the whole surface", () => {
     renderPreview('<p>Text</p><img src="https://example.com/image.png" />');
 
     for (let step = 0; step < 30; step += 1) {
@@ -376,6 +422,42 @@ describe("PreviewPane", () => {
 
     expect(nextPreviewZoom(300, "in")).toBe(300);
     expect(nextPreviewZoom(50, "out")).toBe(50);
+  });
+
+  it("lets direct raster image previews reach and clamp at 800%", () => {
+    renderPreview('<img src="https://example.com/image.png" />', true);
+    const preview = document.querySelector<HTMLElement>(".pane__body.preview");
+
+    if (preview === null) {
+      throw new Error("missing preview body");
+    }
+
+    for (let step = 0; step < 70; step += 1) {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "+" }));
+    }
+    expect(previewZoomText()).toBe("800%");
+
+    preview.dispatchEvent(ctrlWheelUp());
+    expect(previewZoomText()).toBe("800%");
+    expect(nextPreviewZoom(800, "in", 800)).toBe(800);
+  });
+
+  it("lets direct SVG previews reach and clamp at 800%", () => {
+    renderPreview('<svg viewBox="0 0 10 10"></svg>', true);
+    const preview = document.querySelector<HTMLElement>(".pane__body.preview");
+
+    if (preview === null) {
+      throw new Error("missing preview body");
+    }
+
+    for (let step = 0; step < 70; step += 1) {
+      preview.dispatchEvent(ctrlWheelUp());
+    }
+    expect(previewZoomText()).toBe("800%");
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "+" }));
+    expect(previewZoomText()).toBe("800%");
+    expect(nextPreviewZoom(800, "in", 800)).toBe(800);
   });
 
   it("pans a direct image in the same direction as a left-button drag", () => {
@@ -464,6 +546,7 @@ function renderPreview(
     () => (
       <PreviewPane
         colorScheme="dark"
+        fileName="sample.md"
         documentPath={null}
         dragPanEnabled={dragPanEnabled}
         html={html}
@@ -513,6 +596,14 @@ function previewBodyWithPointerCapture(): HTMLElement {
 
 function previewZoomText(): string | null {
   return document.querySelector(".preview__zoom")?.textContent ?? null;
+}
+
+function ctrlWheelUp(): WheelEvent {
+  return new WheelEvent("wheel", {
+    cancelable: true,
+    ctrlKey: true,
+    deltaY: -1,
+  });
 }
 
 async function waitFor(

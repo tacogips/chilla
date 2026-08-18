@@ -168,6 +168,7 @@ Markdown source can be edited in the raw pane and saved back to disk. If the fil
 - Direct Markdown view selection with `1` for raw source and `2` for rendered preview
 - Backend-owned Markdown parsing in Rust
 - Mermaid hydration on the frontend after preview render
+- Active preview headers show the selected file name across Markdown, text, image, CSV, EPUB, PDF, audio, and video views
 - Local Markdown image resolution with HEIC / HEIF image fallback and open-in-default-app affordance when the WebView cannot render an image
 - Direct image-file previews for AVIF, APNG, BMP/DIB, GIF, HEIC/HEIF, ICO, JPEG, PNG, SVG, TIFF, and WebP files that the platform WebView can decode
 - Touch-style left-button drag panning for direct SVG and raster image previews
@@ -198,7 +199,7 @@ Global shortcuts:
 - `Shift+P`: switch Markdown raw/preview pane
 - `1`: select raw view for Markdown or CSV
 - `2`: select Markdown preview or formatted CSV view when available
-- `+` / `-`: zoom the rendered Markdown or file preview in/out by 10% (50%-300%)
+- `+` / `-`: zoom rendered Markdown and other rendered content from 50%-300%, or direct SVG and raster image previews from 50%-800%, in 10% steps
 - `Ctrl+mouse wheel`: zoom the rendered preview under the pointer
 - `Shift+S`: toggle light/dark theme
 
@@ -376,7 +377,7 @@ The local release task expects these environment variables to be exported by the
 Publish signed/notarized macOS release assets from the local machine with:
 
 ```bash
-mise run release-macos-dmg-local -- v0.1.16
+mise run release-macos-dmg-local -- v0.1.17
 ```
 
 Repository-local GitHub Actions build unsigned `.app`/`.dmg` artifacts only for validation. They do not sign, notarize, or publish trusted release assets.

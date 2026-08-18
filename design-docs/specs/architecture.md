@@ -729,7 +729,8 @@ not change the Rust preview payload or introduce a Tauri command.
 - `-` decreases the active rendered preview zoom by 10 percentage points.
 - `Ctrl` plus mouse-wheel up or down applies the same increment or decrement
   while the pointer is over the rendered preview.
-- Preview zoom is clamped from 50% through 300%.
+- Preview zoom is clamped from 50% through 300% for Markdown and other rendered
+  content, and from 50% through 800% for direct SVG and raster image previews.
 - Keyboard zoom is ignored while the user is typing in an editable control.
 - Handled wheel events suppress the WebView's native page zoom.
 - The preview header exposes the current percentage so the state remains visible.
@@ -809,3 +810,22 @@ the drag is active. Existing wheel, keyboard, and zoom behavior remains unchange
 Frontend DOM tests cover horizontal and vertical movement, non-primary-button
 rejection, pointer termination, and the absence of drag handling in non-image
 rendered previews.
+
+---
+
+## Preview Header File Identity
+
+Every active document preview header displays the selected file's basename next
+to the existing `Preview` label. This applies consistently to rendered Markdown,
+generic text and image previews, CSV raw and formatted views, EPUB, PDF, audio,
+and video previews.
+
+Solid.js owns this presentation using the `file_name` already present in the
+document and typed file-preview payloads. The header must not derive or expose a
+full filesystem path. Long basenames truncate within the header while retaining
+the complete basename in a hover title. Existing preview metadata, dirty-state
+notices, pagination, playback hints, and zoom percentage remain visible and keep
+their current behavior.
+
+Frontend DOM tests verify the selected basename appears in shared and dedicated
+preview headers and that switching preview payloads updates the displayed name.

@@ -605,6 +605,22 @@ button {
   color: var(--text-subtle);
 }
 
+.preview__header-identity {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.35rem;
+}
+
+.preview__file-name {
+  min-width: 0;
+  max-width: min(40vw, 24rem);
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pane__body {
   flex: 1;
   min-height: 0;

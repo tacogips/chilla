@@ -186,7 +186,7 @@ impl ViewerService {
         let display_path = display_path(path);
         let file_name = file_name(path);
         let last_modified = last_modified_string(path)?;
-        let resource_url = format!("{display_path}?revision={last_modified}");
+        let escaped_display_path = escape_html_attribute(&display_path);
 
         Ok(FilePreview::Image {
             path: display_path,
@@ -194,7 +194,7 @@ impl ViewerService {
             mime_type,
             html: format!(
                 "<figure class=\"preview-media preview-media--image\"><img src=\"{}\" alt=\"{}\" /></figure>",
-                escape_html_attribute(&resource_url),
+                escaped_display_path,
                 escape_html_attribute(&file_name),
             ),
             last_modified,

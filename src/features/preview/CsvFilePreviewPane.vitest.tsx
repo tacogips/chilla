@@ -64,6 +64,9 @@ describe("CsvFilePreviewPane", () => {
 
     const corner = root.querySelector(".csv-preview-table__corner");
     expect(corner).not.toBeNull();
+    expect(root.querySelector(".preview__file-name")?.textContent).toBe(
+      "sample.csv",
+    );
 
     const colHeads = root.querySelectorAll(".csv-preview-table__col-head");
     expect(colHeads.length).toBe(2);
@@ -166,5 +169,8 @@ describe("CsvFilePreviewPane", () => {
 
     expect(root.innerHTML).toContain("file-preview");
     expect(root.innerHTML).toContain("<pre");
+    expect(root.querySelector(".preview__file-name")?.textContent).toBe(
+      "sample.csv",
+    );
   });
 });

@@ -3,7 +3,7 @@
 **Status**: Completed
 **Design Reference**: design-docs/specs/architecture.md#shared-rendered-preview-zoom
 **Created**: 2026-08-14
-**Last Updated**: 2026-08-14
+**Last Updated**: 2026-08-18
 
 ---
 
@@ -39,7 +39,11 @@ Required TypeScript surface:
 ```typescript
 type PreviewZoomDirection = "in" | "out";
 
-function nextPreviewZoom(current: number, direction: PreviewZoomDirection): number;
+function nextPreviewZoom(
+  current: number,
+  direction: PreviewZoomDirection,
+  maximum?: number,
+): number;
 ```
 
 **Completion Criteria**:
@@ -49,6 +53,8 @@ function nextPreviewZoom(current: number, direction: PreviewZoomDirection): numb
 - [x] Editable targets do not trigger keyboard zoom.
 - [x] The preview header shows the current zoom percentage.
 - [x] Direct images may enlarge beyond the viewport and remain scrollable.
+- [x] Direct SVG and raster images clamp at 800%; other rendered previews clamp
+  at 300%.
 
 ### TASK-002: Frontend regression coverage
 
@@ -61,6 +67,7 @@ function nextPreviewZoom(current: number, direction: PreviewZoomDirection): numb
 - [x] Keyboard zoom-in and zoom-out are covered.
 - [x] Ctrl+wheel zoom and default prevention are covered.
 - [x] Bounds and editable-target behavior are covered.
+- [x] Type-specific 800% image and 300% rendered-content caps are covered.
 
 ### TASK-003: User-facing documentation and verification
 

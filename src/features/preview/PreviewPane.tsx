@@ -19,8 +19,10 @@ import {
   resolveDocumentResource,
   type PreviewPathApi,
 } from "./preview-assets";
+import { PreviewHeader } from "./PreviewHeader";
 
 interface PreviewPaneProps {
+  readonly fileName: string;
   readonly html: string;
   readonly visible: boolean;
   readonly selectedAnchorId: string | null;
@@ -34,18 +36,18 @@ type PreviewZoomDirection = "in" | "out";
 
 const PREVIEW_ZOOM_STEP = 10;
 const PREVIEW_ZOOM_MIN = 50;
-const PREVIEW_ZOOM_MAX = 300;
+const RENDERED_PREVIEW_ZOOM_MAX = 300;
+const IMAGE_PREVIEW_ZOOM_MAX = 800;
 
+/** Returns the next bounded rendered-preview zoom percentage. */
 export function nextPreviewZoom(
   current: number,
   direction: PreviewZoomDirection,
+  maximum = RENDERED_PREVIEW_ZOOM_MAX,
 ): number {
   const adjustment =
     direction === "in" ? PREVIEW_ZOOM_STEP : -PREVIEW_ZOOM_STEP;
-  return Math.min(
-    PREVIEW_ZOOM_MAX,
-    Math.max(PREVIEW_ZOOM_MIN, current + adjustment),
-  );
+  return Math.min(maximum, Math.max(PREVIEW_ZOOM_MIN, current + adjustment));
 }
 
 function previewZoomStyle(zoom: number): JSX.CSSProperties {
@@ -578,7 +580,11 @@ export function PreviewPane(props: PreviewPaneProps) {
   const [zoom, setZoom] = createSignal(100);
 
   const adjustZoom = (direction: PreviewZoomDirection) => {
-    setZoom((current) => nextPreviewZoom(current, direction));
+    const maximum =
+      props.dragPanEnabled === true
+        ? IMAGE_PREVIEW_ZOOM_MAX
+        : RENDERED_PREVIEW_ZOOM_MAX;
+    setZoom((current) => nextPreviewZoom(current, direction, maximum));
   };
 
   onMount(() => {
@@ -769,15 +775,14 @@ export function PreviewPane(props: PreviewPaneProps) {
 
   return (
     <section class={`pane${props.visible ? "" : " pane--hidden"}`}>
-      <header class="pane__header">
-        <span class="pane__title">Preview</span>
+      <PreviewHeader fileName={props.fileName}>
         <span class="preview__header-detail">
           <span>{props.subtitle ?? "Rendered HTML"}</span>
           <span class="preview__zoom" aria-live="polite">
             {zoom()}%
           </span>
         </span>
-      </header>
+      </PreviewHeader>
       <div
         ref={previewRef}
         class="pane__body preview"

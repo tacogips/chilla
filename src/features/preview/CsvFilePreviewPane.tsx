@@ -4,6 +4,7 @@ import type {
   FilePreview,
 } from "../../lib/tauri/document";
 import type { ColorScheme } from "../../lib/theme";
+import { PreviewHeader } from "./PreviewHeader";
 import { PreviewPane, previewThemeStyle } from "./PreviewPane";
 
 type CsvPreviewModel = Extract<FilePreview, { kind: "csv" }>;
@@ -41,6 +42,7 @@ export function CsvFilePreviewPane(props: CsvFilePreviewPaneProps) {
         <PreviewPane
           colorScheme={props.colorScheme}
           documentPath={null}
+          fileName={props.preview.file_name}
           html={props.preview.raw_html}
           selectedAnchorId={null}
           subtitle={props.subtitle}
@@ -50,10 +52,9 @@ export function CsvFilePreviewPane(props: CsvFilePreviewPaneProps) {
 
       <Match when={props.presentationMode === "formatted"}>
         <section class="pane">
-          <header class="pane__header">
-            <span class="pane__title">Preview</span>
+          <PreviewHeader fileName={props.preview.file_name}>
             <span>Formatted CSV</span>
-          </header>
+          </PreviewHeader>
           <div
             class="pane__body preview"
             style={previewThemeStyle(props.colorScheme)}

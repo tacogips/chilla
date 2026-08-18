@@ -2,6 +2,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "solid-js/web";
 import { EpubPreviewPane, EPUB_PAGINATION_STEP_EVENT } from "./EpubPreviewPane";
 
+function createMemoryStorage(): Storage {
+  const values = new Map<string, string>();
+
+  return {
+    get length() {
+      return values.size;
+    },
+    clear() {
+      values.clear();
+    },
+    getItem(key: string) {
+      return values.get(key) ?? null;
+    },
+    key(index: number) {
+      return [...values.keys()][index] ?? null;
+    },
+    removeItem(key: string) {
+      values.delete(key);
+    },
+    setItem(key: string, value: string) {
+      values.set(key, value);
+    },
+  };
+}
+
 describe("EpubPreviewPane", () => {
   let dispose: VoidFunction | undefined;
   let resizeObserverCallback: ResizeObserverCallback | undefined;
@@ -11,6 +36,7 @@ describe("EpubPreviewPane", () => {
 
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>';
+    vi.stubGlobal("localStorage", createMemoryStorage());
     globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
       return window.setTimeout(() => callback(performance.now()), 0);
     }) as typeof globalThis.requestAnimationFrame;
@@ -38,7 +64,7 @@ describe("EpubPreviewPane", () => {
     globalThis.ResizeObserver = originalResizeObserver;
     globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
-    localStorage.clear();
+    vi.unstubAllGlobals();
     document.body.innerHTML = "";
   });
 
@@ -53,6 +79,7 @@ describe("EpubPreviewPane", () => {
       () => (
         <EpubPreviewPane
           colorScheme="light"
+          fileName="sample.epub"
           documentPath={null}
           html={[
             '<section class="file-preview file-preview--epub">',
@@ -70,6 +97,9 @@ describe("EpubPreviewPane", () => {
 
     const viewport = document.querySelector(".epub-reader__viewport");
     const flow = document.querySelector(".file-preview--epub");
+    expect(root.querySelector(".preview__file-name")?.textContent).toBe(
+      "sample.epub",
+    );
 
     if (
       !(viewport instanceof HTMLDivElement) ||
@@ -147,6 +177,7 @@ describe("EpubPreviewPane", () => {
         <EpubPreviewPane
           colorScheme="light"
           documentPath="/tmp/book.epub"
+          fileName="book.epub"
           html={[
             '<section class="file-preview file-preview--epub">',
             '<article class="epub-preview">',

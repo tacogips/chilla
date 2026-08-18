@@ -40,6 +40,9 @@ describe("PdfFilePreviewPane", () => {
     const frame =
       document.querySelector<HTMLIFrameElement>(".preview-pdf-frame");
     expect(frame).not.toBeNull();
+    expect(root.querySelector(".preview__file-name")?.textContent).toBe(
+      "report.pdf",
+    );
     expect(new URL(frame?.src ?? "").searchParams.get("revision")).toBe(
       "2026-08-17T01:02:03Z",
     );

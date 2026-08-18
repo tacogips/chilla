@@ -3,6 +3,7 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import { isLinuxWebKitDesktop } from "../../lib/platform";
+import { PreviewHeader } from "./PreviewHeader";
 
 interface MediaFilePreviewPaneProps {
   readonly kind: "video" | "audio";
@@ -242,13 +243,12 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
 
   return (
     <section class="pane">
-      <header class="pane__header">
-        <span class="pane__title">Preview</span>
+      <PreviewHeader fileName={props.fileName}>
         <span>
           {isVideo() ? "Video" : "Audio"} (Space: play / pause, J/K: +/-5s when
           the file tree is hidden, Ctrl-D/Ctrl-U: +/-15s)
         </span>
-      </header>
+      </PreviewHeader>
       <div
         class={`pane__body preview ${isVideo() ? "preview--embedded-video" : "preview--embedded-audio"}${isLinuxVideoLayout ? " preview--video-external-linux" : ""}`}
       >

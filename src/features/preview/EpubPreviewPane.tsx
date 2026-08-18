@@ -14,11 +14,13 @@ import {
 import type { ColorScheme } from "../../lib/theme";
 import type { EpubNavigationItem } from "../../lib/tauri/document";
 import { isDefaultBrowserUrl } from "./preview-assets";
+import { PreviewHeader } from "./PreviewHeader";
 import { enhancePreviewContent, previewThemeStyle } from "./PreviewPane";
 
 export const EPUB_PAGINATION_STEP_EVENT = "chilla:epub-page-step";
 
 interface EpubPreviewPaneProps {
+  readonly fileName: string;
   readonly html: string;
   readonly toc: readonly EpubNavigationItem[];
   readonly visible: boolean;
@@ -599,10 +601,9 @@ export function EpubPreviewPane(props: EpubPreviewPaneProps) {
 
   return (
     <section class={`pane${props.visible ? "" : " pane--hidden"}`}>
-      <header class="pane__header">
-        <span class="pane__title">Preview</span>
+      <PreviewHeader fileName={props.fileName}>
         <span>{props.subtitle ?? "Rendered HTML"}</span>
-      </header>
+      </PreviewHeader>
       <div
         class="pane__body preview preview--embedded-epub"
         style={previewThemeStyle(props.colorScheme)}

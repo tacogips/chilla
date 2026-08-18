@@ -85,6 +85,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
         <PreviewPane
           colorScheme={props.colorScheme}
           documentPath={props.markdownDoc?.path ?? null}
+          fileName={props.markdownDoc?.file_name ?? ""}
           html={props.markdownDoc?.html ?? ""}
           selectedAnchorId={props.selection.anchorId}
           {...(props.markdownIsDirty
@@ -106,6 +107,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
         <EpubPreviewPane
           colorScheme={props.colorScheme}
           documentPath={previewPath(props.filePreview)}
+          fileName={props.filePreview?.file_name ?? ""}
           html={previewHtml(props.filePreview)}
           onRelocate={props.onRelocateEpub}
           selectedAnchorId={props.selection.anchorId}
@@ -138,6 +140,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
         <PreviewPane
           colorScheme={props.colorScheme}
           documentPath={previewPath(props.filePreview)}
+          fileName={props.filePreview?.file_name ?? ""}
           dragPanEnabled={props.filePreview?.kind === "image"}
           html={previewHtml(props.filePreview)}
           selectedAnchorId={null}

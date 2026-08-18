@@ -8,7 +8,7 @@ use super::ViewerService;
 use crate::{syntax_highlight::SyntaxUiTheme, viewer::types::FilePreview};
 
 #[test]
-fn image_preview_url_tracks_the_current_filesystem_revision() {
+fn image_preview_url_uses_the_clean_file_path() {
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -43,9 +43,11 @@ fn image_preview_url_tracks_the_current_filesystem_revision() {
         .display()
         .to_string();
 
-    assert!(first_html.contains(&format!("src=\"{escaped_path}?revision={first_revision}\"")));
-    assert!(next_html.contains(&format!("src=\"{escaped_path}?revision={next_revision}\"")));
-    assert_ne!(first_html, next_html);
+    assert!(first_html.contains(&format!("src=\"{escaped_path}\"")));
+    assert!(next_html.contains(&format!("src=\"{escaped_path}\"")));
+    assert!(!first_html.contains("?revision="));
+    assert!(!next_html.contains("?revision="));
+    assert_ne!(first_revision, next_revision);
 
     fs::remove_dir_all(&test_directory).expect("remove image revision test directory");
 }

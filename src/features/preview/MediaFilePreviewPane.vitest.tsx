@@ -58,6 +58,10 @@ describe("MediaFilePreviewPane", () => {
       root,
     );
 
+    expect(root.querySelector(".preview__file-name")?.textContent).toBe(
+      "demo.mp4",
+    );
+
     const media = document.querySelector("video");
 
     if (!(media instanceof HTMLMediaElement)) {
