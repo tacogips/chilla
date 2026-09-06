@@ -163,7 +163,7 @@ Markdown source can be edited in the raw pane and saved back to disk. If the fil
 
 ## Features
 
-- Flat file browser with keyboard navigation inspired by terminal file managers
+- Flat file browser with keyboard navigation inspired by terminal file managers, including a filter-row toggle for Git-ignored entries, compact absolute-path display with full-path hover text, a `Tab` directory-information tree, dedicated symbolic-link icons, and visible resolved link destinations
 - Markdown heading extraction and table of contents
 - Direct Markdown view selection with `1` for raw source and `2` for rendered preview
 - Backend-owned Markdown parsing in Rust
@@ -206,6 +206,9 @@ Global shortcuts:
 File tree shortcuts:
 
 - `/`: focus filter
+- `.`: toggle Git-ignored entries in directory browsing
+- `Tab`: show the current directory's absolute path and metadata as a root-to-leaf tree
+- `Esc`: close directory information, or clear the filter and return to the list when the filter is focused
 - `J` or `ArrowDown`: move selection down
 - `K` or `ArrowUp`: move selection up
 - `0`: reset sort to default (`name` ascending)
@@ -377,7 +380,7 @@ The local release task expects these environment variables to be exported by the
 Publish signed/notarized macOS release assets from the local machine with:
 
 ```bash
-mise run release-macos-dmg-local -- v0.1.17
+mise run release-macos-dmg-local -- v0.1.18
 ```
 
 Repository-local GitHub Actions build unsigned `.app`/`.dmg` artifacts only for validation. They do not sign, notarize, or publish trusted release assets.

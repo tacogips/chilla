@@ -97,6 +97,7 @@ pub struct DirectoryEntry {
     pub name: String,
     pub directory_hint: String,
     pub is_directory: bool,
+    pub is_symlink: bool,
     pub size_bytes: u64,
     pub modified_at_unix_ms: u64,
 }

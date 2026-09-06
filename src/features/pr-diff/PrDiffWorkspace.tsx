@@ -9,6 +9,14 @@ import {
 } from "solid-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
+import { PaneResizeHandle } from "../file-view/PaneResizeHandle";
+import {
+  persistPaneWidthPx,
+  PR_BROWSER_WIDTH_STORAGE_KEY,
+  prBrowserWidthBounds,
+  restorePersistedPaneWidthPx,
+  safeLocalStorage,
+} from "../file-view/paneResize";
 import type {
   DiffWorkspaceTarget,
   GitHubDiffSource,
@@ -20,6 +28,7 @@ import type {
 } from "../../lib/tauri/document";
 import {
   loadGitDiff,
+  loadGitDiffFileText,
   loadPrDiff,
   loadPrDiffFileText,
   PrFileStatus,
@@ -909,6 +918,29 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
     Readonly<Record<string, LazyFileTextState>>
   >({});
   const [mode, setMode] = createSignal<DiffViewMode>("left_right");
+  const [prBrowserWidthPx, setPrBrowserWidthPx] = createSignal<number | null>(
+    restorePersistedPaneWidthPx(
+      safeLocalStorage(),
+      PR_BROWSER_WIDTH_STORAGE_KEY,
+      prBrowserWidthBounds(window.innerWidth),
+    ),
+  );
+
+  const prWorkspaceStyle = createMemo(() => {
+    const width = prBrowserWidthPx();
+    return width === null ? undefined : { "--pr-browser-width": `${width}px` };
+  });
+
+  const handlePrBrowserResizeEnd = () => {
+    const width = prBrowserWidthPx();
+    if (width !== null) {
+      persistPaneWidthPx(
+        safeLocalStorage(),
+        PR_BROWSER_WIDTH_STORAGE_KEY,
+        width,
+      );
+    }
+  };
 
   const files = createMemo(() => snapshot()?.files ?? []);
   const sortedFiles = createMemo(() =>
@@ -997,16 +1029,34 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
     }
   };
 
+  const fetchFullFileText = (
+    file: PrDiffFile,
+  ): Promise<PrDiffFileText> | null => {
+    if (props.target.kind === "github") {
+      if (file.raw_url === null) {
+        return null;
+      }
+      return loadPrDiffFileText(file.raw_url);
+    }
+
+    return loadGitDiffFileText(props.target.target, file.path);
+  };
+
   const ensureFullFileText = (file: PrDiffFile) => {
     const lazyState = lazyFileText()[file.path];
     if (
       file.full_text !== null ||
-      file.raw_url === null ||
       file.is_binary ||
+      file.status === PrFileStatus.Deleted ||
       lazyState?.loading === true ||
       (lazyState?.text !== undefined && lazyState.text !== null) ||
       (lazyState?.error !== undefined && lazyState.error !== null)
     ) {
+      return;
+    }
+
+    const request = fetchFullFileText(file);
+    if (request === null) {
       return;
     }
 
@@ -1019,7 +1069,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
       },
     }));
 
-    void loadPrDiffFileText(file.raw_url)
+    void request
       .then((text) => {
         setLazyFileText((state) => ({
           ...state,
@@ -1273,7 +1323,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
   });
 
   return (
-    <div class="pr-workspace">
+    <div class="pr-workspace" style={prWorkspaceStyle()}>
       <aside class="pane pr-browser">
         <header class="pane__header">
           <span class="pane__title">Changed Files</span>
@@ -1401,6 +1451,12 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
             </ul>
           </Show>
         </div>
+        <PaneResizeHandle
+          getBounds={() => prBrowserWidthBounds(window.innerWidth)}
+          onResize={setPrBrowserWidthPx}
+          onResizeEnd={handlePrBrowserResizeEnd}
+          label="Resize changed files pane"
+        />
       </aside>
 
       <section class="pane pr-diff-pane">

@@ -404,7 +404,10 @@ button {
  * pane in the TOC track (12–16rem) and wastes the 1fr column.
  */
 .workspace__body--viewer {
-  grid-template-columns: minmax(10rem, 15rem) minmax(0, 1fr);
+  grid-template-columns: minmax(10rem, var(--file-tree-width, 15rem)) minmax(
+      0,
+      1fr
+    );
   grid-template-rows: 1fr;
   min-width: calc(10rem + 14rem);
   align-content: stretch;
@@ -412,10 +415,10 @@ button {
 }
 
 .workspace__body--viewer--toc {
-  grid-template-columns: minmax(10rem, 15rem) minmax(10rem, 15rem) minmax(
-      0,
-      1fr
-    );
+  grid-template-columns: minmax(10rem, var(--file-tree-width, 15rem)) minmax(
+      10rem,
+      15rem
+    ) minmax(0, 1fr);
   min-width: calc(10rem + 10rem + 14rem);
 }
 
@@ -564,6 +567,7 @@ button {
 }
 
 .pane {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -580,6 +584,24 @@ button {
 
 .pane--hidden {
   display: none;
+}
+
+.pane-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  z-index: 5;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.pane-resize-handle:hover,
+.pane-resize-handle:active {
+  background: var(--accent-soft);
 }
 
 .pane__header {
@@ -1152,10 +1174,12 @@ button {
   flex-direction: column;
   gap: 0;
   margin: 0;
+  overflow: hidden;
   padding: 0;
 }
 
 .file-browser__path {
+  flex: 0 0 auto;
   margin: 0;
   padding: 0.25rem 0.4rem;
   border: 0;
@@ -1165,11 +1189,123 @@ button {
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  word-break: break-all;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-information-layer {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.directory-information-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--bg) 58%, transparent);
+  cursor: default;
+}
+
+.directory-information {
+  position: relative;
+  z-index: 1;
+  width: min(36rem, 100%);
+  max-height: min(38rem, calc(100vh - 2rem));
+  overflow: auto;
+  padding: 0.85rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: 0 1rem 3rem color-mix(in srgb, var(--bg) 60%, transparent);
+  color: var(--text);
+}
+
+.directory-information:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.directory-information__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.directory-information__header h2 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.directory-information__close {
+  margin: 0;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-muted);
+}
+
+.directory-information__absolute-path,
+.directory-information__path-tree {
+  margin: 0.75rem 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.directory-information__absolute-path {
+  color: var(--text);
+}
+
+.directory-information__path-tree {
+  padding: 0;
+  list-style: none;
+  color: var(--text-muted);
+}
+
+.directory-information__path-tree li {
+  padding-left: calc(var(--directory-depth) * 0.8rem);
+}
+
+.directory-information__path-tree li::before {
+  content: "└ ";
+  color: var(--text-subtle);
+}
+
+.directory-information__details {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.35rem 0.75rem;
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.directory-information__details dt {
+  color: var(--text-subtle);
+}
+
+.directory-information__details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.directory-information__hint {
+  margin: 0.85rem 0 0;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
 }
 
 .file-browser__filter-row {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 0.2rem;
   margin: 0;
@@ -1186,6 +1322,43 @@ button {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-subtle);
+}
+
+.file-browser__filter-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.file-browser__git-ignored-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.25rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+
+.file-browser__git-ignored-toggle:hover,
+.file-browser__git-ignored-toggle:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+  color: var(--text);
+  outline: none;
+}
+
+.file-browser__git-ignored-toggle--active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .file-browser__filter {
@@ -1214,6 +1387,27 @@ button {
 .file-browser__path--selected {
   background: var(--accent-soft);
   color: var(--text);
+}
+
+.file-browser__path--compact {
+  display: grid;
+  grid-template-rows: repeat(2, 1.35em);
+  block-size: calc(2.7em + 0.5rem + 1px);
+  text-overflow: clip;
+}
+
+.file-browser__path-row {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.file-browser__entries {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .file-browser__list {
@@ -1276,6 +1470,10 @@ button {
   color: var(--text-subtle);
 }
 
+.file-browser__button--symlink .file-browser__icon {
+  color: var(--accent);
+}
+
 .file-browser__button--dir .file-browser__name {
   color: var(--folder-name);
   font-weight: 500;
@@ -1304,6 +1502,15 @@ button {
   white-space: nowrap;
 }
 
+.file-browser__symlink-target {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-size: 0.82em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .file-browser__name {
   flex: 1;
   min-width: 0;
@@ -1322,7 +1529,10 @@ button {
 
 .pr-workspace {
   display: grid;
-  grid-template-columns: minmax(14rem, 0.25fr) minmax(0, 1fr);
+  grid-template-columns: var(--pr-browser-width, minmax(14rem, 0.25fr)) minmax(
+      0,
+      1fr
+    );
   flex: 1;
   min-width: 0;
   min-height: 0;

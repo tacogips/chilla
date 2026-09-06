@@ -163,6 +163,35 @@ Behavior rules:
 
 - Entries are sorted by the requested sort contract; the current default is case-insensitive name ascending.
 - Hidden files remain visible unless a later feature explicitly adds filtering.
+
+### Symbolic Link Presentation
+
+- Directory entries identify whether the logical row path is a symbolic link without changing the existing resolved `canonical_path` contract.
+- A symbolic-link row uses a dedicated symbolic-link glyph, regardless of whether its target is a file or directory.
+- A symbolic-link row renders `→ <resolved target path>` beneath its name so the destination is visible without opening the entry; the full destination remains available through the row text and tooltip when space is limited.
+- Selecting or opening a symbolic link continues to use the logical link path, while preview identity and target matching may continue to use the canonical path.
+- Explicit file sets contain canonicalized files and therefore do not present their source arguments as symbolic links.
+- Existing dangling symbolic-link omission remains unchanged.
+
+### Git-Ignored Entry Visibility
+
+- Directory browsing includes Git-ignored entries by default so the existing file-view behavior remains unchanged.
+- A compact icon button beside the file-name filter toggles exclusion of entries ignored by the applicable Git repository rules.
+- The active button state means ignored entries are hidden. Its accessible name and tooltip must describe both the state and the `.` shortcut.
+- `.` toggles the same state when focus is within the file browser and the event target is not editable, matching yazi's visibility-toggle key.
+- Git ignore evaluation is Rust-owned and occurs before sorting, counting, and pagination so page totals remain accurate.
+- Ignore evaluation uses Git's own rule resolution, including repository, nested, and global excludes. A directory outside a Git worktree or an unavailable Git executable behaves as though no entries are ignored.
+- The visibility preference persists while navigating, sorting, filtering, loading additional pages, and refreshing during the current workspace session.
+- Explicit file-set mode never removes user-selected files and does not show the Git-ignore toggle.
+
+### Compact Directory Path And Directory Information
+
+- The current-directory line remains an absolute path, but paths longer than roughly 40 characters render as the first 20 characters, an ellipsis, and the last 20 characters.
+- The compact path may wrap to at most two lines. Its hover title exposes the complete absolute path.
+- `Tab` opens a directory-information popup while the file browser is active and focus is not in an editable control, matching yazi's spot shortcut.
+- The popup renders the complete absolute directory as a root-to-leaf component tree without truncation and also shows the current entry count, sort, text filter, and Git-ignored visibility state.
+- `Escape` closes the popup and restores normal file-browser interaction.
+- Explicit file-set mode keeps its neutral context label and does not expose directory information.
 - Non-readable directories fail with a user-facing error rather than partial silent omission.
 
 ### Explicit File Set Contract

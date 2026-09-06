@@ -104,6 +104,14 @@ export const SHORTCUT_SECTIONS: readonly {
     shortcuts: [
       { keys: ["/"], description: "Focus filter" },
       {
+        keys: ["."],
+        description: "Toggle Git-ignored entries (directory browsing only)",
+      },
+      {
+        keys: ["Tab"],
+        description: "Show directory information (directory browsing only)",
+      },
+      {
         keys: ["Esc"],
         description: "Clear filter and return to list (when filter focused)",
       },

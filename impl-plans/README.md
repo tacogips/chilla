@@ -46,6 +46,9 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `git-ignored-file-visibility.md` | 2026-09-03 | `design-docs/specs/design-file-viewer-mode.md#git-ignored-entry-visibility` |
+| `symlink-file-list-presentation.md` | 2026-09-03 | `design-docs/specs/design-file-viewer-mode.md#symbolic-link-presentation` |
+| `git-diff-loading-performance.md` | 2026-09-03 | Performance fix for the git diff viewer (lazy full-text loading, untracked-file diff synthesis) |
 | `preview-header-file-name.md` | 2026-08-18 | `design-docs/specs/architecture.md#preview-header-file-identity` |
 | `two-column-shortcut-help.md` | 2026-08-17 | `design-docs/specs/architecture.md#keyboard-shortcut-help-layout` |
 | `revision-aware-local-refresh.md` | 2026-08-17 | `design-docs/specs/architecture.md#revision-aware-local-refresh`; `design-docs/specs/architecture.md#direct-image-drag-panning` |

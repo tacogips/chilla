@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "solid-js/web";
 import type {
+  GitDiffTarget,
   GitHubDiffSource,
   GitHubPrTarget,
   PrDiffFile,
@@ -10,6 +11,8 @@ import { PrFileStatus } from "../../lib/tauri/document";
 
 const loadPrDiffMock = vi.hoisted(() => vi.fn());
 const loadPrDiffFileTextMock = vi.hoisted(() => vi.fn());
+const loadGitDiffMock = vi.hoisted(() => vi.fn());
+const loadGitDiffFileTextMock = vi.hoisted(() => vi.fn());
 const openUrlMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -24,6 +27,8 @@ vi.mock("../../lib/tauri/document", async (importOriginal) => {
     ...actual,
     loadPrDiff: loadPrDiffMock,
     loadPrDiffFileText: loadPrDiffFileTextMock,
+    loadGitDiff: loadGitDiffMock,
+    loadGitDiffFileText: loadGitDiffFileTextMock,
   };
 });
 
@@ -61,6 +66,13 @@ const target: GitHubPrTarget = {
   },
   url: "https://github.com/tacogips/chilla/pull/12",
   use_cache: true,
+};
+
+const gitTarget: GitDiffTarget = {
+  repo_path: "/workspace/repo",
+  source: {
+    kind: "worktree",
+  },
 };
 
 function textDiffFile(
@@ -193,6 +205,12 @@ describe("PrDiffWorkspace", () => {
       full_text: "",
       full_text_truncated: false,
     });
+    loadGitDiffMock.mockReset();
+    loadGitDiffFileTextMock.mockReset();
+    loadGitDiffFileTextMock.mockResolvedValue({
+      full_text: "",
+      full_text_truncated: false,
+    });
     openUrlMock.mockReset();
   });
 
@@ -209,6 +227,17 @@ describe("PrDiffWorkspace", () => {
     }
     dispose = render(
       () => PrDiffWorkspace({ target: { kind: "github", target } }),
+      root,
+    );
+  }
+
+  function renderGitWorkspace(): void {
+    const root = document.getElementById("root");
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+    dispose = render(
+      () => PrDiffWorkspace({ target: { kind: "git", target: gitTarget } }),
       root,
     );
   }
@@ -690,6 +719,80 @@ describe("PrDiffWorkspace", () => {
       );
       expect(document.body.textContent).toContain("loaded");
     });
+  });
+
+  it("loads full file text lazily for local Git diff targets without a raw URL", async () => {
+    loadGitDiffMock.mockResolvedValue(
+      snapshot(
+        [{ ...textDiffFile("src/app.ts"), raw_url: null, full_text: null }],
+        { kind: "git_worktree", repo_path: gitTarget.repo_path },
+        gitTarget.repo_path,
+      ),
+    );
+    loadGitDiffFileTextMock.mockResolvedValue({
+      full_text: 'const lazy = "loaded";',
+      full_text_truncated: false,
+    });
+
+    renderGitWorkspace();
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-path="src"]')).not.toBeNull();
+    });
+
+    click('[data-path="src"]');
+    await waitFor(() => {
+      expect(document.querySelector('[data-path="src/app.ts"]')).not.toBeNull();
+    });
+    click('[data-path="src/app.ts"]');
+    expect(loadGitDiffFileTextMock).not.toHaveBeenCalled();
+    expect(loadPrDiffFileTextMock).not.toHaveBeenCalled();
+
+    click('[aria-label="Full file"]');
+
+    await waitFor(() => {
+      expect(loadGitDiffFileTextMock).toHaveBeenCalledWith(
+        gitTarget,
+        "src/app.ts",
+      );
+      expect(document.body.textContent).toContain("loaded");
+    });
+    expect(loadPrDiffFileTextMock).not.toHaveBeenCalled();
+  });
+
+  it("skips lazy loading for deleted files in Git diff targets", async () => {
+    loadGitDiffMock.mockResolvedValue(
+      snapshot(
+        [
+          {
+            ...textDiffFile("src/removed.ts"),
+            raw_url: null,
+            full_text: null,
+            status: PrFileStatus.Deleted,
+          },
+        ],
+        { kind: "git_worktree", repo_path: gitTarget.repo_path },
+        gitTarget.repo_path,
+      ),
+    );
+
+    renderGitWorkspace();
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-path="src"]')).not.toBeNull();
+    });
+
+    click('[data-path="src"]');
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-path="src/removed.ts"]'),
+      ).not.toBeNull();
+    });
+    click('[data-path="src/removed.ts"]');
+    click('[aria-label="Full file"]');
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(loadGitDiffFileTextMock).not.toHaveBeenCalled();
   });
 
   it("shows image mode only for SVG paths and renders encoded SVG content", async () => {

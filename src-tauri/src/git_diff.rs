@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::{AppError, AppResult},
     github_pr_diff::{
-        parse_unified_diff, GitHubDiffSource, PrDiffFile, PrDiffFileText, PrDiffIdentity,
-        PrDiffSnapshot, PrFileStatus,
+        parse_unified_diff, GitHubDiffSource, PrDiffChange, PrDiffChangeType, PrDiffChunk,
+        PrDiffFile, PrDiffFileText, PrDiffIdentity, PrDiffSnapshot, PrFileStatus,
     },
 };
 
@@ -82,7 +82,7 @@ impl GitDiffService {
 
     pub fn load(&self, target: &GitDiffTarget) -> AppResult<PrDiffSnapshot> {
         let repo_path = resolve_git_repository_root(Path::new(&target.repo_path))?;
-        let (diff_text, warnings) = match &target.source {
+        let (diff_text, warnings, extra_files) = match &target.source {
             GitDiffSource::Worktree => self.worktree_diff(&repo_path)?,
             GitDiffSource::Commit { commit } => {
                 validate_git_revision(commit)?;
@@ -92,13 +92,12 @@ impl GitDiffService {
                         "show",
                         "--format=",
                         "--find-renames",
-                        "--binary",
                         "--no-ext-diff",
                         commit,
                     ],
                     true,
                 )?;
-                (diff_text, Vec::new())
+                (diff_text, Vec::new(), Vec::new())
             }
             GitDiffSource::Range {
                 base,
@@ -114,21 +113,15 @@ impl GitDiffService {
                 };
                 let diff_text = run_git_text(
                     &repo_path,
-                    &[
-                        "diff",
-                        "--find-renames",
-                        "--binary",
-                        "--no-ext-diff",
-                        &range,
-                    ],
+                    &["diff", "--find-renames", "--no-ext-diff", &range],
                     true,
                 )?;
-                (diff_text, Vec::new())
+                (diff_text, Vec::new(), Vec::new())
             }
         };
 
         let mut files = parse_unified_diff(&diff_text);
-        hydrate_full_file_texts(&repo_path, &target.source, &mut files);
+        files.extend(extra_files);
         files.sort_by(|left, right| left.path.cmp(&right.path));
 
         let additions = files.iter().map(|file| file.additions).sum();
@@ -160,16 +153,10 @@ impl GitDiffService {
         })
     }
 
-    fn worktree_diff(&self, repo_path: &Path) -> AppResult<(String, Vec<String>)> {
-        let mut diff = run_git_text(
+    fn worktree_diff(&self, repo_path: &Path) -> AppResult<(String, Vec<String>, Vec<PrDiffFile>)> {
+        let diff = run_git_text(
             repo_path,
-            &[
-                "diff",
-                "--find-renames",
-                "--binary",
-                "--no-ext-diff",
-                "HEAD",
-            ],
+            &["diff", "--find-renames", "--no-ext-diff", "HEAD"],
             true,
         )?;
         let mut warnings = Vec::new();
@@ -182,19 +169,102 @@ impl GitDiffService {
             ));
         }
 
+        let mut extra_files = Vec::new();
         for path in untracked_paths.into_iter().take(MAX_UNTRACKED_DIFF_FILES) {
-            let untracked_diff = run_git_text(
-                repo_path,
-                &["diff", "--no-index", "--binary", "--", "/dev/null", &path],
-                true,
-            )?;
-            if !diff.is_empty() && !untracked_diff.is_empty() {
-                diff.push('\n');
-            }
-            diff.push_str(&untracked_diff);
+            let Ok(bytes) = fs::read(repo_path.join(&path)) else {
+                continue;
+            };
+            extra_files.push(synthesize_untracked_file(path, &bytes));
         }
 
-        Ok((diff, warnings))
+        Ok((diff, warnings, extra_files))
+    }
+
+    pub fn load_file_text(
+        &self,
+        target: &GitDiffTarget,
+        relative_path: &str,
+    ) -> AppResult<PrDiffFileText> {
+        let repo_path = resolve_git_repository_root(Path::new(&target.repo_path))?;
+        match &target.source {
+            GitDiffSource::Worktree => load_worktree_file_text(&repo_path, relative_path),
+            GitDiffSource::Commit { commit } => {
+                load_git_blob_text(&repo_path, commit, relative_path)
+            }
+            GitDiffSource::Range { head, .. } => {
+                load_git_blob_text(&repo_path, head, relative_path)
+            }
+        }
+    }
+}
+
+const BINARY_SNIFF_BYTES: usize = 8000;
+
+fn synthesize_untracked_file(path: String, bytes: &[u8]) -> PrDiffFile {
+    let sniff_len = bytes.len().min(BINARY_SNIFF_BYTES);
+    let is_binary = bytes[..sniff_len].contains(&0);
+
+    if is_binary {
+        return PrDiffFile {
+            path,
+            old_path: None,
+            status: PrFileStatus::Added,
+            additions: 0,
+            deletions: 0,
+            chunks: Vec::new(),
+            is_binary: true,
+            raw_url: None,
+            full_text: None,
+            full_text_truncated: false,
+        };
+    }
+
+    let text = String::from_utf8_lossy(bytes);
+    let lines: Vec<&str> = if text.is_empty() {
+        Vec::new()
+    } else {
+        text.strip_suffix('\n')
+            .unwrap_or(&text)
+            .split('\n')
+            .collect()
+    };
+
+    let additions = u32::try_from(lines.len()).unwrap_or(u32::MAX);
+    let chunks = if lines.is_empty() {
+        Vec::new()
+    } else {
+        let changes = lines
+            .iter()
+            .enumerate()
+            .map(|(index, line)| PrDiffChange {
+                change_type: PrDiffChangeType::Add,
+                old_line: None,
+                new_line: Some(u32::try_from(index + 1).unwrap_or(u32::MAX)),
+                content: (*line).to_string(),
+            })
+            .collect();
+
+        vec![PrDiffChunk {
+            old_start: 0,
+            old_lines: 0,
+            new_start: 1,
+            new_lines: additions,
+            header: format!("@@ -0,0 +1,{additions} @@"),
+            changes,
+        }]
+    };
+
+    PrDiffFile {
+        path,
+        old_path: None,
+        status: PrFileStatus::Added,
+        additions,
+        deletions: 0,
+        chunks,
+        is_binary: false,
+        raw_url: None,
+        full_text: None,
+        full_text_truncated: false,
     }
 }
 
@@ -318,25 +388,6 @@ fn untracked_paths(repo_path: &Path) -> AppResult<Vec<String>> {
         .filter(|value| !value.is_empty())
         .map(|value| String::from_utf8_lossy(value).to_string())
         .collect())
-}
-
-fn hydrate_full_file_texts(repo_path: &Path, source: &GitDiffSource, files: &mut [PrDiffFile]) {
-    for file in files {
-        if file.status == PrFileStatus::Deleted || file.is_binary {
-            continue;
-        }
-
-        let loaded = match source {
-            GitDiffSource::Worktree => load_worktree_file_text(repo_path, &file.path),
-            GitDiffSource::Commit { commit } => load_git_blob_text(repo_path, commit, &file.path),
-            GitDiffSource::Range { head, .. } => load_git_blob_text(repo_path, head, &file.path),
-        };
-
-        if let Ok(text) = loaded {
-            file.full_text = Some(text.full_text);
-            file.full_text_truncated = text.full_text_truncated;
-        }
-    }
 }
 
 fn load_worktree_file_text(repo_path: &Path, relative_path: &str) -> AppResult<PrDiffFileText> {
@@ -473,7 +524,7 @@ mod tests {
     };
 
     use super::{GitDiffService, GitDiffSource, GitDiffTarget};
-    use crate::github_pr_diff::PrFileStatus;
+    use crate::github_pr_diff::{PrDiffChangeType, PrFileStatus};
 
     struct TestRepo {
         path: PathBuf,
@@ -539,8 +590,48 @@ mod tests {
 
         assert_eq!(snapshot.identity.state.as_deref(), Some("uncommitted"));
         assert!(snapshot.files.iter().any(|file| file.path == "README.md"));
-        assert!(snapshot.files.iter().any(|file| file.path == "src/new.rs"));
         assert!(snapshot.additions >= 2);
+
+        let untracked = snapshot
+            .files
+            .iter()
+            .find(|file| file.path == "src/new.rs")
+            .expect("untracked file present");
+        assert_eq!(untracked.status, PrFileStatus::Added);
+        assert!(!untracked.is_binary);
+        assert_eq!(untracked.additions, 1);
+        assert_eq!(untracked.deletions, 0);
+        assert_eq!(untracked.chunks.len(), 1);
+        let chunk = &untracked.chunks[0];
+        assert_eq!(chunk.new_start, 1);
+        assert_eq!(chunk.new_lines, 1);
+        assert_eq!(chunk.changes.len(), 1);
+        assert_eq!(chunk.changes[0].change_type, PrDiffChangeType::Add);
+        assert_eq!(chunk.changes[0].old_line, None);
+        assert_eq!(chunk.changes[0].new_line, Some(1));
+        assert_eq!(chunk.changes[0].content, "fn main() {}");
+    }
+
+    #[test]
+    fn reports_untracked_binary_files_without_chunks() {
+        let repo = TestRepo::new();
+        repo.write("README.md", "old\n");
+        repo.commit_all("initial");
+        let binary_path = repo.path().join("blob.bin");
+        fs::write(&binary_path, [0x00_u8, 0x01, 0x02, 0x03]).expect("write binary file");
+
+        let target = GitDiffTarget::worktree_from_path(repo.path()).expect("target");
+        let snapshot = GitDiffService::new().load(&target).expect("snapshot");
+
+        let binary_file = snapshot
+            .files
+            .iter()
+            .find(|file| file.path == "blob.bin")
+            .expect("untracked binary file present");
+        assert!(binary_file.is_binary);
+        assert_eq!(binary_file.status, PrFileStatus::Added);
+        assert!(binary_file.chunks.is_empty());
+        assert_eq!(binary_file.additions, 0);
     }
 
     #[test]
@@ -559,7 +650,30 @@ mod tests {
         assert_eq!(snapshot.files.len(), 1);
         assert_eq!(snapshot.files[0].path, "README.md");
         assert_eq!(snapshot.files[0].status, PrFileStatus::Modified);
-        assert_eq!(snapshot.files[0].full_text.as_deref(), Some("new\n"));
+        assert_eq!(snapshot.files[0].full_text, None);
+        assert!(!snapshot.files[0].full_text_truncated);
+
+        let text = GitDiffService::new()
+            .load_file_text(&target, "README.md")
+            .expect("load file text");
+        assert_eq!(text.full_text, "new\n");
+        assert!(!text.full_text_truncated);
+    }
+
+    #[test]
+    fn loads_file_text_for_worktree_source() {
+        let repo = TestRepo::new();
+        repo.write("README.md", "old\n");
+        repo.commit_all("initial");
+        repo.write("README.md", "new\n");
+
+        let target = GitDiffTarget::worktree_from_path(repo.path()).expect("target");
+        let text = GitDiffService::new()
+            .load_file_text(&target, "README.md")
+            .expect("load file text");
+
+        assert_eq!(text.full_text, "new\n");
+        assert!(!text.full_text_truncated);
     }
 
     #[test]

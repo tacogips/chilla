@@ -39,6 +39,13 @@ import {
 } from "../../lib/tauri/document";
 import { FileBrowserPane } from "../file-view/FileBrowserPane";
 import type { FileBrowserSelectOptions } from "../file-view/FileBrowserPane";
+import {
+  FILE_TREE_WIDTH_STORAGE_KEY,
+  fileTreeWidthBounds,
+  persistPaneWidthPx,
+  restorePersistedPaneWidthPx,
+  safeLocalStorage,
+} from "../file-view/paneResize";
 import { DEFAULT_FILE_TREE_SORT, DIRECTORY_PAGE_SIZE } from "../file-view/sort";
 import { WorkspaceDocumentColumn } from "./WorkspaceDocumentColumn";
 import {
@@ -99,6 +106,7 @@ export function WorkspaceShell() {
     DEFAULT_FILE_TREE_SORT,
   );
   const [directoryQuery, setDirectoryQuery] = createSignal("");
+  const [hideGitIgnored, setHideGitIgnored] = createSignal(false);
   const [selectedBrowserPath, setSelectedBrowserPath] = createSignal<
     string | null
   >(null);
@@ -117,6 +125,13 @@ export function WorkspaceShell() {
     createSignal<DocumentPresentationMode>("formatted");
   const [isTocOpen, setTocOpen] = createSignal(false);
   const [isFileTreeOpen, setFileTreeOpen] = createSignal(true);
+  const [fileTreeWidthPx, setFileTreeWidthPx] = createSignal<number | null>(
+    restorePersistedPaneWidthPx(
+      safeLocalStorage(),
+      FILE_TREE_WIDTH_STORAGE_KEY,
+      fileTreeWidthBounds(window.innerWidth),
+    ),
+  );
   const [isShortcutsHelpOpen, setShortcutsHelpOpen] = createSignal(false);
   const [selection, setSelection] = createSignal<WorkspaceSelection>({
     anchorId: null,
@@ -176,6 +191,7 @@ export function WorkspaceShell() {
     selectedPath: string | null,
     sort: DirectoryListSort = directorySort(),
     query: string = directoryQuery(),
+    hideIgnored: boolean = hideGitIgnored(),
   ) => {
     clearSelectionPreviewDebounce();
     const requestId = ++directoryRequestId;
@@ -185,6 +201,7 @@ export function WorkspaceShell() {
       path,
       sort,
       query,
+      hideIgnored,
       0,
       DIRECTORY_PAGE_SIZE,
     );
@@ -218,6 +235,7 @@ export function WorkspaceShell() {
         path,
         sort,
         query,
+        hideIgnored,
         nextState.next_offset,
         DIRECTORY_PAGE_SIZE,
       );
@@ -337,12 +355,14 @@ export function WorkspaceShell() {
 
     setLoadingMoreDirectoryEntries(true);
     const requestId = directoryRequestId;
+    const hideIgnored = hideGitIgnored();
 
     try {
       const nextPage = await listDirectory(
         currentDirectory.current_directory_path,
         currentDirectory.sort,
         currentDirectory.query,
+        hideIgnored,
         currentDirectory.next_offset,
         DIRECTORY_PAGE_SIZE,
       );
@@ -1115,6 +1135,56 @@ export function WorkspaceShell() {
     }
   };
 
+  const handleToggleGitIgnored = async (): Promise<void> => {
+    const currentDirectory = directoryState();
+
+    if (
+      currentDirectory === null ||
+      currentDirectory.listingKind !== "directory"
+    ) {
+      return;
+    }
+
+    const nextHideGitIgnored = !hideGitIgnored();
+    setHideGitIgnored(nextHideGitIgnored);
+
+    try {
+      await loadDirectoryState(
+        currentDirectory.current_directory_path,
+        selectedBrowserPath(),
+        currentDirectory.sort,
+        currentDirectory.query,
+        nextHideGitIgnored,
+      );
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to update Git-ignored file visibility",
+      );
+    }
+  };
+
+  const viewerGridStyle = createMemo(() => {
+    const width = fileTreeWidthPx();
+    return width === null ? undefined : { "--file-tree-width": `${width}px` };
+  });
+
+  const handleFileTreeResize = (widthPx: number) => {
+    setFileTreeWidthPx(widthPx);
+  };
+
+  const handleFileTreeResizeEnd = () => {
+    const width = fileTreeWidthPx();
+    if (width !== null) {
+      persistPaneWidthPx(
+        safeLocalStorage(),
+        FILE_TREE_WIDTH_STORAGE_KEY,
+        width,
+      );
+    }
+  };
+
   const viewerGridClassName = createMemo(() => {
     if (diffTarget() !== null) {
       return "workspace__body workspace__body--pr-diff";
@@ -1464,7 +1534,7 @@ export function WorkspaceShell() {
           onReloadFromDisk={applyMarkdownSnapshot}
         />
 
-        <div class={viewerGridClassName()}>
+        <div class={viewerGridClassName()} style={viewerGridStyle()}>
           <Show when={diffTarget()}>
             {(target) => <PrDiffWorkspace target={target()} />}
           </Show>
@@ -1477,6 +1547,7 @@ export function WorkspaceShell() {
                   directory={directoryState()}
                   sort={directorySort()}
                   query={directoryQuery()}
+                  hideGitIgnored={hideGitIgnored()}
                   selectedPath={selectedBrowserPath()}
                   canLoadMore={canLoadMoreDirectoryEntries()}
                   isLoadingMore={isLoadingMoreDirectoryEntries()}
@@ -1497,8 +1568,15 @@ export function WorkspaceShell() {
                       void loadMoreDirectoryEntries();
                     }
                   }}
+                  onToggleGitIgnored={() => void handleToggleGitIgnored()}
                   onNavigateToParent={() => void handleNavigateToParent()}
                   onSelectEntry={handleSelectEntry}
+                  resizeHandle={{
+                    getBounds: () => fileTreeWidthBounds(window.innerWidth),
+                    onResize: handleFileTreeResize,
+                    onResizeEnd: handleFileTreeResizeEnd,
+                    label: "Resize file tree pane",
+                  }}
                 />
               </Show>
 

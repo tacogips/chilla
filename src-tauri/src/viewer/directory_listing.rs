@@ -1,6 +1,9 @@
 use std::{
     fs,
+    io::{Read, Write},
     path::{Path, PathBuf},
+    process::{Command, Stdio},
+    thread,
 };
 
 use crate::{
@@ -16,12 +19,14 @@ use crate::{
 };
 
 const MAX_DIRECTORY_PAGE_SIZE: usize = 200;
+const GIT_COMMAND_PATH: &str = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
 
 #[derive(Debug)]
 struct DirectoryEntrySeed {
     path: PathBuf,
     name: String,
     is_directory: bool,
+    is_symlink: bool,
     size_bytes: u64,
     modified_at_unix_ms: u64,
 }
@@ -47,6 +52,7 @@ pub(super) fn list_directory(
     path: &Path,
     sort: DirectoryListSort,
     query: Option<&str>,
+    hide_git_ignored: bool,
     offset: usize,
     limit: usize,
 ) -> AppResult<DirectoryPage> {
@@ -58,6 +64,9 @@ pub(super) fn list_directory(
     match sort.field {
         DirectorySortField::Name | DirectorySortField::Extension => {
             let mut seeds = read_directory_entry_seeds(&current_directory_path)?;
+            if hide_git_ignored {
+                retain_non_git_ignored_entry_seeds(&mut seeds, &current_directory_path);
+            }
             if let Some(query) = normalized_query.as_deref() {
                 seeds.retain(|entry| directory_entry_matches_query(&entry.name, query));
             }
@@ -82,6 +91,9 @@ pub(super) fn list_directory(
         }
         DirectorySortField::Mtime | DirectorySortField::Size => {
             let mut records = read_directory_entry_records(&current_directory_path)?;
+            if hide_git_ignored {
+                retain_non_git_ignored_entry_records(&mut records, &current_directory_path);
+            }
             if let Some(query) = normalized_query.as_deref() {
                 records.retain(|entry| directory_entry_matches_query(&entry.seed.name, query));
             }
@@ -161,6 +173,7 @@ pub(super) fn list_explicit_file_set(
             name: record.name.clone(),
             directory_hint: record.directory_hint.clone(),
             is_directory: false,
+            is_symlink: false,
             size_bytes: record.size_bytes,
             modified_at_unix_ms: record.modified_at_unix_ms,
         })
@@ -302,6 +315,107 @@ fn read_directory_entry_records(
     Ok(records)
 }
 
+fn retain_non_git_ignored_entry_seeds(
+    seeds: &mut Vec<DirectoryEntrySeed>,
+    current_directory_path: &Path,
+) {
+    let ignored_entry_names = git_ignored_entry_names(
+        current_directory_path,
+        seeds.iter().map(|entry| entry.name.as_str()),
+    );
+    seeds.retain(|entry| !ignored_entry_names.contains(&entry.name));
+}
+
+fn retain_non_git_ignored_entry_records(
+    records: &mut Vec<DirectoryEntryRecord>,
+    current_directory_path: &Path,
+) {
+    let ignored_entry_names = git_ignored_entry_names(
+        current_directory_path,
+        records.iter().map(|entry| entry.seed.name.as_str()),
+    );
+    records.retain(|entry| !ignored_entry_names.contains(&entry.seed.name));
+}
+
+fn git_ignored_entry_names<'a>(
+    current_directory_path: &Path,
+    entry_names: impl Iterator<Item = &'a str>,
+) -> std::collections::HashSet<String> {
+    let entry_names = entry_names.collect::<Vec<_>>();
+    if entry_names.is_empty() {
+        return std::collections::HashSet::new();
+    }
+
+    let mut command = Command::new("git");
+    command
+        .current_dir(current_directory_path)
+        .args(["check-ignore", "-z", "--stdin"])
+        .env_clear()
+        .env("PATH", GIT_COMMAND_PATH)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    for environment_name in ["HOME", "XDG_CONFIG_HOME"] {
+        if let Some(environment_value) = std::env::var_os(environment_name) {
+            command.env(environment_name, environment_value);
+        }
+    }
+
+    let Ok(mut child) = command.spawn() else {
+        return std::collections::HashSet::new();
+    };
+    let Some(mut stdin) = child.stdin.take() else {
+        let _ = child.wait();
+        return std::collections::HashSet::new();
+    };
+    let Some(mut stdout) = child.stdout.take() else {
+        drop(stdin);
+        let _ = child.wait();
+        return std::collections::HashSet::new();
+    };
+    let stdout_reader = match thread::Builder::new()
+        .name("git-check-ignore-stdout".to_owned())
+        .spawn(move || {
+            let mut output = Vec::new();
+            stdout.read_to_end(&mut output).map(|_| output)
+        }) {
+        Ok(stdout_reader) => stdout_reader,
+        Err(_) => {
+            drop(stdin);
+            let _ = child.wait();
+            return std::collections::HashSet::new();
+        }
+    };
+    let write_result = entry_names.iter().try_for_each(|entry_name| {
+        stdin
+            .write_all(entry_name.as_bytes())
+            .and_then(|_| stdin.write_all(&[0]))
+    });
+    drop(stdin);
+
+    let status = match child.wait() {
+        Ok(status) => status,
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = stdout_reader.join();
+            return std::collections::HashSet::new();
+        }
+    };
+    let Ok(Ok(output)) = stdout_reader.join() else {
+        return std::collections::HashSet::new();
+    };
+    if write_result.is_err() || !status.success() {
+        return std::collections::HashSet::new();
+    }
+
+    output
+        .split(|byte| *byte == 0)
+        .filter(|entry_name| !entry_name.is_empty())
+        .map(|entry_name| String::from_utf8_lossy(entry_name).into_owned())
+        .collect()
+}
+
 fn directory_entry_seed_from_fs_entry(
     entry: &fs::DirEntry,
 ) -> AppResult<Option<DirectoryEntrySeed>> {
@@ -327,6 +441,7 @@ fn directory_entry_seed_from_fs_entry(
         path: entry_path,
         name: entry_name,
         is_directory,
+        is_symlink: file_type.is_symlink(),
         size_bytes: entry_metadata.len(),
         modified_at_unix_ms,
     }))
@@ -354,6 +469,7 @@ fn directory_entry_from_seed(seed: &DirectoryEntrySeed) -> AppResult<DirectoryEn
         name: seed.name.clone(),
         directory_hint: String::new(),
         is_directory: seed.is_directory,
+        is_symlink: seed.is_symlink,
         size_bytes: seed.size_bytes,
         modified_at_unix_ms: seed.modified_at_unix_ms,
     })
@@ -366,6 +482,7 @@ fn directory_entry_from_record(record: &DirectoryEntryRecord) -> AppResult<Direc
         name: record.seed.name.clone(),
         directory_hint: String::new(),
         is_directory: record.seed.is_directory,
+        is_symlink: record.seed.is_symlink,
         size_bytes: record.size_bytes,
         modified_at_unix_ms: record.modified_at_unix_ms,
     })
@@ -502,3 +619,6 @@ fn file_extension(name: &str) -> String {
 
     extension.to_ascii_lowercase()
 }
+
+#[cfg(test)]
+mod tests;

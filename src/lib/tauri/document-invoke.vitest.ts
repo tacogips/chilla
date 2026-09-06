@@ -14,6 +14,7 @@ import {
   detectGitRepository,
   listDirectory,
   loadGitDiff,
+  loadGitDiffFileText,
   loadPrDiff,
   loadPrDiffFileText,
   saveDocument,
@@ -42,7 +43,7 @@ describe("listDirectory", () => {
     invokeMock.mockResolvedValue(response);
 
     await expect(
-      listDirectory("/workspace", sort, "", 0, 200),
+      listDirectory("/workspace", sort, "", true, 0, 200),
     ).resolves.toEqual(response);
 
     expect(invokeMock).toHaveBeenCalledTimes(1);
@@ -51,6 +52,7 @@ describe("listDirectory", () => {
         path: "/workspace",
         sort,
         query: "",
+        hideGitIgnored: true,
         offset: 0,
         limit: 200,
       },
@@ -63,7 +65,7 @@ describe("listDirectory", () => {
       direction: "asc",
     };
 
-    await expect(listDirectory("", sort, "", 0, 200)).rejects.toThrow(
+    await expect(listDirectory("", sort, "", false, 0, 200)).rejects.toThrow(
       "Directory path is required before listing files",
     );
 
@@ -240,6 +242,35 @@ describe("loadGitDiff", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("load_git_diff", {
       target,
+    });
+  });
+});
+
+describe("loadGitDiffFileText", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("sends the Git diff target and file path through the Tauri command", async () => {
+    const target = {
+      repo_path: "/workspace/repo",
+      source: {
+        kind: "worktree" as const,
+      },
+    };
+    const response = {
+      full_text: "const value = 1;",
+      full_text_truncated: false,
+    };
+    invokeMock.mockResolvedValue(response);
+
+    await expect(loadGitDiffFileText(target, "src/app.ts")).resolves.toEqual(
+      response,
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith("load_git_diff_file_text", {
+      target,
+      path: "src/app.ts",
     });
   });
 });

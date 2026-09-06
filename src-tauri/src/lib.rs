@@ -117,6 +117,7 @@ pub fn run(startup_target: StartupTarget) -> Result<(), String> {
             commands::document::get_startup_context,
             commands::document::detect_git_repository,
             commands::document::load_git_diff,
+            commands::document::load_git_diff_file_text,
             commands::document::load_pr_diff,
             commands::document::load_pr_diff_file_text,
             commands::document::list_directory,

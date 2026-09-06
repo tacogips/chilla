@@ -150,6 +150,7 @@ function directoryPage(filePath: string): DirectoryPage {
         name: fileName,
         directory_hint: "",
         is_directory: false,
+        is_symlink: false,
         size_bytes: 24,
         modified_at_unix_ms: 0,
       },
@@ -171,6 +172,7 @@ function directoryPageWithPaths(filePaths: readonly string[]): DirectoryPage {
       name: filePath.slice(filePath.lastIndexOf("/") + 1),
       directory_hint: "",
       is_directory: false,
+      is_symlink: false,
       size_bytes: 24,
       modified_at_unix_ms: 0,
     })),
@@ -649,6 +651,89 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       expect(document.body.textContent).toContain("Please select a file.");
       expect(document.body.textContent).toContain("File no longer exists");
       expect(document.body.textContent).not.toContain("Body");
+    });
+  });
+});
+
+describe("WorkspaceShell Git-ignored visibility", () => {
+  let dispose: VoidFunction | undefined;
+
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="root"></div>';
+    documentMocks.getStartupContext.mockReset();
+    documentMocks.listDirectory.mockReset();
+    documentMocks.listExplicitFileSet.mockReset();
+    documentMocks.openDocument.mockReset();
+    documentMocks.openFilePreview.mockReset();
+    documentMocks.reloadDocument.mockReset();
+    documentMocks.listenDocumentRefreshed.mockReset();
+    documentMocks.stopDocumentWatch.mockReset();
+    documentMocks.listenDocumentRefreshed.mockResolvedValue(() => {});
+    documentMocks.stopDocumentWatch.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    dispose?.();
+    dispose = undefined;
+    document.body.innerHTML = "";
+  });
+
+  it("defaults to showing ignored entries, then reloads from offset zero with the toggled state", async () => {
+    const selectedPath = "/workspace/note.md";
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.listDirectory.mockResolvedValue(directoryPage(selectedPath));
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expect(documentMocks.listDirectory).toHaveBeenCalledWith(
+        "/workspace",
+        { field: "name", direction: "asc" },
+        "",
+        false,
+        0,
+        200,
+      );
+    });
+
+    const toggle = await waitForElement<HTMLButtonElement>(
+      ".file-browser__git-ignored-toggle",
+    );
+    toggle.click();
+
+    await waitFor(() => {
+      expect(documentMocks.listDirectory).toHaveBeenLastCalledWith(
+        "/workspace",
+        { field: "name", direction: "asc" },
+        "",
+        true,
+        0,
+        200,
+      );
+      expect(
+        document
+          .querySelector<HTMLButtonElement>(".file-browser__git-ignored-toggle")
+          ?.getAttribute("aria-pressed"),
+      ).toBe("true");
+      expect(
+        document.querySelector<HTMLButtonElement>(
+          `.file-browser__button[data-path="${selectedPath}"]`,
+        ),
+      ).not.toBeNull();
+    });
+
+    modeButton("Refresh workspace").click();
+    await waitFor(() => {
+      expect(documentMocks.listDirectory).toHaveBeenLastCalledWith(
+        "/workspace",
+        { field: "name", direction: "asc" },
+        "",
+        true,
+        0,
+        200,
+      );
     });
   });
 });

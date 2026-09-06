@@ -51,6 +51,15 @@ fn default_directory_sort() -> DirectoryListSort {
     }
 }
 
+fn list_directory(
+    path: &Path,
+    query: Option<&str>,
+    offset: usize,
+    limit: usize,
+) -> crate::error::AppResult<crate::viewer::types::DirectoryPage> {
+    ViewerService::new().list_directory(path, default_directory_sort(), query, false, offset, limit)
+}
+
 #[test]
 fn fallback_media_mime_type_infers_heic_and_heif_extensions() {
     let cases = [
@@ -200,9 +209,7 @@ fn list_directory_name_sort_orders_entries_without_directory_priority() {
     fs::write(test_dir.path().join("Alpha.txt"), "alpha").expect("write alpha");
     fs::write(test_dir.path().join("bravo.txt"), "bravo").expect("write bravo");
 
-    let snapshot = ViewerService::new()
-        .list_directory(test_dir.path(), default_directory_sort(), None, 0, 200)
-        .expect("directory snapshot");
+    let snapshot = list_directory(test_dir.path(), None, 0, 200).expect("directory snapshot");
 
     let names = snapshot
         .entries
@@ -237,12 +244,8 @@ fn list_directory_paginates_large_directories_in_requested_batches() {
             .expect("write paged test file");
     }
 
-    let first_page = ViewerService::new()
-        .list_directory(test_dir.path(), default_directory_sort(), None, 0, 200)
-        .expect("first page");
-    let second_page = ViewerService::new()
-        .list_directory(test_dir.path(), default_directory_sort(), None, 200, 200)
-        .expect("second page");
+    let first_page = list_directory(test_dir.path(), None, 0, 200).expect("first page");
+    let second_page = list_directory(test_dir.path(), None, 200, 200).expect("second page");
 
     assert_eq!(first_page.entries.len(), 200);
     assert_eq!(first_page.total_entry_count, 205);
@@ -267,9 +270,7 @@ fn list_directory_symlink_entry_path_is_the_link_not_the_target() {
     fs::write(&target, "x").expect("write target");
     symlink(&target, &link).expect("symlink");
 
-    let snapshot = ViewerService::new()
-        .list_directory(test_dir.path(), default_directory_sort(), None, 0, 200)
-        .expect("directory snapshot");
+    let snapshot = list_directory(test_dir.path(), None, 0, 200).expect("directory snapshot");
 
     assert_ne!(
         target.canonicalize().expect("canonical target"),
@@ -323,9 +324,7 @@ fn list_directory_skips_dangling_symlinks_without_failing_the_directory() {
     fs::write(&valid_file, "visible").expect("write visible file");
     symlink(test_dir.path().join("missing-target"), &dangling_link).expect("dangling symlink");
 
-    let snapshot = ViewerService::new()
-        .list_directory(test_dir.path(), default_directory_sort(), None, 0, 200)
-        .expect("directory snapshot");
+    let snapshot = list_directory(test_dir.path(), None, 0, 200).expect("directory snapshot");
 
     assert_eq!(snapshot.total_entry_count, 1);
     assert_eq!(snapshot.entries.len(), 1);
@@ -341,15 +340,8 @@ fn list_directory_filters_before_pagination() {
     }
     fs::write(test_dir.path().join("needle-target.txt"), "needle").expect("write filter target");
 
-    let page = ViewerService::new()
-        .list_directory(
-            test_dir.path(),
-            default_directory_sort(),
-            Some("needle-target"),
-            0,
-            200,
-        )
-        .expect("filtered page");
+    let page =
+        list_directory(test_dir.path(), Some("needle-target"), 0, 200).expect("filtered page");
 
     assert_eq!(page.total_entry_count, 1);
     assert_eq!(page.entries.len(), 1);

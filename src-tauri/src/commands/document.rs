@@ -109,6 +109,7 @@ pub struct ListDirectoryInput {
     pub path: String,
     pub sort: Option<DirectoryListSort>,
     pub query: Option<String>,
+    pub hide_git_ignored: bool,
     pub offset: Option<usize>,
     pub limit: Option<usize>,
 }
@@ -161,6 +162,20 @@ pub async fn load_git_diff(target: GitDiffTarget) -> Result<PrDiffSnapshot, Stri
 }
 
 #[tauri::command]
+pub async fn load_git_diff_file_text(
+    target: GitDiffTarget,
+    path: String,
+) -> Result<PrDiffFileText, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        GitDiffService::new()
+            .load_file_text(&target, &path)
+            .map_err(format_command_error)
+    })
+    .await
+    .map_err(format_command_error)?
+}
+
+#[tauri::command]
 pub async fn detect_git_repository(path: String) -> Result<Option<GitDiffTarget>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         GitDiffService::new()
@@ -193,6 +208,7 @@ pub fn list_directory(
             Path::new(&input.path),
             input.sort.unwrap_or_default(),
             input.query.as_deref(),
+            input.hide_git_ignored,
             input.offset.unwrap_or(0),
             input.limit.unwrap_or(0),
         )

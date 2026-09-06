@@ -127,6 +127,7 @@ export interface DirectoryEntry {
   readonly name: string;
   readonly directory_hint: string;
   readonly is_directory: boolean;
+  readonly is_symlink: boolean;
   readonly size_bytes: number;
   readonly modified_at_unix_ms: number;
 }
@@ -1143,6 +1144,19 @@ export async function loadPrDiffFileText(
   }
 }
 
+export async function loadGitDiffFileText(
+  target: GitDiffTarget,
+  path: string,
+): Promise<PrDiffFileText> {
+  try {
+    return normalizePrDiffFileTextPayload(
+      await invoke<unknown>("load_git_diff_file_text", { target, path }),
+    );
+  } catch (error: unknown) {
+    throw new Error(toErrorMessage(error));
+  }
+}
+
 export async function getStartupContext(): Promise<StartupContext> {
   try {
     return normalizeStartupContextPayload(
@@ -1185,6 +1199,7 @@ export async function listDirectory(
   path: string,
   sort: DirectoryListSort,
   query: string,
+  hideGitIgnored: boolean,
   offset: number,
   limit: number,
 ): Promise<DirectoryPage> {
@@ -1198,6 +1213,7 @@ export async function listDirectory(
         path,
         sort,
         query,
+        hideGitIgnored,
         offset,
         limit,
       },

@@ -99,10 +99,11 @@ impl ViewerService {
         path: &Path,
         sort: DirectoryListSort,
         query: Option<&str>,
+        hide_git_ignored: bool,
         offset: usize,
         limit: usize,
     ) -> AppResult<DirectoryPage> {
-        directory_listing::list_directory(path, sort, query, offset, limit)
+        directory_listing::list_directory(path, sort, query, hide_git_ignored, offset, limit)
     }
 
     pub fn list_explicit_file_set(
