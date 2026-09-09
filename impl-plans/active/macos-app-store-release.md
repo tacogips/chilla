@@ -61,7 +61,7 @@ record, listing metadata, privacy answers, screenshots, review information
 **Completion Criteria**:
 
 - [x] owner decisions recorded for price, availability, and release timing
-- [ ] review contact and notes are complete
+- [x] review contact and notes are complete
 - [x] app record uses the exact bundle identifier and product identity
 - [ ] one to ten compliant 16:10 macOS screenshots are uploaded
 - [ ] privacy and encryption answers match shipped behavior
@@ -191,12 +191,11 @@ app until the Account Holder explicitly releases it.
 Agreement with explicit Account Holder authorization and saved confirmation that
 Chilla has the necessary rights to display third-party content.
 
-**Tasks In Progress**: TASK-002 runtime QA, TASK-003 screenshots, review contact,
+**Tasks In Progress**: TASK-002 runtime QA, TASK-003 screenshots and
 privacy/compliance metadata, and TASK-004 final validation and submission.
 
-**Blockers**: App Store Connect requires the review-contact email address before
-it will save the supplied name and international-format phone number. Compliant
-16:10 screenshots and remaining privacy/compliance answers are also required.
+**Blockers**: Compliant 16:10 screenshots and remaining privacy/compliance
+answers are required.
 
-**Notes**: Personal review-contact values are intentionally not recorded in the
-repository.
+**Notes**: App Review contact information is complete in App Store Connect.
+Personal review-contact values are intentionally not recorded in the repository.
