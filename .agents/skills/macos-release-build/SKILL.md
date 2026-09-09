@@ -1,13 +1,14 @@
 ---
 name: macos-release-build
-description: Build, sign, notarize, validate, or publish chilla macOS app and DMG artifacts using mise tasks and local Apple credentials.
+description: Build, sign, notarize, validate, publish, or register chilla macOS releases with GitHub and Apple App Store Connect using mise tasks and local Apple credentials.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
-user-invocable: true
 ---
 
 # macOS Release Build Skill
 
-This skill covers the repository-specific workflow for producing macOS `.app` and `.dmg` artifacts for `chilla`, validating them locally, and preparing them for Apple signing/notarization and GitHub release publication.
+This skill covers the repository-specific workflow for producing macOS release
+artifacts, validating them locally, publishing the GitHub/DMG release, and
+registering a sandboxed Mac release in Apple Developer and App Store Connect.
 
 ## When to Apply
 
@@ -17,6 +18,8 @@ Apply this skill when:
 - preparing or debugging Apple signing/notarization inputs
 - creating or reviewing the macOS GitHub release workflow
 - publishing or verifying macOS release artifacts
+- creating or updating the Apple bundle identifier, provisioning profile, App
+  Store Connect app/version record, listing metadata, build, and review submission
 
 For installer tarballs use `native-release-build` and `release/README.md`.
 
@@ -26,6 +29,11 @@ For installer tarballs use `native-release-build` and `release/README.md`.
 - `src-tauri/tauri.macos.release.conf.json` enables the macOS bundle path with `app,dmg`.
 - `mise.toml` exposes `mise run bundle-macos-dmg`.
 - `.github/workflows/release-macos-dmg.yml` is the repository workflow for macOS bundles.
+- `src-tauri/tauri.appstore.conf.json` and
+  `src-tauri/Entitlements.appstore.plist.in` define the isolated Mac App Store
+  variant.
+- `mise run release-macos-app-store-local -- build|upload` builds, validates,
+  signs, and optionally uploads the Mac App Store package.
 - local macOS bundle outputs land under:
 
 ```text
@@ -117,6 +125,25 @@ gh release view v<version> --repo tacogips/chilla --json url,assets
 
 Confirm the release contains the macOS `.dmg` and any additional macOS bundle artifacts you intentionally publish.
 
+## Apple Release Registration
+
+When the user requests a Mac App Store or Apple release, do not stop after
+uploading the package. Complete the Apple Developer and App Store Connect record
+through the requested release stage: register identifiers and profiles when
+missing, create or update the app/version record, attach the processed build,
+complete listing and compliance metadata, add compliant screenshots, validate
+the submission, and submit for App Review when submission is in scope.
+
+Read [references/app-store-connect-release.md](references/app-store-connect-release.md)
+before performing this mode. It defines the required order, verification, secret
+handling, and authorization boundaries.
+
+A request limited to build, signing, notarization, DMG, GitHub, or Homebrew does
+not authorize App Store Connect mutations. Conversely, an explicit Apple/App
+Store release request authorizes ordinary record creation, metadata entry,
+package upload, build attachment, and submission steps needed for that release,
+subject to the legal and owner-decision gates in the reference.
+
 ## Homebrew Tap Follow-Up
 
 The tap repository does not create or sign macOS artifacts. It only consumes them.
@@ -132,3 +159,5 @@ After switching the macOS distribution artifact shape, update `tacogips/homebrew
 - a successful local DMG build does not prove notarization
 - Gatekeeper rejection on an unsigned local build is expected
 - if users should run the app without quarantine workarounds, the published macOS artifact must be properly signed and notarized
+- a successful package upload does not prove that App Store Connect processed,
+  attached, validated, or submitted the build; verify each state explicitly
