@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-if ! command -v biome >/dev/null 2>&1; then
-  echo "biome not found; install it through the Nix dev shell or bun install"
+if [ ! -x node_modules/.bin/biome ]; then
+  echo "biome not found; run mise install and mise run install"
   exit 1
 fi
 
@@ -35,4 +35,4 @@ if [ ${#frontend_files[@]} -eq 0 ]; then
   exit 0
 fi
 
-biome format --write "${frontend_files[@]}"
+node_modules/.bin/biome format --write "${frontend_files[@]}"

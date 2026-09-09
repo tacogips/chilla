@@ -48,6 +48,7 @@ dist
 **/.tox/
 
 ## tmps
+# Legacy local build symlink; no longer produced by project tasks.
 result
 /release/*
 !/release/

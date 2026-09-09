@@ -4,6 +4,8 @@
 
 `chilla` is a lightweight file and Git viewer built with Tauri, Bun, Solid.js, and Rust. It opens directories, files, Git diffs, and GitHub diff URLs from the command line, then previews Markdown, text, images, video, PDF content, and changed files inside a desktop UI.
 
+Product website: [chilla-viewer.com](https://chilla-viewer.com/)
+
 ## Install
 
 ### macOS: Homebrew Cask
@@ -90,7 +92,7 @@ Installer behavior:
 - can update the user's shell profile with a managed PATH block unless `--no-modify-path` is used
 - supports `./install.sh uninstall` to remove the installed files and managed PATH block
 
-The current installer-facing Darwin tarball remains a Nix-based release artifact containing `bin/chilla`, not a `.app` bundle. It may still depend on `/nix/store` runtime paths on the target machine.
+New installer tarballs are built natively with `mise run package-native` and contain `bin/chilla`, not a `.app` bundle. Older published tarballs may still depend on `/nix/store`; use the signed DMG/Homebrew cask on macOS. Linux tarballs require compatible GTK/WebKitGTK system libraries.
 
 For most macOS users, prefer the Homebrew Cask or direct DMG install paths above.
 
@@ -414,24 +416,35 @@ Key runtime contracts:
 ├── src-tauri/           # Rust + Tauri backend
 ├── design-docs/         # design notes and specs
 ├── impl-plans/          # implementation plans
-├── mise.toml         # common development commands
-├── package.json         # Bun scripts
-└── flake.nix            # Nix development environment
+├── mise.toml            # tool versions and development/CI tasks
+└── package.json         # locked Bun scripts/dependencies
 ```
 
 ## Development
 
 ### Prerequisites
 
-- Nix with flakes enabled
-- direnv optional but recommended
+- [mise](https://mise.jdx.dev/) 2026.8.3 or newer
+- macOS: Xcode Command Line Tools (full Xcode for signing/notarization)
+- Linux: native Tauri libraries, installed separately from mise
 
-The repository is set up for `mise install`, which provides Bun, Cargo, Tauri-related build dependencies, and the Rust toolchain.
+The repository follows [ign-template's tauri-v1](https://github.com/tacogips/ign-template/tree/cd4284b7c942f3b1bc38b81212525830e6c99bb8/tauri-v1): mise supplies Bun, Node and Rust (including rustfmt/clippy); the OS supplies native SDKs/libraries. Nix and direnv are not required. Frontend tools such as Biome come from the Bun lockfile.
 
-### Enter the dev shell
+On Ubuntu 24.04, install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential pkg-config curl wget file libssl-dev \
+  libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev
+# Additional packages for desktop E2E:
+sudo apt-get install -y webkit2gtk-driver xvfb xauth dbus-x11 fonts-dejavu-core
+```
+
+### Set up tools and dependencies
 
 ```bash
 mise install
+mise run install
 ```
 
 ### Common commands
@@ -439,15 +452,18 @@ mise install
 ```bash
 mise run dev
 mise run build
-mise run nix-build
+mise run package-native
 mise run test
 mise run test-tauri-e2e-linux
 mise run check
 mise run clippy
 mise run fmt
+mise run verify
 ```
 
 Equivalent package-manager commands:
+
+Use `mise exec -- <command>` when your shell does not have mise activation enabled.
 
 ```bash
 bun run dev
@@ -460,19 +476,21 @@ CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml
 
 `mise run build` compiles the Tauri backend with Cargo `--release`.
 `mise run tauri-build` creates the packaged desktop binary with Tauri's release build.
+`mise run package-native -- [output-directory]` produces a native installer tarball
+and checksum (default `release/`), refusing existing artifacts and Nix-linked
+binaries. It does not publish anything. `mise run verify` includes the DOM suite.
 
 ### Linux desktop E2E
 
 The repository also includes a Linux-only desktop smoke test that runs the real Tauri app through `tauri-driver`:
 
 ```bash
-CARGO_TERM_QUIET=true cargo install tauri-driver --locked
-bun run test:tauri:e2e:linux
+mise run test-tauri-e2e-linux
 ```
 
 Notes:
 
-- `WebKitWebDriver` is expected on `PATH`. The mise environment provides it via `webkitgtk_4_1`.
+- The task installs pinned `tauri-driver` through mise. `WebKitWebDriver` must be on `PATH` from the OS `webkit2gtk-driver` package, not mise.
 - If `DISPLAY` is not set, the runner falls back to `Xvfb` when available.
 - The smoke test opens the real workspace, filters to `README.md`, and verifies the rendered Markdown preview.
 
@@ -496,8 +514,12 @@ The local release task expects these environment variables to be exported by the
 Publish signed/notarized macOS release assets from the local machine with:
 
 ```bash
-mise run release-macos-dmg-local -- v0.1.18
+mise run release-macos-dmg-local -- v0.2.0
 ```
+
+The release task mounts the final DMG read-only and verifies the embedded app's
+Developer ID signature, stapled notarization ticket, and Gatekeeper acceptance
+before uploading either release asset.
 
 Repository-local GitHub Actions build unsigned `.app`/`.dmg` artifacts only for validation. They do not sign, notarize, or publish trusted release assets.
 

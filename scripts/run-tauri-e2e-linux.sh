@@ -11,12 +11,12 @@ if [[ "$(uname -s)" != "Linux" ]]; then
 fi
 
 if ! command -v tauri-driver >/dev/null 2>&1; then
-  echo "Missing tauri-driver. Install it with: CARGO_TERM_QUIET=true cargo install tauri-driver --locked"
+  echo "Missing tauri-driver. Run mise run test-tauri-e2e-linux to install the pinned driver."
   exit 1
 fi
 
 if ! command -v WebKitWebDriver >/dev/null 2>&1; then
-  echo "Missing WebKitWebDriver. Enter the Nix dev shell or install WebKitGTK's WebDriver binary."
+  echo "Missing WebKitWebDriver. On Ubuntu, install webkit2gtk-driver (see README prerequisites)."
   exit 1
 fi
 

@@ -1,6 +1,11 @@
 # macOS DMG Release Design
 
-This document describes the first repository-local step from the current Nix tarball release toward a notarizable macOS distribution for `chilla`.
+This document records the original transition from Nix tarballs to notarizable
+macOS distribution. As of the mise migration, new tarballs are native builds
+(`mise run package-native`), the Homebrew cask uses the signed DMG, and CI uses
+mise with native SDKs. Nix references below describe the original design context,
+not current build instructions; see [Mise Native Toolchain](architecture.md#mise-native-toolchain)
+and `release/README.md` for the current contract.
 
 ## Overview
 
@@ -82,6 +87,23 @@ The docs should distinguish:
 - the existing Nix tarball contract used by `install.sh`
 - the new DMG release flow intended for signed/notarized direct downloads
 - the fact that `homebrew-tap` remains a consumer repository that only needs URL/SHA updates after the new artifact is published
+
+## Mounted Artifact Trust Gate
+
+The local release path must validate the exact application bundle contained in
+the final DMG, not only the pre-packaging app directory. Before any GitHub release
+asset is uploaded, the release automation must:
+
+- attach the final DMG read-only at an isolated temporary mount point
+- locate `chilla.app` inside that mounted image
+- verify its Developer ID signature with strict deep validation
+- verify that its notarization ticket is stapled
+- require Gatekeeper to accept the mounted app as executable
+- detach the image on both success and failure
+
+This gate protects the Homebrew cask boundary because the cask installs the app
+from that DMG. A successful validation of the build-directory app alone is not
+sufficient evidence that the distributed container preserved a launchable bundle.
 
 ## Official Homebrew Cask Distribution
 

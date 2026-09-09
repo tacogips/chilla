@@ -13,72 +13,64 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_QUIET: "true"
+
 jobs:
-  nix-flake-check:
-    runs-on: ubuntu-latest
+  native-verify:
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - name: Install native Tauri libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config curl wget file libssl-dev \
+            libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev
 
-      - name: Flake check
-        run: nix flake check -L
-
-  bun-verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
-          persist-credentials: false
+          version: 2026.8.3
+          install_args: bun node rust
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - name: Install locked dependencies
+        run: mise run install
 
-      - name: Typecheck and Bun tests
-        run: nix develop -c bash -euo pipefail -c 'bun install --frozen-lockfile && bun run typecheck && bun run test:dom && bun run test'
+      - name: Verify and build natively
+        run: mise run ci
 
   tauri-e2e-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     continue-on-error: true
     timeout-minutes: 90
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - name: Install native Tauri and WebDriver libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config curl wget file libssl-dev \
+            libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
+            webkit2gtk-driver xvfb xauth dbus-x11 fonts-dejavu-core
 
-      - name: Cache Cargo home (tauri-driver)
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
-          path: |
-            ~/.cargo/bin
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: tauri-e2e-linux-cargo-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}-v1
-          restore-keys: |
-            tauri-e2e-linux-cargo-${{ runner.os }}-
+          version: 2026.8.3
+          install_args: bun node rust
+
+      - name: Install locked dependencies
+        run: mise run install
 
       - name: Linux Tauri WebDriver smoke
-        run: |
-          nix develop -c bash <<'EOF'
-          set -euo pipefail
-          cargo_bin="$HOME/.cargo/bin"
-          PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -Fxv "$cargo_bin" | paste -sd ':' -)"
-          export PATH
-          bun install --frozen-lockfile
-          if [[ ! -x "$cargo_bin/tauri-driver" ]]; then
-            CARGO_TERM_QUIET=true cargo install tauri-driver --locked --root "$HOME/.cargo"
-          fi
-          export PATH="$PATH:$cargo_bin"
-          bun run test:tauri:e2e:linux
-          EOF
+        run: dbus-run-session -- mise run test-tauri-e2e-linux

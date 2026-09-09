@@ -1,18 +1,18 @@
 ---
 name: tauri-lint-verify
-description: Run mixed Tauri Rust and TypeScript lint, typecheck, formatting, and verification commands. Use when Codex is asked to lint, check, test, verify, or prepare Rust/TypeScript/Tauri changes in this repository, especially after editing src-tauri, src, package.json, Taskfile.yml, flake.nix, or agent lint scripts.
+description: Run mixed Tauri Rust and TypeScript lint, typecheck, formatting, and verification through mise tasks and locked Bun tools.
 ---
 
 # Tauri Lint Verify
 
 ## Workflow
 
-Prefer the Taskfile entry points so frontend and backend checks stay consistent:
+Prefer mise entry points so frontend and backend checks stay consistent:
 
-- Run `task lint-ts` for Biome checks and TypeScript typechecking.
-- Run `task lint-rust` for Rust clippy with `CARGO_TERM_QUIET=true`.
-- Run `task lint` before handoff when linting was requested.
-- Run `task verify` after behavior-changing Rust, TypeScript, or Tauri edits.
+- Run `mise run lint-ts` for locked Biome checks and TypeScript typechecking.
+- Run `mise run lint-rust` for Rust clippy with `CARGO_TERM_QUIET=true`.
+- Run `mise run lint` before handoff when linting was requested.
+- Run `mise run verify` for typecheck, lint, Bun/DOM and Rust tests.
 
 Use the underlying scripts only when a task target is unavailable:
 

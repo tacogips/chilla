@@ -17,16 +17,26 @@ fi
 '''
 
 [tools]
-node = "22"
-bun = "latest"
-biome = "latest"
-rust = "1.92.0"
+node = "22.23.2"
+bun = "1.4.0"
+rust = { version = "1.92.0", components = ["rustfmt", "clippy"] }
 rust-analyzer = "latest"
 taplo = "latest"
 "cargo:cargo-nextest" = "latest"
 "cargo:cargo-audit" = "latest"
 gitleaks = "latest"
 pre-commit = "latest"
+
+[env]
+CARGO_TERM_QUIET = "true"
+
+[tasks.install]
+description = "Install locked frontend dependencies"
+run = "bun install --frozen-lockfile"
+
+[tasks.package-native]
+description = "Build and package an installer-compatible native tarball (optional output directory)"
+run = 'bash scripts/package-native.sh "$@"'
 
 [tasks."default"]
 description = "Show available tasks"
@@ -97,11 +107,13 @@ description = "Run frontend and backend verification"
 run = '''
 bun run typecheck
 bun run test
+bun run test:dom
 CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml
 '''
 
 [tasks."test-tauri-e2e-linux"]
 description = "Run Linux desktop E2E verification with tauri-driver"
+tools = { "cargo:tauri-driver" = "2.0.6" }
 run = '''
 bun run test:tauri:e2e:linux
 '''

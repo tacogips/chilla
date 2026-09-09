@@ -1,6 +1,6 @@
 ---
 name: macos-release-build
-description: Use when building, signing, notarizing, validating, or publishing macOS `.app` and `.dmg` release artifacts for this repository. Covers the Tauri macOS release config, local `task bundle-macos-dmg`, Apple signing/notarization inputs, GitHub Actions release workflow, and post-release tap follow-up.
+description: Build, sign, notarize, validate, or publish chilla macOS app and DMG artifacts using mise tasks and local Apple credentials.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 user-invocable: true
 ---
@@ -18,13 +18,13 @@ Apply this skill when:
 - creating or reviewing the macOS GitHub release workflow
 - publishing or verifying macOS release artifacts
 
-Do not use this skill for the installer tarball contract or Linux tarball releases. Use `nix-release-build` for those.
+For installer tarballs use `native-release-build` and `release/README.md`.
 
 ## Repository Facts
 
-- `src-tauri/tauri.conf.json` keeps the base bundle flow disabled for the Nix tarball path.
+- `src-tauri/tauri.conf.json` keeps bundling disabled for native binary builds.
 - `src-tauri/tauri.macos.release.conf.json` enables the macOS bundle path with `app,dmg`.
-- `Taskfile.yml` exposes `task bundle-macos-dmg`.
+- `mise.toml` exposes `mise run bundle-macos-dmg`.
 - `.github/workflows/release-macos-dmg.yml` is the repository workflow for macOS bundles.
 - local macOS bundle outputs land under:
 
@@ -38,8 +38,9 @@ target/release/bundle/dmg/chilla_<version>_aarch64.dmg
 ### 1. Build the macOS bundle
 
 ```bash
-bun install --frozen-lockfile
-task bundle-macos-dmg
+mise install
+mise run install
+mise run bundle-macos-dmg
 ```
 
 Equivalent direct command:
@@ -71,22 +72,20 @@ Interpretation:
 
 ## Apple Signing And Notarization Inputs
 
-The workflow is designed to consume these secrets:
+The local signing workflow uses the installed Developer ID keychain identity
+and these secret names through `kinko exec`:
 
-- `APPLE_CERTIFICATE`
-- `APPLE_CERTIFICATE_PASSWORD`
 - `APPLE_SIGNING_IDENTITY`
 - `APPLE_ID`
 - `APPLE_PASSWORD`
 - `APPLE_TEAM_ID`
-- `KEYCHAIN_PASSWORD`
 
 Meaning:
-- `APPLE_CERTIFICATE` is the base64-encoded Developer ID Application `.p12`
-- `APPLE_CERTIFICATE_PASSWORD` unlocks that `.p12`
 - `APPLE_SIGNING_IDENTITY` is the codesigning identity name
 - `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` support notarization
-- `KEYCHAIN_PASSWORD` is used for the temporary CI keychain
+
+Do not add Apple credentials to the validation-only GitHub Actions workflow.
+Publication remains the explicitly requested local `mise run release-macos-dmg-local` task.
 
 If these are absent, the repo can still build unsigned `.app` / `.dmg` artifacts for local validation.
 
@@ -102,9 +101,9 @@ It should:
 - use pinned action SHAs
 - build on `macos-latest`
 - run on `workflow_dispatch` and version tags
-- import the Apple certificate only when secrets are present
-- upload release assets on tag builds
-- upload workflow artifacts on manual builds
+- use mise for the toolchain and native macOS SDKs
+- build unsigned validation artifacts only, without Apple credentials
+- upload workflow artifacts on tag and manual builds
 
 When modifying this workflow, also use the `secure-github-action` skill.
 

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#faf7ef" /><meta name="description" content="軽快に動く、キーボード中心のmacOS向けファイル＆Gitビューア。Yaziライクな移動、豊富なプレビュー、Git diffを、可愛いネコとひとつのウィンドウで。" />
+<meta property="og:title" content="chilla — Yaziライクに、軽快に。ネコとファイル散歩。" /><meta property="og:description" content="軽快に動く、キーボード中心のmacOS向けファイル＆Gitビューア。Yaziライクな移動、豊富なプレビュー、Git diffを、可愛いネコとひとつのウィンドウで。" /><meta property="og:type" content="website" /><meta property="og:url" content="https://chilla-viewer.com/ja/" /><meta property="og:image" content="https://chilla-viewer.com/og.png" /><meta name="twitter:card" content="summary" />
+<link rel="canonical" href="https://chilla-viewer.com/ja/" />
+<link rel="alternate" hreflang="en" href="https://chilla-viewer.com/" /><link rel="alternate" hreflang="ja" href="https://chilla-viewer.com/ja/" /><link rel="alternate" hreflang="x-default" href="https://chilla-viewer.com/" />
+<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" /><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+<link rel="stylesheet" href="/src/styles.css" /><title>chilla — Yaziライクに、軽快に。ネコとファイル散歩。</title>
+</head>
+<body>
+<a class="skip-link" href="#main">本文へ</a>
+<header class="site-header">
+<a class="brand" href="/ja/" aria-label="chilla"><img class="brand-icon" src="/favicon.png" data-app-icon alt="" width="44" height="44" /><span>chilla</span></a>
+<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>メニュー</button>
+<nav class="site-nav" id="site-nav" aria-label="メインナビゲーション" data-nav>
+<a href="#features">chillaとは</a>
+<a href="#keyboard">キーボード</a>
+<a href="#git-diff">Git diff</a>
+<a href="#install">インストール</a>
+<a href="https://github.com/tacogips/chilla">GitHub ↗</a><a class="language-link" href="/" lang="en">English</a></nav>
+</header>
+<main id="main">
+<section class="hero" aria-labelledby="hero-title">
+<div class="hero-top"><div class="hero-copy">
+<p class="eyebrow"><span class="status-dot" aria-hidden="true"></span>Yaziライクなファイル＆Gitビューア · macOS</p>
+<h1 id="hero-title">ターミナルのように、<br /><em>素早くファイルを閲覧。</em></h1><p class="hero-lede">Yaziライクなキーボード操作で、ファイルを次々に移動。Markdown・画像・コードのプレビューからGit diffの確認まで、軽快に動くデスクトップアプリひとつで。マウスに持ち替えず、作業を進められます。</p>
+<div class="hero-actions"><a class="button button-primary" href="https://github.com/tacogips/chilla/releases/latest">Mac版をダウンロード<span aria-hidden="true">↗</span></a><a class="button button-secondary" href="#install">Homebrewでインストール</a><a class="button button-secondary" href="https://github.com/tacogips/chilla">GitHubリポジトリ<span aria-hidden="true">↗</span></a></div><p class="small-note">Apple Silicon対応</p>
+</div><aside class="hero-mascot" aria-label="chillaのネコ"><p class="cat-note">気になるファイル、ちょっと見てみよう。</p><img src="/cat.webp" width="1024" height="1536" alt="角から顔をのぞかせるピクセルアートのネコ" fetchpriority="high" /><div class="cat-keys" aria-hidden="true"><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></div></aside></div>
+<ul class="feature-strip" aria-label="特徴"><li><span class="feature-index" aria-hidden="true">01</span>Yaziライクな移動</li><li><span class="feature-index" aria-hidden="true">02</span>キーボード中心</li><li><span class="feature-index" aria-hidden="true">03</span>軽快な動作</li><li><span class="feature-index" aria-hidden="true">04</span>Git diffを標準搭載</li></ul>
+</section>
+<section class="install-section" id="install" aria-labelledby="install-title"><div class="section install-layout">
+<div><img class="install-cat" src="/favicon.png" data-app-icon width="68" height="68" alt="" /><p class="eyebrow">はじめるまで、数ステップ。</p><h2 id="install-title">chillaを<br />インストール。</h2><p>macOSのApple Silicon（M1以降）に対応。DMGを使う方法と、Homebrewを使う方法から選べます。</p>
+<h3 class="install-method">DMGでインストール</h3>
+<ol class="install-steps">
+<li><a href="https://github.com/tacogips/chilla/releases/latest">最新リリース</a>のAssetsから、末尾が<code>_aarch64.dmg</code>のファイルをダウンロード。</li>
+<li>ダウンロードした<code>.dmg</code>を開き、<code>chilla.app</code>を<code>Applications</code>（アプリケーション）へドラッグ。</li>
+<li>DMGを取り出し、アプリケーションフォルダから<code>chilla</code>を起動。</li>
+</ol>
+<a class="button button-primary" href="https://github.com/tacogips/chilla/releases/latest">DMGをダウンロード<span aria-hidden="true">↗</span></a><p class="small-note">Homebrewなしでもインストールできます。</p></div>
+<div class="install-panel"><div class="terminal-label"><h3>Homebrewでインストール</h3><span>macOS</span></div>
+<ol class="brew-steps">
+<li><strong>Homebrewを用意</strong><p>未導入の場合は、<a href="https://brew.sh/">Homebrew公式サイト</a>の手順でインストールしてください。</p></li>
+<li><strong>ターミナルでインストール</strong><pre><code>brew tap tacogips/tap
+brew install --cask chilla</code></pre><button class="copy-button" type="button" data-copy-command="brew tap tacogips/tap && brew install --cask chilla" aria-live="polite">コマンドをコピー</button></li>
+<li><strong>chillaを起動</strong><p>アプリケーションフォルダから開くか、次を実行：</p><pre class="launch-command"><code>open -a chilla</code></pre><p>今いるプロジェクトのフォルダを開くには：</p><pre class="launch-command"><code>chilla .</code></pre></li>
+</ol>
+<details class="install-update"><summary>Homebrewでアップデートするには</summary><pre><code>brew update
+brew upgrade --cask chilla</code></pre></details>
+<a class="text-link" href="https://github.com/tacogips/chilla#install">インストールの詳細 ↗</a></div>
+</div></section>
+<div class="section product-preview">
+<figure class="app-shot hero-shot" id="proof"><div class="shot-heading"><span>いつものファイルを、いつものリズムで。</span><span class="shot-tag">chilla / README.md</span></div>
+<a href="/screenshots/browse-fresh.jpg" aria-label="ブラウザ画面を原寸で開く"><picture><source type="image/webp" srcset="/screenshots/browse-fresh.webp" /><img src="/screenshots/browse-fresh.jpg" width="1277" height="768" alt="ファイルブラウザとネコのイラスト付きREADMEを並べたchillaの画面" loading="lazy" /></picture></a><figcaption>撮り直した実際のアプリ画面 · リポジトリを移動しながらREADMEをプレビュー。</figcaption></figure>
+</div>
+<section class="section features" id="features" aria-labelledby="features-title">
+<div class="section-intro"><div><p class="eyebrow">手間を減らして、すいすいと。</p><h2 id="features-title">ちょっと見たい。<br />だから、軽やかに。</h2></div><p>ターミナルのファイルブラウザのような操作感に、見たいものが見やすいデスクトップの画面を。chillaはYaziに着想を得たアプリで、Yaziのフォークではありません。</p></div>
+<div class="feature-grid"><article><span class="feature-symbol" aria-hidden="true">h / j / k / l</span><h3>気になる方へ、すいすい。</h3><p>フォルダを移動し、名前で絞り込み、リストとツリーを切り替える。選んだファイルは、その場でプレビューできます。</p></article><article><span class="feature-symbol" aria-hidden="true">.md &nbsp; .png &nbsp; .pdf</span><h3>テキストの、その先も。</h3><p>Markdown、構文ハイライト付きソース、画像、動画、PDF、CSV、EPUB。いろいろなファイルを、ひとつの落ち着く場所で。</p></article><article><span class="feature-symbol" aria-hidden="true">&gt; chilla .</span><h3>身軽に、はじめよう。</h3><p>RustとTauriで作られた、見ることに集中できるアプリ。フォルダをそのまま開けます。ワークスペースの取り込みも、アカウント登録も、大きなIDEも不要です。</p></article></div>
+</section>
+<section class="keyboard-section" id="keyboard" aria-labelledby="keyboard-title"><div class="section keyboard-layout">
+<div><p class="eyebrow">手は、ホームポジションのまま。</p><h2 id="keyboard-title">指が覚えている、<br />いつもの道順。</h2><p class="section-lede">Yaziライクな移動で、ファイル探しが自然に。マウスに持ち替えずに移動、絞り込み、Git diffの表示まで。</p><p class="keyboard-foot">矢印キー派も、そのままどうぞ。</p></div>
+<div class="keyboard-board"><div class="shortcuts"><div class="shortcut"><kbd>h</kbd><span>親フォルダへ</span></div>
+<div class="shortcut"><kbd>j</kbd><span>下へ移動</span></div>
+<div class="shortcut"><kbd>k</kbd><span>上へ移動</span></div>
+<div class="shortcut"><kbd>l</kbd><span>選択項目を開く</span></div>
+<div class="shortcut"><kbd>/</kbd><span>ファイルを絞り込む</span></div>
+<div class="shortcut"><kbd>g</kbd><span>Git diffを切り替え</span></div>
+<div class="shortcut"><kbd>Shift + L</kbd><span>ファイルツリーを表示／非表示</span></div>
+<div class="shortcut"><kbd>?</kbd><span>ヘルプを表示</span></div></div><p class="small-note">デフォルトのショートカットです。移動キーはファイルブラウザ内で有効です。入力欄では通常どおり文字を入力できます。</p></div>
+</div></section>
+<section class="section diff-section" id="git-diff" aria-labelledby="diff-title">
+<div class="section-intro"><div><p class="eyebrow">Git diffも、おまかせ。</p><h2 id="diff-title">小さな変更も、<br />くっきりと。</h2></div><div><p>ローカルの変更、コミット、範囲指定、GitHubのプルリクエストURLに対応。変更ファイルをたどりながら、何が変わったかを確認できます。ここでも操作はキーボード中心。</p><ul class="mode-pills"><li>左右比較</li><li>スタック表示</li><li>ファイル全体</li></ul></div></div>
+<figure class="app-shot diff-shot"><a href="/screenshots/diff-fresh.jpg" aria-label="Git diffの画面を原寸で開く"><picture><source type="image/webp" srcset="/screenshots/diff-fresh.webp" /><img src="/screenshots/diff-fresh.jpg" width="1277" height="768" loading="lazy" alt="変更ファイルの一覧と赤と緑の差分を左右に表示したchillaのGit diff画面" /></picture></a><figcaption>撮り直した実際のアプリ画面 · リポジトリの変更を左右に並べて比較。</figcaption></figure>
+<p class="diff-shortcuts">diffモードでは： <kbd>1</kbd> 左右比較 <kbd>2</kbd> スタック <kbd>3</kbd> ファイル全体</p></section>
+</main>
+<footer class="site-footer"><a class="brand" href="/ja/"><img class="brand-icon" src="/favicon.png" data-app-icon alt="" width="44" height="44" /><span>chilla</span></a><p>好奇心いっぱいの、小さなファイル＆Gitビューア。</p><nav aria-label="フッター"><a href="/ja/privacy/">プライバシー</a><a href="https://github.com/tacogips/chilla/releases/latest">リリース</a><a href="https://github.com/tacogips/chilla">GitHub</a><a href="/" lang="en">English</a></nav><p class="copyright">© <span data-year>2026</span> chilla</p></footer>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

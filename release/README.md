@@ -4,7 +4,7 @@ This directory is the local staging area for packaged `chilla` release artifacts
 
 The repository root `install.sh` can install directly from this directory before assets are uploaded to GitHub Releases.
 
-This contract currently covers the existing Nix tarball release path used by `install.sh` and the current custom Homebrew cask. The repository also contains a separate macOS Tauri bundle flow for `.app` / `.dmg` creation; that bundle flow does not replace this tarball contract yet.
+This contract covers native tarballs built through mise for `install.sh`. The macOS Homebrew cask uses the separate signed `.app` / `.dmg` flow described below. Older published Nix tarballs are historical artifacts and are not changed by the build migration.
 
 ## Expected filenames
 
@@ -42,10 +42,10 @@ Example:
 ```text
 chilla-v0.1.1-x86_64-linux/
 ├── bin/chilla
-└── lib/
+└── LICENSE
 ```
 
-`bin/chilla` is currently a Nix-generated wrapper script. The release is therefore a full directory tree, not a single binary and not the new Tauri `.app` / `.dmg` bundle path.
+`bin/chilla` is a native executable built with the mise-managed Rust toolchain and embedded frontend assets. Packaging rejects Nix-linked executables. Linux still requires compatible system GTK/WebKitGTK libraries; this is not a static or cross-distribution bundle. Public macOS distribution should use signed/notarized DMGs.
 
 ## Checksum format
 
@@ -62,13 +62,17 @@ shasum -a 256 release/chilla-v0.1.1-x86_64-linux.tar.gz | \
 ## Packaging example
 
 ```bash
-mkdir -p release
-cp -RL result release/chilla-v0.1.1-x86_64-linux
-tar -C release -czf release/chilla-v0.1.1-x86_64-linux.tar.gz chilla-v0.1.1-x86_64-linux
-shasum -a 256 release/chilla-v0.1.1-x86_64-linux.tar.gz | \
-  awk '{ print $1 "  chilla-v0.1.1-x86_64-linux.tar.gz" }' \
-  > release/chilla-v0.1.1-x86_64-linux.sha256
+mise install
+mise run install
+mise run package-native
+# Optional separate output directory:
+mise run package-native -- /tmp/chilla-artifacts
 ```
+
+The task reads the project version, builds for the current native architecture,
+checks executable type/version and shared-library linkage, and emits the archive
+and checksum. Existing artifact filenames are refused rather than overwritten.
+No release upload, tag, or Homebrew update is performed.
 
 ## Installer usage
 
@@ -92,14 +96,15 @@ That cask currently points at the published macOS Apple Silicon DMG:
 chilla_<version>_aarch64.dmg
 ```
 
-The cask installs `chilla.app` from the DMG and links `chilla.app/Contents/MacOS/chilla` into Homebrew's `bin` directory. The current DMG is still unsigned and not notarized, so the cask should be treated as a transitional distribution path until a local macOS release publishes a trusted artifact.
+The cask installs `chilla.app` from the signed and notarized DMG and links
+`chilla.app/Contents/MacOS/chilla` into Homebrew's `bin` directory.
 
 ## macOS DMG Bundle Flow
 
 The repository now also contains a dedicated Tauri macOS bundle config at `src-tauri/tauri.macos.release.conf.json` and a local task:
 
 ```bash
-task bundle-macos-dmg
+mise run bundle-macos-dmg
 ```
 
 That flow targets `app,dmg` bundles and is intended for Apple signing/notarization. It is additive: it does not change the tarball filenames, directory layout, or installer behavior documented above.
@@ -114,8 +119,11 @@ Trusted macOS release assets are signed and notarized locally. Apple certificate
 Then publish the trusted DMG and `.app` zip with:
 
 ```bash
-task release-macos-dmg-local -- v0.1.7
+mise run release-macos-dmg-local -- v0.2.0
 ```
+
+The local release task mounts the final DMG and verifies the embedded app with
+strict code-signing, stapler, and Gatekeeper checks before upload.
 
 GitHub Actions only produce unsigned validation artifacts for this bundle flow.
 

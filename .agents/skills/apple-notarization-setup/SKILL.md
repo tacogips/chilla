@@ -67,7 +67,7 @@ After storage, avoid showing the value again. If the browser dialog is still ope
 Prefer the existing macOS release skill and tasks for actual packaging. The common local command is:
 
 ```bash
-kinko exec --env APPLE_SIGNING_IDENTITY,APPLE_ID,APPLE_PASSWORD,APPLE_TEAM_ID -- task bundle-macos-dmg
+kinko exec --env APPLE_SIGNING_IDENTITY,APPLE_ID,APPLE_PASSWORD,APPLE_TEAM_ID -- mise run bundle-macos-dmg
 ```
 
 This builds:
@@ -77,36 +77,12 @@ This builds:
 
 Cargo commands must use `CARGO_TERM_QUIET=true` when invoked directly.
 
-## Nix Environment Notarytool Workaround
+## Native Xcode Tools
 
-In this repository's Nix shell, `xcrun` may point at the Nix Apple SDK and fail with:
-
-```text
-tool 'notarytool' not found
-```
-
-Do not replace the whole build environment with the system Xcode `DEVELOPER_DIR`; that can break Nix SDK linking. Instead, create a temporary `notarytool` wrapper and keep the Nix build environment intact:
-
-```bash
-tmp_notary_dir=/tmp/chilla-notarytool-wrapper
-mkdir -p "$tmp_notary_dir"
-printf '%s\n' \
-  '#!/usr/bin/env bash' \
-  'exec /Applications/Xcode.app/Contents/Developer/usr/bin/notarytool "$@"' \
-  > "$tmp_notary_dir/notarytool"
-chmod 700 "$tmp_notary_dir/notarytool"
-
-kinko exec --env APPLE_SIGNING_IDENTITY,APPLE_ID,APPLE_PASSWORD,APPLE_TEAM_ID -- bash -lc '
-  export PATH="/tmp/chilla-notarytool-wrapper:$PATH"
-  task bundle-macos-dmg
-'
-```
-
-If `/Applications/Xcode.app/Contents/Developer/usr/bin/notarytool` is unavailable, check:
-
-```bash
-/usr/bin/mdfind 'kMDItemFSName == "notarytool"'
-```
+Build outside legacy Nix shells. Verify `/usr/bin/xcrun --find notarytool` and
+`/usr/bin/xcrun --find stapler` resolve the installed Xcode tools. If not, check
+`xcode-select -p` and install/select full Xcode; mise supplies Rust/Bun, not Apple
+SDK tools. Do not silently change system Xcode selection or credential settings.
 
 ## Notarization Status
 
@@ -152,7 +128,7 @@ spctl --assess --type execute --verbose=4 target/release/bundle/macos/chilla.app
 spctl --assess --type open --context context:primary-signature --verbose=4 target/release/bundle/dmg/*.dmg
 ```
 
-If `xcrun stapler` cannot find tools due to the Nix SDK, call the Xcode tool directly when appropriate:
+If `xcrun stapler` cannot find tools, first verify the selected full Xcode installation. A known installed tool can be called directly:
 
 ```bash
 /Applications/Xcode.app/Contents/Developer/usr/bin/stapler validate target/release/bundle/macos/chilla.app
@@ -164,6 +140,6 @@ Local Apple setup is complete when:
 
 - kinko has all required Apple secret keys present.
 - `security find-identity` reports a valid Developer ID Application identity.
-- `task bundle-macos-dmg` or the wrapper-based equivalent signs the app.
+- `mise run bundle-macos-dmg` signs the app.
 - Notarization reaches `Accepted`.
 - Stapler and Gatekeeper validation pass for the app and DMG.

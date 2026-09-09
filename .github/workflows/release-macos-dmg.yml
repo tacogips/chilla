@@ -21,26 +21,21 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-
-      - name: Setup Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: 2026.8.3
+          install_args: bun node rust
 
       - name: Install frontend dependencies
-        run: bun install --frozen-lockfile
+        run: mise run install
 
       - name: Build unsigned macOS bundles
-        id: build-unsigned
-        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # action-v0.6.2
-        with:
-          includeUpdaterJson: false
-          tauriScript: bun run tauri
-          args: --config src-tauri/tauri.macos.release.conf.json --bundles app,dmg
+        run: mise run bundle-macos-dmg
 
       - name: Verify macOS bundle outputs
         run: |
@@ -60,7 +55,7 @@ jobs:
           test -f "$dmg_path"
 
       - name: Upload validation build artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: chilla-macos-dmg
           if-no-files-found: error

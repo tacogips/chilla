@@ -6,6 +6,9 @@ This directory contains reference materials for system design and implementation
 
 | Name | URL | Description |
 |------|-----|-------------|
+| ign-template tauri-v1 | https://github.com/tacogips/ign-template/tree/cd4284b7c942f3b1bc38b81212525830e6c99bb8/tauri-v1 | Verified upstream mise-native tool/task baseline |
+| Tauri Prerequisites | https://v2.tauri.app/start/prerequisites/ | Native OS dependencies outside mise |
+| mise Continuous Integration | https://mise.jdx.dev/continuous-integration.html | mise-action and CI task execution |
 | GitHub Pull Request REST API | https://docs.github.com/en/rest/pulls/pulls | Canonical PR URLs, diff_url/patch_url forms, and changed-file responses |
 | Yazi Quick Start | https://yazi-rs.github.io/docs/quick-start/ | Browser navigation, comma-prefixed sorting, filter and recursive search key bindings |
 | Yazi Keymap Configuration | https://yazi-rs.github.io/docs/configuration/keymap/ | Contexts, prepend/append/replacement precedence, key notation, sequences and descriptions |

@@ -61,6 +61,7 @@ require_command codesign
 require_command ditto
 require_command git
 require_command gh
+require_command hdiutil
 require_command security
 require_command shasum
 require_command spctl
@@ -116,6 +117,28 @@ xcrun stapler validate "$app_path"
 xcrun stapler validate "$dmg_path"
 spctl --assess --type execute --verbose=4 "$app_path"
 spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg_path"
+
+mount_dir="$(mktemp -d "${TMPDIR:-/tmp}/chilla-release-mount.XXXXXX")"
+image_attached=false
+cleanup_mount() {
+  if [ "$image_attached" = true ]; then
+    hdiutil detach "$mount_dir" >/dev/null 2>&1 || true
+  fi
+  rmdir "$mount_dir" >/dev/null 2>&1 || true
+}
+trap cleanup_mount EXIT
+
+hdiutil attach -nobrowse -readonly -mountpoint "$mount_dir" "$dmg_path" >/dev/null
+image_attached=true
+mounted_app_path="$mount_dir/chilla.app"
+test -d "$mounted_app_path"
+codesign --verify --deep --strict --verbose=2 "$mounted_app_path"
+xcrun stapler validate "$mounted_app_path"
+spctl --assess --type execute --verbose=4 "$mounted_app_path"
+hdiutil detach "$mount_dir" >/dev/null
+image_attached=false
+rmdir "$mount_dir"
+trap - EXIT
 
 app_zip_path="target/release/bundle/macos/chilla.app.zip"
 ditto -c -k --keepParent "$app_path" "$app_zip_path"

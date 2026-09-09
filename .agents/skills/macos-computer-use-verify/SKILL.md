@@ -35,7 +35,7 @@ Use the exact app bundle path with Computer Use:
 /absolute/path/to/repo/target/debug/bundle/macos/chilla.app
 ```
 
-Use `nix build` only when the user explicitly asks to validate the Nix package output; it is slower and may omit untracked Git files unless built from a path source.
+Use `mise exec -- bun run tauri build --debug --bundles app` for native debug builds. Installer tarballs use `mise run package-native` and are not app bundles.
 
 ## Workflow
 

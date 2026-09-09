@@ -6,6 +6,28 @@ This document describes system architecture and design decisions.
 
 Architectural patterns, system structure, and technical decisions.
 
+## Mise Native Toolchain
+
+Development and CI follow ign-template's tauri-v1 at revision
+cd4284b7c942f3b1bc38b81212525830e6c99bb8. mise.toml owns tool versions and task
+entry points; Bun's lockfile owns frontend dependencies and Cargo.lock owns
+Rust dependencies. Native OS SDKs and libraries are prerequisites, not installed
+by mise. Ubuntu CI installs Tauri/WebKitGTK and WebDriver packages using apt;
+macOS uses Xcode tools. No Nix shell, flake check, generated Bun Nix manifest,
+or Nix runtime is required for new builds.
+
+Local and CI verification share mise tasks covering frontend typecheck, lint,
+Bun/DOM tests, Rust format/clippy/tests and native builds. Linux desktop E2E
+remains a separate job, retaining its existing advisory status. Actions are
+SHA-pinned with read-only permissions; signed releases remain local operations.
+
+Native tarballs retain install.sh's version/target naming, top-level directory,
+bin/chilla entry point and SHA-256 sidecar. Packaging rejects Nix linkage and
+non-native builds, refuses existing output artifacts, and stages in a fresh
+temporary directory. Linux tarballs require compatible system WebKitGTK/GTK
+libraries; macOS public distribution continues to prefer signed/notarized DMGs.
+Older published Nix tarballs are historical artifacts, not retroactively fixed.
+
 ---
 
 ## Sections

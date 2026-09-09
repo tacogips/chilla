@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Tarball installer: downloads `chilla-v<version>-<target>.tar.gz` GitHub release assets (see README).
-# For macOS .app / .dmg bundles built from this repository, see README "macOS DMG Releases" and `task bundle-macos-dmg`.
+# For macOS .app / .dmg bundles, see README "macOS DMG Releases" and `mise run bundle-macos-dmg`.
 
 set -euo pipefail
 
@@ -455,13 +455,6 @@ install_release_tree() {
   printf '%s\n' "$destination_dir"
 }
 
-warn_if_nix_store_missing() {
-  if [[ ! -d /nix/store ]]; then
-    info "Warning: /nix/store is not present on this machine."
-    info "Warning: current chilla release artifacts are produced from Nix and may not run correctly without Nix."
-  fi
-}
-
 install_command() {
   local archive_path archive_name source_kind checksum_path release_json archive_url checksum_url
   local package_root package_name install_path refresh_command profile_path shell_name
@@ -520,7 +513,6 @@ install_command() {
   install_path="$(install_release_tree "$package_root" "$package_name")"
 
   configure_shell_profile
-  warn_if_nix_store_missing
 
   success "chilla was installed successfully to ${Bold_Green}$(tildify "$install_path")${Color_Off}"
   info "CLI symlink: $(tildify "$BIN_DIR/$APP_NAME")"
