@@ -158,7 +158,9 @@ plutil -lint "$runtime_entitlements" >/dev/null
 
 runtime_profile="$work_dir/chilla.provisionprofile"
 cp "$profile_source" "$runtime_profile"
-chmod 600 "$runtime_profile"
+# The profile is embedded verbatim in the application bundle. App Store
+# validation requires every bundled file to be readable by non-root users.
+chmod 644 "$runtime_profile"
 
 runtime_config="$work_dir/tauri.appstore.runtime.conf.json"
 jq -s \

@@ -22,7 +22,7 @@ credentials or provisioning artifacts, and inferring commercial/review choices.
 
 ### TASK-001: Release Configuration And Safety Gates
 
-**Status**: In Progress
+**Status**: Completed
 **Parallelizable**: No
 **Deliverables**: `src-tauri/tauri.appstore.conf.json`,
 `src-tauri/Entitlements.appstore.plist.in`, `src-tauri/Info.plist`,
@@ -34,18 +34,18 @@ credentials or provisioning artifacts, and inferring commercial/review choices.
 - [x] sandbox, user-selected file, and outbound-network entitlements are present
 - [x] provisioning and team values are supplied ephemerally and never committed
 - [x] readiness failures identify missing certificate/profile/metadata gates
-- [ ] the task builds an Apple Silicon `.app` and installer-signed `.pkg`
+- [x] the task builds an Apple Silicon `.app` and installer-signed `.pkg`
 
 ### TASK-002: Sandboxed Runtime Verification
 
-**Status**: Not Started
+**Status**: In Progress
 **Parallelizable**: No (depends on TASK-001)
 **Deliverables**: packaged application and redacted release evidence
 
 **Completion Criteria**:
 
-- [ ] signed app passes strict code-signature validation
-- [ ] embedded profile and effective entitlements match the application
+- [x] signed app passes strict code-signature validation
+- [x] embedded profile and effective entitlements match the application
 - [ ] packaged app launches under App Sandbox
 - [ ] in-app picker opens a directory and file preview
 - [ ] GitHub diff retrieval works with outbound-network entitlement
@@ -53,7 +53,7 @@ credentials or provisioning artifacts, and inferring commercial/review choices.
 
 ### TASK-003: App Store Connect Record And Metadata
 
-**Status**: Blocked
+**Status**: In Progress
 **Parallelizable**: Yes
 **Deliverables**: `com.tacogips.chilla` identifier, App Store Connect macOS app
 record, listing metadata, privacy answers, screenshots, review information
@@ -62,21 +62,21 @@ record, listing metadata, privacy answers, screenshots, review information
 
 - [ ] owner decisions recorded for price, availability, and release timing
 - [ ] review contact and notes are complete
-- [ ] app record uses the exact bundle identifier and product identity
+- [x] app record uses the exact bundle identifier and product identity
 - [ ] one to ten compliant 16:10 macOS screenshots are uploaded
 - [ ] privacy and encryption answers match shipped behavior
 
 ### TASK-004: Upload, Processing, And Submission
 
-**Status**: Blocked
+**Status**: In Progress
 **Parallelizable**: No (depends on TASK-002 and TASK-003)
 **Deliverables**: uploaded 0.2.0 build and App Review submission evidence
 
 **Completion Criteria**:
 
-- [ ] package validation and upload succeed
-- [ ] build finishes processing without blocking issues
-- [ ] processed build is attached to the 0.2.0 macOS version
+- [x] package validation and upload succeed
+- [x] build finishes processing without blocking issues
+- [x] processed build is attached to the 0.2.0 macOS version
 - [ ] final metadata validation passes
 - [ ] version is submitted with the owner-selected release mode
 
@@ -84,26 +84,26 @@ record, listing metadata, privacy answers, screenshots, review information
 
 | Module | File Path / Service | Status | Tests |
 | --- | --- | --- | --- |
-| Release safety gates | Tauri config, script, mise | IN_PROGRESS | Shell/config checks |
-| Sandboxed runtime | packaged chilla app | NOT_STARTED | Signature and UI QA |
-| Store record | Apple Developer / App Store Connect | BLOCKED | Metadata validation |
-| Upload and review | App Store Connect | BLOCKED | Processing evidence |
+| Release safety gates | Tauri config, script, mise | COMPLETED | Shell/config checks |
+| Sandboxed runtime | packaged chilla app | IN_PROGRESS | Signature and UI QA |
+| Store record | Apple Developer / App Store Connect | IN_PROGRESS | Metadata validation |
+| Upload and review | App Store Connect | IN_PROGRESS | Processing evidence |
 
 ## Dependencies
 
 | Feature | Depends On | Status |
 | --- | --- | --- |
-| Signed app | Mac App Store profile and Apple Distribution identity | Profile missing |
-| Signed package | Mac Installer Distribution identity | Available |
-| App record | registered bundle identifier and owner metadata | Missing |
+| Signed app | Mac App Store profile and Apple Distribution identity | Available |
+| Signed package | Mac Installer Distribution identity | Available and Keychain-authorized |
+| App record | registered bundle identifier and owner metadata | Record created; owner metadata remains |
 | Final submission | processed build and owner decisions | Blocked |
 
 ## Completion Criteria
 
 - [ ] repository verification passes
 - [ ] no secret/profile material appears in Git history or release logs
-- [ ] signed sandboxed 0.2.0 app and package pass local validation
-- [ ] App Store Connect accepts and processes the build
+- [x] signed sandboxed 0.2.0 app and package pass local validation
+- [x] App Store Connect accepts and processes the build
 - [ ] macOS version is submitted to App Review
 
 ## Progress Log
@@ -141,3 +141,28 @@ biometric approval. Price, availability, release timing, and review contact
 remain required before submission.
 
 **Notes**: No certificate, account, team, or private-key values are recorded.
+
+### Session: 2026-09-09 (App Store Connect Upload)
+
+**Tasks Completed**: Registered the explicit chilla bundle identifier and Mac App
+Store provisioning profile, created the macOS App Store Connect record as
+`Chilla Viewer`, saved the `Lightweight, keyboard-first` subtitle, selected the
+Utilities category, populated version 0.2.0 listing copy and project URLs,
+validated and uploaded build 1, confirmed processing completed, and attached the
+processed build to version 0.2.0. App Store Connect extracted the embedded app
+icon from the build.
+
+**Tasks In Progress**: TASK-002 runtime QA, TASK-003 owner metadata and
+screenshots, and TASK-004 final validation/submission.
+
+**Blockers**: The Account Holder must accept the updated Apple Developer Program
+License Agreement. Owner decisions remain required for price, territories,
+release timing, content rights, copyright holder, review contact, and compliance
+answers. Compliant 16:10 screenshots are not yet uploaded.
+
+**Notes**: Apple validation initially rejected the embedded provisioning profile
+because it retained owner-only file permissions. The release script now embeds
+the profile read-only for all users, after which validation and upload succeeded
+without errors. A distribution-signed App Store bundle cannot be launched
+directly outside the Store installation path; strict code-signature and
+entitlement checks pass, while installed-build runtime QA remains pending.
