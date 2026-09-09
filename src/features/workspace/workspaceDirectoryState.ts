@@ -13,6 +13,8 @@ export interface LoadedDirectoryState {
   readonly next_offset: number;
   readonly sort: DirectoryListSort;
   readonly query: string;
+  readonly hideGitIgnored?: boolean;
+  readonly refreshToken?: number;
 }
 
 function defaultFocusedEntryPath(

@@ -337,7 +337,7 @@ fn retain_non_git_ignored_entry_records(
     records.retain(|entry| !ignored_entry_names.contains(&entry.seed.name));
 }
 
-fn git_ignored_entry_names<'a>(
+pub(super) fn git_ignored_entry_names<'a>(
     current_directory_path: &Path,
     entry_names: impl Iterator<Item = &'a str>,
 ) -> std::collections::HashSet<String> {

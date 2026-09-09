@@ -533,7 +533,7 @@ describe("PrDiffWorkspace", () => {
     await waitFor(() => {
       expect(document.body.textContent).toContain("first");
       expect(document.querySelector(".pr-browser__path")?.textContent).toBe(
-        "src",
+        "/",
       );
       expect(
         document
@@ -669,6 +669,7 @@ describe("PrDiffWorkspace", () => {
 
     expect(body.scrollTop).toBe(0);
 
+    click('[aria-label="Show filter"]');
     const filter = document.querySelector<HTMLInputElement>(
       ".pr-browser__filter",
     );
@@ -1037,6 +1038,7 @@ describe("PrDiffWorkspace", () => {
     );
 
     renderWorkspace();
+    click('[aria-label="List"]');
 
     await waitFor(() => {
       expect(document.querySelector('[data-path="src"]')).not.toBeNull();
@@ -1076,6 +1078,7 @@ describe("PrDiffWorkspace", () => {
     );
 
     renderWorkspace();
+    click('[aria-label="List"]');
 
     await waitFor(() => {
       expect(document.querySelector('[data-path="src"]')).not.toBeNull();
@@ -1166,6 +1169,333 @@ describe("PrDiffWorkspace", () => {
       expect(document.body.textContent).toContain("from src/old-name.ts");
       expect(document.body.textContent).toContain("renamed");
     });
+  });
+
+  it.each(["git", "pr"])(
+    "toggles %s diff Tree with plain t and ignores typing and modified keys",
+    async (kind) => {
+      const files = snapshot([textDiffFile("src/app.ts", "preview")]);
+      loadGitDiffMock.mockResolvedValue(files);
+      loadPrDiffMock.mockResolvedValue(files);
+      if (kind === "git") renderGitWorkspace();
+      else renderWorkspace();
+      await waitFor(() =>
+        expect(document.querySelector('[role="tree"]')).not.toBeNull(),
+      );
+      const shortcut = (init: KeyboardEventInit = {}) =>
+        new KeyboardEvent("keydown", {
+          key: "t",
+          bubbles: true,
+          cancelable: true,
+          ...init,
+        });
+      for (const modifiers of [
+        { ctrlKey: true },
+        { metaKey: true },
+        { altKey: true },
+        { shiftKey: true },
+        { key: "T", shiftKey: true },
+        { repeat: true },
+        { isComposing: true },
+      ]) {
+        window.dispatchEvent(shortcut(modifiers));
+        expect(document.querySelector('[role="tree"]')).not.toBeNull();
+      }
+      click('[aria-label="Show filter"]');
+      const input = document.querySelector("input");
+      expect(input).not.toBeNull();
+      input?.dispatchEvent(shortcut());
+      expect(document.querySelector('[role="tree"]')).not.toBeNull();
+      const toggle = document.querySelector<HTMLButtonElement>(
+        '[aria-label="List"]',
+      );
+      expect(toggle?.title).toBe("List view (t toggles)");
+      toggle?.dispatchEvent(shortcut());
+      expect(document.querySelector('[role="tree"]')).toBeNull();
+      expect(toggle?.getAttribute("aria-pressed")).toBe("true");
+      window.dispatchEvent(shortcut());
+      expect(document.querySelector('[role="tree"]')).not.toBeNull();
+    },
+  );
+
+  it("defaults Git diff to a tree and preserves the preview while collapsing folders", async () => {
+    loadGitDiffMock.mockResolvedValue(
+      snapshot([
+        textDiffFile("src/deep/app.ts", "nested preview"),
+        textDiffFile("README.md", "readme"),
+      ]),
+    );
+    renderGitWorkspace();
+    await waitFor(() =>
+      expect(document.querySelector('[data-path="src"]')).not.toBeNull(),
+    );
+    expect(
+      document
+        .querySelector('[aria-label="Tree"]')
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(document.querySelector('[role="tree"]')).not.toBeNull();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    expect(document.querySelector('[data-path="src/deep"]')).not.toBeNull();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+    expect(
+      document
+        .querySelector('[data-path="src/deep/app.ts"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(
+      document
+        .querySelector('[data-path="src/deep/app.ts"]')
+        ?.getAttribute("aria-level"),
+    ).toBe("3");
+    expect(document.body.textContent).toContain("nested preview");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+    expect(document.querySelector('[data-path="src/deep/app.ts"]')).toBeNull();
+    expect(document.body.textContent).toContain("nested preview");
+    expect(document.querySelector(".pr-browser__path")?.textContent).toBe("/");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+    expect(
+      document
+        .querySelector('[data-path="README.md"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+
+  it("keeps DOM focus and the tree cursor together through expansion and collapse", async () => {
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([
+        textDiffFile("src/deep/app.ts", "app"),
+        textDiffFile("README.md", "readme"),
+      ]),
+    );
+    renderWorkspace();
+    await waitFor(() =>
+      expect(document.querySelector('[data-path="src"]')).not.toBeNull(),
+    );
+    const focusRow = (path: string) => {
+      const row = document.querySelector<HTMLButtonElement>(
+        `[data-path="${path}"]`,
+      );
+      if (row === null) throw new Error(`missing row ${path}`);
+      row.focus();
+      return row;
+    };
+    const press = async (key: string, expectedPath: string) => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true }),
+      );
+      await waitFor(() =>
+        expect(document.activeElement?.getAttribute("data-path")).toBe(
+          expectedPath,
+        ),
+      );
+      expect(
+        document.querySelectorAll('[role="treeitem"][tabindex="0"]'),
+      ).toHaveLength(1);
+      expect(document.activeElement?.getAttribute("aria-selected")).toBe(
+        "true",
+      );
+    };
+    focusRow("src");
+    await press("ArrowRight", "src");
+    expect(document.querySelector('[data-path="src/deep"]')).not.toBeNull();
+    await press("ArrowDown", "src/deep");
+    await press("ArrowRight", "src/deep");
+    await press("ArrowRight", "src/deep/app.ts");
+    await press("ArrowLeft", "src/deep");
+    await press("ArrowLeft", "src/deep");
+    expect(document.querySelector('[data-path="src/deep/app.ts"]')).toBeNull();
+    focusRow("README.md");
+    await press("Enter", "README.md");
+    expect(document.body.textContent).toContain("readme");
+    expect(
+      document
+        .querySelector('[data-path="src/deep"]')
+        ?.getAttribute("aria-expanded"),
+    ).toBe("false");
+  });
+
+  it.each(["/", "f"])(
+    "shows an icon toolbar and reveals filtering with %s and focus restoration",
+    async (filterKey) => {
+      loadPrDiffMock.mockResolvedValue(
+        snapshot([textDiffFile("README.md", "readme")]),
+      );
+      renderWorkspace();
+      await waitFor(() =>
+        expect(
+          document.querySelector('[data-path="README.md"]'),
+        ).not.toBeNull(),
+      );
+      expect(document.querySelector(".pr-browser__filter")).toBeNull();
+      for (const label of ["List", "Tree", "Show filter"]) {
+        const button = document.querySelector<HTMLButtonElement>(
+          `[aria-label="${label}"]`,
+        );
+        expect(button?.textContent?.trim()).toBe("");
+        expect(button?.querySelector("svg")).not.toBeNull();
+        expect(button?.title).not.toBe("");
+      }
+      const filterButton = document.querySelector<HTMLButtonElement>(
+        '[aria-label="Show filter"]',
+      );
+      click('[aria-label="Show filter"]');
+      await waitFor(() =>
+        expect(document.activeElement?.getAttribute("aria-label")).toBe(
+          "Filter changed files",
+        ),
+      );
+      const input = document.querySelector<HTMLInputElement>(
+        ".pr-browser__filter",
+      );
+      if (input === null) throw new Error("missing filter");
+      expect(filterButton?.getAttribute("aria-controls")).toBe(input.id);
+      input.value = "README";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      filterButton?.click();
+      await Promise.resolve();
+      expect(input.value).toBe("README");
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe(6);
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+      await waitFor(() =>
+        expect(document.activeElement?.getAttribute("data-path")).toBe(
+          "README.md",
+        ),
+      );
+      expect(document.querySelector(".pr-browser__filter")).toBeNull();
+      expect(filterButton?.getAttribute("aria-expanded")).toBe("false");
+      for (const modifiers of [
+        { ctrlKey: true },
+        { metaKey: true },
+        { altKey: true },
+        { shiftKey: true },
+        { isComposing: true },
+      ]) {
+        window.dispatchEvent(
+          new KeyboardEvent("keydown", { key: filterKey, ...modifiers }),
+        );
+        expect(document.querySelector(".pr-browser__filter")).toBeNull();
+      }
+      const list = document.querySelector<HTMLButtonElement>(
+        '[aria-label="List"]',
+      );
+      list?.focus();
+      list?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: filterKey, bubbles: true }),
+      );
+      await waitFor(() =>
+        expect(document.activeElement?.getAttribute("aria-label")).toBe(
+          "Filter changed files",
+        ),
+      );
+      expect(
+        document.querySelector<HTMLInputElement>(".pr-browser__filter")?.value,
+      ).toBe("");
+      expect(filterButton?.getAttribute("aria-expanded")).toBe("true");
+    },
+  );
+
+  it("returns filter focus to its icon when no changed rows exist", async () => {
+    loadPrDiffMock.mockResolvedValue(snapshot([]));
+    renderWorkspace();
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("No changed files here."),
+    );
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "/" }));
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute("aria-label")).toBe(
+        "Filter changed files",
+      ),
+    );
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute("aria-label")).toBe(
+        "Show filter",
+      ),
+    );
+    expect(document.querySelector(".pr-browser__filter")).toBeNull();
+  });
+
+  it("reveals filtered deleted paths and ancestors without changing stored expansion", async () => {
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([
+        {
+          ...textDiffFile("src/removed/gone.ts", "deleted"),
+          status: PrFileStatus.Deleted,
+        },
+        textDiffFile("src/keep.ts", "keep"),
+        textDiffFile("other.ts", "other"),
+      ]),
+    );
+    renderWorkspace();
+    await waitFor(() =>
+      expect(document.querySelector('[data-path="src"]')).not.toBeNull(),
+    );
+    click('[aria-label="Show filter"]');
+    const input = document.querySelector<HTMLInputElement>(
+      ".pr-browser__filter",
+    );
+    if (input === null) throw new Error("missing filter");
+    input.value = "gone";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(
+      Array.from(document.querySelectorAll("[data-path]")).map((row) =>
+        row.getAttribute("data-path"),
+      ),
+    ).toEqual(["src", "src/removed", "src/removed/gone.ts"]);
+    click('[data-path="src/removed/gone.ts"]');
+    expect(document.body.textContent).toContain("deleted");
+    expect(document.querySelector('[data-path="src"]')?.textContent).toContain(
+      "2 files",
+    );
+    input.value = "";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(document.querySelector('[data-path="src/removed"]')).toBeNull();
+    expect(document.querySelector(".pr-browser__path")?.textContent).toBe("/");
+  });
+
+  it("roots Tree at the current List directory and reveals next files within that root", async () => {
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([
+        textDiffFile("src/a.ts", "first"),
+        textDiffFile("src/deep/b.ts", "second"),
+        textDiffFile("outside.ts", "outside"),
+      ]),
+    );
+    renderWorkspace();
+    await waitFor(() =>
+      expect(document.querySelector('[data-path="src"]')).not.toBeNull(),
+    );
+    click('[aria-label="List"]');
+    click('[data-path="src"]');
+    click('[data-path="src/a.ts"]');
+    click('[aria-label="Tree"]');
+    expect(document.querySelector(".pr-browser__path")?.textContent).toBe(
+      "src",
+    );
+    expect(document.querySelector('[data-path="outside.ts"]')).toBeNull();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: ">" }));
+    expect(
+      document
+        .querySelector('[data-path="src/deep/b.ts"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(document.querySelector(".pr-browser__path")?.textContent).toBe(
+      "src",
+    );
+    click('[aria-label="List"]');
+    expect(document.querySelector(".pr-browser__path")?.textContent).toBe(
+      "src",
+    );
+    expect(document.querySelector('[data-path="src/deep/b.ts"]')).toBeNull();
   });
 
   it("renders empty diff state", async () => {

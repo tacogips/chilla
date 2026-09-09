@@ -91,7 +91,7 @@ export const SHORTCUT_SECTIONS: readonly {
       },
       {
         keys: ["Shift", "S"],
-        description: "Toggle light / dark theme",
+        description: "Toggle light / dark theme (outside the file browser)",
       },
       {
         keys: ["Ctrl", "S"],
@@ -102,7 +102,24 @@ export const SHORTCUT_SECTIONS: readonly {
   {
     title: "File tree",
     shortcuts: [
-      { keys: ["/"], description: "Focus filter" },
+      {
+        keys: ["t"],
+        description: "Toggle List/Tree view (directory and diff browsers)",
+      },
+      { keys: ["f", "/"], description: "Show and focus filter" },
+      {
+        keys: ["s"],
+        description: "Find files recursively (directory browser)",
+      },
+      {
+        keys: ["S"],
+        description: "Search file contents recursively (directory browser)",
+      },
+      {
+        keys: [","],
+        description:
+          "Open sort shortcuts popup; press the next key or Escape to cancel",
+      },
       {
         keys: ["."],
         description: "Toggle Git-ignored entries (directory browsing only)",
@@ -113,7 +130,8 @@ export const SHORTCUT_SECTIONS: readonly {
       },
       {
         keys: ["Esc"],
-        description: "Clear filter and return to list (when filter focused)",
+        description:
+          "Clear and close filter, return to list (when filter focused)",
       },
       {
         keys: ["Enter"],
@@ -133,23 +151,23 @@ export const SHORTCUT_SECTIONS: readonly {
         description: "Move selection up",
       },
       {
-        keys: ["0"],
+        keys: [", then 0", "0"],
         description: "Reset sort to default (name ascending)",
       },
       {
-        keys: ["a", "A"],
+        keys: [", then a/A"],
         description: "Sort by name ascending / descending",
       },
       {
-        keys: ["e", "E"],
+        keys: [", then e/E"],
         description: "Sort by extension ascending / descending",
       },
       {
-        keys: ["m", "M"],
+        keys: [", then m/M"],
         description: "Sort by modified time ascending / descending",
       },
       {
-        keys: ["s", "S"],
+        keys: [", then s/S"],
         description: "Sort by size ascending / descending",
       },
       {

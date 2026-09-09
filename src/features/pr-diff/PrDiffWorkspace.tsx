@@ -4,12 +4,18 @@ import {
   createMemo,
   createEffect,
   createSignal,
+  createUniqueId,
   onCleanup,
   onMount,
 } from "solid-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import { PaneResizeHandle } from "../file-view/PaneResizeHandle";
+import {
+  BrowserListGlyph,
+  BrowserTreeGlyph,
+  BrowserFilterGlyph,
+} from "../file-view/browser-toolbar-glyphs";
 import {
   persistPaneWidthPx,
   PR_BROWSER_WIDTH_STORAGE_KEY,
@@ -40,6 +46,8 @@ import {
 } from "./prDiffSyntax";
 import {
   buildDirectoryEntries,
+  buildTreeEntries,
+  treeAncestors,
   parentDir,
   type BrowserEntry,
 } from "./prDiffBrowserEntries";
@@ -905,13 +913,23 @@ function LeftRightDiffHunk(props: {
 }
 
 export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
+  let browserPane: HTMLElement | undefined;
+  let focusedBrowserRow: HTMLButtonElement | undefined;
   let filterInput: HTMLInputElement | undefined;
+  let filterButton: HTMLButtonElement | undefined;
+  const filterId = createUniqueId();
   let diffFileView: HTMLDivElement | undefined;
   const [snapshot, setSnapshot] = createSignal<PrDiffSnapshot | null>(null);
   const [isLoading, setLoading] = createSignal(true);
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
   const [currentDir, setCurrentDir] = createSignal("");
+  const [browserView, setBrowserView] = createSignal<"list" | "tree">("tree");
+  const [expandedPaths, setExpandedPaths] = createSignal<ReadonlySet<string>>(
+    new Set(),
+  );
   const [query, setQuery] = createSignal("");
+  const [filterOpen, setFilterOpen] = createSignal(false);
+  const filterVisible = () => filterOpen() || query().length > 0;
   const [cursorPath, setCursorPath] = createSignal<string | null>(null);
   const [selectedPath, setSelectedPath] = createSignal<string | null>(null);
   const [lazyFileText, setLazyFileText] = createSignal<
@@ -947,7 +965,11 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
     [...files()].sort((left, right) => left.path.localeCompare(right.path)),
   );
   const entries = createMemo(() =>
-    buildDirectoryEntries(sortedFiles(), currentDir(), query()),
+    browserView() === "tree"
+      ? buildTreeEntries(sortedFiles(), currentDir(), query(), expandedPaths())
+      : buildDirectoryEntries(sortedFiles(), currentDir(), query()).map(
+          (entry) => ({ ...entry, depth: 0 }),
+        ),
   );
   const selectedFile = createMemo(() => {
     const path = selectedPath();
@@ -1016,6 +1038,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
       );
       const initialEntries = buildDirectoryEntries(nextFiles, "", "");
       setCurrentDir("");
+      setExpandedPaths(new Set<string>());
       setQuery("");
       setCursorPath(initialEntries[0]?.path ?? null);
       setSelectedPath(null);
@@ -1111,11 +1134,52 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
 
   const focusEntry = (entry: BrowserEntry) => {
     setCursorPath(entry.path);
-    setSelectedPath(entry.kind === "file" ? entry.path : null);
+    if (entry.kind === "file" || browserView() === "list") {
+      setSelectedPath(entry.kind === "file" ? entry.path : null);
+    }
+  };
+
+  const isExpanded = (path: string): boolean =>
+    query().trim().length > 0 || expandedPaths().has(path);
+  const toggleDirectory = (path: string) => {
+    if (query().trim().length > 0) return;
+    setExpandedPaths((previous) => {
+      const next = new Set(previous);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+
+  const revealPath = (path: string) => {
+    let root = currentDir();
+    while (root.length > 0 && !path.startsWith(`${root}/`)) {
+      root = parentDir(root) ?? "";
+    }
+    setCurrentDir(root);
+    setExpandedPaths(
+      (previous) => new Set([...previous, ...treeAncestors(path, root)]),
+    );
+  };
+
+  const changeBrowserView = (view: "list" | "tree") => {
+    setBrowserView(view);
+    const path = selectedPath();
+    if (
+      view === "tree" &&
+      path !== null &&
+      (currentDir().length === 0 || path.startsWith(`${currentDir()}/`))
+    ) {
+      revealPath(path);
+    }
+    if (!entries().some((entry) => entry.path === cursorPath())) {
+      setCursorPath(entries()[0]?.path ?? null);
+    }
   };
 
   const selectFilePath = (path: string) => {
-    setCurrentDir(parentDir(path) ?? "");
+    if (browserView() === "tree") revealPath(path);
+    else setCurrentDir(parentDir(path) ?? "");
     setQuery("");
     setCursorPath(path);
     setSelectedPath(path);
@@ -1147,6 +1211,10 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
   const selectEntry = (entry: BrowserEntry) => {
     focusEntry(entry);
     if (entry.kind === "directory") {
+      if (browserView() === "tree") {
+        toggleDirectory(entry.path);
+        return;
+      }
       setCurrentDir(entry.path);
       setQuery("");
       const childEntries = buildDirectoryEntries(sortedFiles(), entry.path, "");
@@ -1192,6 +1260,66 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
     }
   };
 
+  const moveTreeLeft = () => {
+    const entry = entries().find(
+      (candidate) => candidate.path === cursorPath(),
+    );
+    if (entry === undefined) return;
+    if (
+      entry.kind === "directory" &&
+      isExpanded(entry.path) &&
+      query().trim().length === 0
+    ) {
+      toggleDirectory(entry.path);
+      return;
+    }
+    const parent = parentDir(entry.path);
+    if (parent !== currentDir() && parent !== null) setCursorPath(parent);
+  };
+
+  const revealFilter = () => {
+    setFilterOpen(true);
+    queueMicrotask(() => {
+      filterInput?.focus();
+      filterInput?.select();
+    });
+  };
+
+  const hideFilter = () => {
+    setQuery("");
+    setFilterOpen(false);
+    if (!entries().some((entry) => entry.path === cursorPath())) {
+      setCursorPath(entries()[0]?.path ?? null);
+    }
+    queueMicrotask(() => {
+      const row = Array.from(
+        browserPane?.querySelectorAll<HTMLButtonElement>("button[data-path]") ??
+          [],
+      ).find((candidate) => candidate.dataset["path"] === cursorPath());
+      (row ?? filterButton)?.focus({ preventScroll: true });
+    });
+  };
+
+  createEffect(() => {
+    cursorPath();
+    entries();
+    queueMicrotask(() => {
+      const row = Array.from(
+        browserPane?.querySelectorAll<HTMLButtonElement>("button[data-path]") ??
+          [],
+      ).find((candidate) => candidate.dataset["path"] === cursorPath());
+      row?.scrollIntoView?.({ block: "nearest" });
+      if (
+        focusedBrowserRow !== undefined &&
+        (document.activeElement === focusedBrowserRow ||
+          (!focusedBrowserRow.isConnected &&
+            document.activeElement === document.body))
+      ) {
+        row?.focus({ preventScroll: true });
+      }
+    });
+  });
+
   onMount(() => {
     void load();
 
@@ -1199,6 +1327,37 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
       if (isEditableKeyboardTarget(event.target)) {
         return;
       }
+      if (
+        (event.key === "/" || event.key === "f") &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.repeat &&
+        !event.isComposing
+      ) {
+        event.preventDefault();
+        revealFilter();
+        return;
+      }
+      if (
+        event.key === "t" &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.repeat &&
+        !event.isComposing
+      ) {
+        event.preventDefault();
+        changeBrowserView(browserView() === "tree" ? "list" : "tree");
+        return;
+      }
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".file-browser__toolbar") !== null
+      )
+        return;
 
       const key = event.key.toLowerCase();
       if (matchesCtrlShortcut(event, "d")) {
@@ -1239,7 +1398,8 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
 
       if (key === "h" || event.key === "ArrowLeft" || event.key === "Left") {
         event.preventDefault();
-        navigateParent();
+        if (browserView() === "tree") moveTreeLeft();
+        else navigateParent();
         return;
       }
 
@@ -1255,15 +1415,22 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
           entries()[0];
         if (entry !== undefined) {
           event.preventDefault();
-          selectEntry(entry);
+          if (
+            browserView() === "tree" &&
+            entry.kind === "directory" &&
+            (key === "l" ||
+              event.key === "ArrowRight" ||
+              event.key === "Right") &&
+            isExpanded(entry.path)
+          ) {
+            const index = entries().findIndex(
+              (candidate) => candidate.path === entry.path,
+            );
+            const child = entries()[index + 1];
+            if (child !== undefined && child.depth > entry.depth)
+              focusEntry(child);
+          } else selectEntry(entry);
         }
-        return;
-      }
-
-      if (event.key === "/") {
-        event.preventDefault();
-        filterInput?.focus();
-        filterInput?.select();
         return;
       }
 
@@ -1324,12 +1491,54 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
 
   return (
     <div class="pr-workspace" style={prWorkspaceStyle()}>
-      <aside class="pane pr-browser">
+      <aside class="pane pr-browser" ref={browserPane}>
         <header class="pane__header">
           <span class="pane__title">Changed Files</span>
           <span>{files().length} files</span>
         </header>
         <div class="pane__body pr-browser__body">
+          <div class="file-browser__toolbar">
+            <div
+              class="file-browser__view-toggle"
+              role="group"
+              aria-label="Changed files view"
+            >
+              <button
+                type="button"
+                class="file-browser__view-option"
+                title="List view (t toggles)"
+                aria-label="List"
+                aria-pressed={browserView() === "list"}
+                onClick={() => changeBrowserView("list")}
+              >
+                <BrowserListGlyph />
+              </button>
+              <button
+                type="button"
+                class="file-browser__view-option"
+                title="Tree view (t toggles)"
+                aria-label="Tree"
+                aria-pressed={browserView() === "tree"}
+                onClick={() => changeBrowserView("tree")}
+              >
+                <BrowserTreeGlyph />
+              </button>
+            </div>
+            <div class="file-browser__toolbar-actions">
+              <button
+                ref={filterButton}
+                type="button"
+                class="file-browser__filter-toggle file-browser__icon-button"
+                title="Show and focus filter (f or /)"
+                aria-label="Show filter"
+                aria-expanded={filterVisible()}
+                aria-controls={filterId}
+                onClick={revealFilter}
+              >
+                <BrowserFilterGlyph />
+              </button>
+            </div>
+          </div>
           <div
             class={`pr-browser__path${
               currentDir().length === 0 ? " pr-browser__path--root" : ""
@@ -1337,23 +1546,26 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
           >
             {currentDir().length === 0 ? "/" : currentDir()}
           </div>
-          <input
-            ref={(element) => {
-              filterInput = element;
-            }}
-            class="file-browser__filter pr-browser__filter"
-            value={query()}
-            placeholder="Filter files..."
-            onInput={(event) => setQuery(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                setQuery("");
-                setCursorPath(entries()[0]?.path ?? null);
-                filterInput?.blur();
-              }
-            }}
-          />
+          <Show when={filterVisible()}>
+            <input
+              id={filterId}
+              aria-label="Filter changed files"
+              ref={(element) => {
+                filterInput = element;
+              }}
+              class="file-browser__filter pr-browser__filter"
+              value={query()}
+              placeholder="Filter files..."
+              onInput={(event) => setQuery(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && !event.isComposing) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  hideFilter();
+                }
+              }}
+            />
+          </Show>
           <Show
             when={entries().length > 0}
             fallback={
@@ -1365,8 +1577,16 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
               </Show>
             }
           >
-            <ul class="file-browser__list pr-browser__list">
-              <Show when={parentDir(currentDir()) !== null}>
+            <ul
+              class="file-browser__list pr-browser__list"
+              role={browserView() === "tree" ? "tree" : "list"}
+              aria-label="Changed files"
+            >
+              <Show
+                when={
+                  browserView() === "list" && parentDir(currentDir()) !== null
+                }
+              >
                 <li>
                   <button
                     type="button"
@@ -1381,10 +1601,10 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
               </Show>
               <For each={entries()}>
                 {(entry) => (
-                  <li>
+                  <li role={browserView() === "tree" ? "none" : "listitem"}>
                     <button
                       type="button"
-                      class={`file-browser__button${
+                      class={`file-browser__button${browserView() === "tree" ? " file-browser__tree-row" : ""}${
                         entry.kind === "directory"
                           ? " file-browser__button--dir"
                           : " file-browser__button--file"
@@ -1394,8 +1614,50 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
                           : ""
                       }`}
                       data-path={entry.path}
+                      tabIndex={
+                        browserView() === "tree"
+                          ? cursorPath() === entry.path ||
+                            (!entries().some(
+                              (candidate) => candidate.path === cursorPath(),
+                            ) &&
+                              entries()[0]?.path === entry.path)
+                            ? 0
+                            : -1
+                          : 0
+                      }
+                      onFocus={(event) => {
+                        focusedBrowserRow = event.currentTarget;
+                        focusEntry(entry);
+                      }}
+                      role={browserView() === "tree" ? "treeitem" : undefined}
+                      aria-level={
+                        browserView() === "tree" ? entry.depth + 1 : undefined
+                      }
+                      aria-expanded={
+                        browserView() === "tree" && entry.kind === "directory"
+                          ? isExpanded(entry.path)
+                          : undefined
+                      }
+                      aria-selected={
+                        browserView() === "tree"
+                          ? cursorPath() === entry.path
+                          : undefined
+                      }
+                      style={{ "--tree-depth": entry.depth }}
                       onClick={() => selectEntry(entry)}
                     >
+                      <Show when={browserView() === "tree"}>
+                        <span
+                          class="file-browser__tree-chevron"
+                          aria-hidden="true"
+                        >
+                          {entry.kind === "directory"
+                            ? isExpanded(entry.path)
+                              ? "▾"
+                              : "▸"
+                            : ""}
+                        </span>
+                      </Show>
                       <Show when={entry.kind === "file"}>
                         <FileStatusBadge
                           file={(entry as { file: PrDiffFile }).file}

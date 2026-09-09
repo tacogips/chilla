@@ -92,75 +92,89 @@ describe("FileBrowserPane", () => {
     expect(shortPath?.querySelector(".file-browser__path-row")).toBeNull();
   });
 
-  it("renders symbolic links with a dedicated glyph and resolved target", () => {
-    const root = document.getElementById("root");
-    if (root === null) {
-      throw new Error("missing test root");
-    }
+  it.each([
+    ["/workspace/notes.md", "notes.md"],
+    ["/workspace/archive/notes.md", "archive/notes.md"],
+    ["/notes.md", "../notes.md"],
+    ["/workspace", "."],
+  ])(
+    "renders symbolic link %s with relative target %s",
+    (targetPath, label) => {
+      const root = document.getElementById("root");
+      if (root === null) {
+        throw new Error("missing test root");
+      }
 
-    const linkPath = "/workspace/notes-link";
-    const targetPath = "/workspace/archive/notes.md";
-    dispose = render(
-      () => (
-        <FileBrowserPane
-          active={true}
-          listingKind="directory"
-          directory={{
-            current_directory_path: "/workspace",
-            parent_directory_path: "/",
-            entries: [
-              {
-                path: linkPath,
-                canonical_path: targetPath,
-                name: "notes-link",
-                directory_hint: "",
-                is_directory: true,
-                is_symlink: true,
-                size_bytes: 42,
-                modified_at_unix_ms: 0,
-              },
-            ],
-            total_entry_count: 1,
-          }}
-          sort={{ field: "name", direction: "asc" }}
-          query=""
-          hideGitIgnored={false}
-          selectedPath={linkPath}
-          canLoadMore={false}
-          isLoadingMore={false}
-          onChangeQuery={() => {}}
-          onChangeSort={() => {}}
-          onLoadMore={() => {}}
-          onSelectEntry={() => {}}
-          onConfirmEntry={() => {}}
-          onNavigateToParent={() => {}}
-          onToggleGitIgnored={() => {}}
-        />
-      ),
-      root,
-    );
+      const linkPath = "/workspace/notes-link";
+      const onConfirmEntry = vi.fn();
+      dispose = render(
+        () => (
+          <FileBrowserPane
+            active={true}
+            listingKind="directory"
+            directory={{
+              current_directory_path: "/workspace",
+              parent_directory_path: "/",
+              entries: [
+                {
+                  path: linkPath,
+                  canonical_path: targetPath,
+                  name: "notes-link",
+                  directory_hint: "",
+                  is_directory: true,
+                  is_symlink: true,
+                  size_bytes: 42,
+                  modified_at_unix_ms: 0,
+                },
+              ],
+              total_entry_count: 1,
+            }}
+            sort={{ field: "name", direction: "asc" }}
+            query=""
+            hideGitIgnored={false}
+            selectedPath={linkPath}
+            canLoadMore={false}
+            isLoadingMore={false}
+            onChangeQuery={() => {}}
+            onChangeSort={() => {}}
+            onLoadMore={() => {}}
+            onSelectEntry={() => {}}
+            onConfirmEntry={onConfirmEntry}
+            onNavigateToParent={() => {}}
+            onToggleGitIgnored={() => {}}
+          />
+        ),
+        root,
+      );
 
-    const row = document.querySelector<HTMLButtonElement>(
-      ".file-browser__button",
-    );
-    const target = document.querySelector<HTMLElement>(
-      ".file-browser__symlink-target",
-    );
-    if (row === null || target === null) {
-      throw new Error("missing symbolic-link presentation");
-    }
+      const row = document.querySelector<HTMLButtonElement>(
+        ".file-browser__button",
+      );
+      const target = document.querySelector<HTMLElement>(
+        ".file-browser__symlink-target",
+      );
+      if (row === null || target === null) {
+        throw new Error("missing symbolic-link presentation");
+      }
 
-    expect(row.getAttribute("aria-label")).toBe(
-      `notes-link, symbolic link to ${targetPath}`,
-    );
-    expect(row.title).toBe(`notes-link, symbolic link to ${targetPath}`);
-    expect(target.textContent).toBe(`→ ${targetPath}`);
-    expect(target.title).toBe(targetPath);
-    expect(row.classList.contains("file-browser__button--dir")).toBe(true);
-    expect(row.classList.contains("file-browser__button--symlink")).toBe(true);
-    expect(row.querySelector(".file-browser__glyph--symlink")).not.toBeNull();
-    expect(row.querySelector(".file-browser__path-hint")).toBeNull();
-  });
+      expect(row.getAttribute("aria-label")).toBe(
+        `notes-link, symbolic link to ${targetPath}`,
+      );
+      expect(row.title).toBe(`notes-link, symbolic link to ${targetPath}`);
+      expect(target.textContent).toBe(`→ ${label}`);
+      expect(target.title).toBe(targetPath);
+      expect(row.classList.contains("file-browser__button--dir")).toBe(true);
+      expect(row.classList.contains("file-browser__button--symlink")).toBe(
+        true,
+      );
+      expect(row.querySelector(".file-browser__glyph--symlink")).not.toBeNull();
+      expect(row.querySelector(".file-browser__path-hint")).toBeNull();
+      row.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+      expect(onConfirmEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ path: linkPath, canonical_path: targetPath }),
+      );
+    },
+  );
 
   it("keeps regular file and directory rows on their existing presentation", () => {
     const root = document.getElementById("root");
@@ -264,6 +278,9 @@ describe("FileBrowserPane", () => {
     const toggle = document.querySelector<HTMLButtonElement>(
       ".file-browser__git-ignored-toggle",
     );
+    document
+      .querySelector<HTMLButtonElement>(".file-browser__filter-toggle")
+      ?.click();
     if (toggle === null) {
       throw new Error("missing Git-ignored toggle");
     }
@@ -315,6 +332,9 @@ describe("FileBrowserPane", () => {
     const toggle = document.querySelector<HTMLButtonElement>(
       ".file-browser__git-ignored-toggle",
     );
+    document
+      .querySelector<HTMLButtonElement>(".file-browser__filter-toggle")
+      ?.click();
     const filter = document.querySelector<HTMLInputElement>(
       ".file-browser__filter",
     );
@@ -434,6 +454,9 @@ describe("FileBrowserPane", () => {
     );
 
     const pathLine = document.querySelector<HTMLElement>(".file-browser__path");
+    document
+      .querySelector<HTMLButtonElement>(".file-browser__filter-toggle")
+      ?.click();
     const filterRow = document.querySelector<HTMLElement>(
       ".file-browser__filter-row",
     );
@@ -716,10 +739,7 @@ describe("FileBrowserPane", () => {
     const closeButton = document.querySelector<HTMLButtonElement>(
       ".directory-information__close",
     );
-    const filter = document.querySelector<HTMLInputElement>(
-      ".file-browser__filter",
-    );
-    if (dialog === null || closeButton === null || filter === null) {
+    if (dialog === null || closeButton === null) {
       throw new Error("missing directory information focus targets");
     }
 
@@ -738,7 +758,9 @@ describe("FileBrowserPane", () => {
     );
     expect(document.activeElement).toBe(closeButton);
 
-    filter.focus();
+    document
+      .querySelector<HTMLButtonElement>(".file-browser__filter-toggle")
+      ?.focus();
     expect(dialog.contains(document.activeElement)).toBe(true);
 
     dialog.dispatchEvent(
@@ -876,12 +898,13 @@ describe("FileBrowserPane", () => {
       root,
     );
 
+    document
+      .querySelector<HTMLButtonElement>(".file-browser__filter-toggle")
+      ?.click();
     const filter = document.querySelector<HTMLInputElement>(
       ".file-browser__filter",
     );
-    if (filter === null) {
-      throw new Error("missing filter");
-    }
+    if (filter === null) throw new Error("missing filter");
 
     const pathLine = document.querySelector<HTMLElement>(".file-browser__path");
     if (pathLine === null) {

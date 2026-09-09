@@ -168,7 +168,7 @@ Behavior rules:
 
 - Directory entries identify whether the logical row path is a symbolic link without changing the existing resolved `canonical_path` contract.
 - A symbolic-link row uses a dedicated symbolic-link glyph, regardless of whether its target is a file or directory.
-- A symbolic-link row renders `→ <resolved target path>` beneath its name so the destination is visible without opening the entry; the full destination remains available through the row text and tooltip when space is limited.
+- A symbolic-link row renders `→ <relative target path>` beneath its name, relative to the containing directory. Same-directory targets show just the target name; parent targets use `../` and the containing directory itself uses `.`. The resolved absolute destination remains available in the tooltip and accessible row name. Paths without a compatible root retain their absolute form.
 - Selecting or opening a symbolic link continues to use the logical link path, while preview identity and target matching may continue to use the canonical path.
 - Explicit file sets contain canonicalized files and therefore do not present their source arguments as symbolic links.
 - Existing dangling symbolic-link omission remains unchanged.
@@ -269,6 +269,105 @@ CSV-specific interaction rule:
 - `chilla file-a file-b` fails before window creation when any path is unreadable, missing, or a directory.
 - A multi-file startup containing both files and directories is rejected instead of silently converting to directory mode.
 - If all provided filepaths canonicalize to the same file, the app falls back to single-file behavior after deduplication.
+
+## Left Pane Tree View
+
+The view toolbar uses icon buttons: List/Tree on the left, filter and (for
+directory browsing) Git-ignore visibility on the right. Buttons have accessible
+names, tooltips and selected/expanded state; there is no visible Filter title.
+The filter textbox starts hidden. Clicking the filter icon or pressing `/`
+reveals and focuses it. Escape clears the query, hides the textbox and returns
+focus to the file rows (or filter icon when empty). Active queries remain visible
+so filtering is never hidden unexpectedly. The same toolbar and reveal behavior
+apply to changed-file browsing; explicit file sets retain their filter without
+directory-only controls.
+
+The directory browser offers List and Tree views. Plain `t` toggles between them
+in directory and diff browsing, except while typing or composing text. Modified
+keys are excluded so `Shift+T` continues to control the table of contents.
+List remains the default for
+ordinary browsing. Switching to Tree uses the current directory as a fixed root;
+expanding a folder reveals its children inline without navigating away from that
+root. Selecting a nested file uses the existing preview/open behavior. Explicit
+CLI file selections retain their constrained list presentation.
+
+Directory children load on demand through the existing paginated directory
+command, respecting sort and Git-ignore visibility. Expansion must handle loading,
+errors, paging, and changes of root without applying stale responses. Tree keyboard
+navigation follows visible rows, with Left/Right collapsing/expanding folders.
+Switching views reuses a compatible loaded root page instead of rereading it.
+Each folder expansion requests only that folder's immediate children, in bounded
+pages; it never prefetches unopened descendants. Branch caches survive view
+switches. Refresh and sort/ignore changes invalidate caches, but only visible
+expanded branches reload; hidden descendants remain lazy. Returning to List must
+not exhaust root pagination trying to locate a nested file. Directory filesystem
+I/O runs on Tauri's blocking worker pool so a slow read does not block the UI.
+Directory filtering retains the existing name-filter scope; ancestors must remain
+available to navigate to nested matches without scanning the whole filesystem.
+
+Git diff and PR diff browsers default to Tree, organizing changed files into
+expandable ancestor folders and retaining status and change counts. Their tree
+root is the current diff directory (the repository root initially), and folders
+come from diff paths so deleted or remote-only files remain visible. Filtering
+keeps matching files and ancestors visible. List remains selectable. File-to-file
+diff navigation must reveal the selected file without moving the tree root.
+
+## Recursive Directory Search
+
+The filesystem browser toolbar provides two additional icon actions: Search file
+contents and Find files. Both search recursively under the current browser root
+in List or Tree mode and respect Git-ignore visibility. Opening a search reveals
+a query field and results panel; submitting with Enter starts the search. Name
+search matches filename or relative-path substrings case-insensitively; content
+search matches literal, case-sensitive text in UTF-8 text files. Content results
+include one-based line numbers and a bounded excerpt containing the match.
+Activating a result opens its file through the existing preview flow. Closing
+search restores ordinary browsing without changing its root or cached tree.
+
+Search is separate from the existing shallow name filter. These filesystem
+actions are shown for directory browsing, not explicit file sets or remote diffs.
+No recursive search happens until a query is submitted. Work runs on a blocking
+worker; the UI ignores stale responses after query, root, mode, or ignore changes.
+Binary/non-UTF-8/oversized/unreadable entries are skipped and reported. Directory
+symlinks are not traversed; symlink entries are skipped to keep reads within the
+chosen root. Git metadata directories are excluded. Search results and work are
+bounded and incomplete results are identified explicitly.
+
+The `search_directory` command accepts an `input` object with `path`, `query`,
+`kind` (`name` or `content`) and `hideGitIgnored`. Its response includes
+`root_path`, `matches`, `truncated`, `skipped_count` and `scanned_files`.
+Each match includes an existing `DirectoryEntry` as `entry`, `relative_path`,
+nullable `line_number` and nullable `line_text`. Filesystem payload fields retain
+the existing snake_case response convention. Limits: 200 results, 50,000 visited
+entries, 8 MiB per content file, 64 MiB total content, and a 5-second scan budget.
+
+## Yazi-style Browser Shortcuts
+
+Existing browser sorting uses comma-prefixed sequences: comma followed by a/A
+for name, e/E for extension, m/M for modification time, or s/S for size;
+lowercase is ascending and uppercase descending. Comma then 0 resets sorting;
+plain 0 remains a compatibility alias. Bare a/A/e/E/m/M no longer sort.
+Plain s opens recursive filename search and Shift+S opens recursive literal
+content search for filesystem directories. The browser takes precedence over
+the workspace theme shortcut only in its own keyboard context; theme remains
+available outside that context. Ctrl/Cmd+S remains document save.
+
+The f key reveals the filter; / remains its existing alias. Existing h/j/k/l,
+arrow navigation, Enter, Tab information, dot ignore visibility and t Tree
+toggle remain unchanged. This adapts existing browser features, not Yazi's
+destructive file-management commands or new sorting algorithms. Diff filter
+also accepts f, while recursive search remains filesystem-only.
+
+Comma displays a nonmodal popup fixed to the app window's bottom-right corner,
+independent of the left pane, listing all valid next keys and their
+actions, including ascending/descending direction and reset. It preserves
+keyboard focus and remains visible while the user reads; there is no timeout.
+Escape, invalid continuation, focus leaving the browser, and root/view/context
+changes cancel pending state. Shift alone must not cancel uppercase continuations.
+Editable controls, IME composition, repeats and Ctrl/Alt/Meta combinations
+must not initiate or accidentally complete sequences. Invalid continuations
+are consumed rather than executing another action unexpectedly.
+See the Yazi quick-start entry in the design references index.
 
 ## References
 

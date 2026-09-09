@@ -46,6 +46,14 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `prefix-popup-window-position.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#yazi-style-browser-shortcuts` |
+| `yazi-browser-shortcuts.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#yazi-style-browser-shortcuts` |
+| `recursive-directory-search.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#recursive-directory-search` |
+| `left-pane-tree-view.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#left-pane-tree-view` |
+| `tree-view-shortcut.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#left-pane-tree-view` |
+| `tree-lazy-loading-performance.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#left-pane-tree-view` |
+| `compact-browser-toolbar.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#left-pane-tree-view` |
+| `relative-symlink-targets.md` | 2026-09-08 | `design-docs/specs/design-file-viewer-mode.md#symbolic-link-presentation` |
 | `git-ignored-file-visibility.md` | 2026-09-03 | `design-docs/specs/design-file-viewer-mode.md#git-ignored-entry-visibility` |
 | `symlink-file-list-presentation.md` | 2026-09-03 | `design-docs/specs/design-file-viewer-mode.md#symbolic-link-presentation` |
 | `git-diff-loading-performance.md` | 2026-09-03 | Performance fix for the git diff viewer (lazy full-text loading, untracked-file diff synthesis) |

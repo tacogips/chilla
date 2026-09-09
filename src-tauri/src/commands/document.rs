@@ -198,21 +198,25 @@ pub async fn load_pr_diff_file_text(raw_url: String) -> Result<PrDiffFileText, S
 }
 
 #[tauri::command]
-pub fn list_directory(
+pub async fn list_directory(
     input: ListDirectoryInput,
     state: State<'_, AppState>,
 ) -> Result<DirectoryPage, String> {
-    state
-        .viewer_service()
-        .list_directory(
-            Path::new(&input.path),
-            input.sort.unwrap_or_default(),
-            input.query.as_deref(),
-            input.hide_git_ignored,
-            input.offset.unwrap_or(0),
-            input.limit.unwrap_or(0),
-        )
-        .map_err(format_command_error)
+    let viewer_service = state.viewer_service();
+    tauri::async_runtime::spawn_blocking(move || {
+        viewer_service
+            .list_directory(
+                Path::new(&input.path),
+                input.sort.unwrap_or_default(),
+                input.query.as_deref(),
+                input.hide_git_ignored,
+                input.offset.unwrap_or(0),
+                input.limit.unwrap_or(0),
+            )
+            .map_err(format_command_error)
+    })
+    .await
+    .map_err(format_command_error)?
 }
 
 #[tauri::command]

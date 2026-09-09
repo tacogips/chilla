@@ -106,6 +106,9 @@ export function WorkspaceShell() {
     DEFAULT_FILE_TREE_SORT,
   );
   const [directoryQuery, setDirectoryQuery] = createSignal("");
+  const [directoryViewMode, setDirectoryViewMode] = createSignal<
+    "list" | "tree"
+  >("list");
   const [hideGitIgnored, setHideGitIgnored] = createSignal(false);
   const [selectedBrowserPath, setSelectedBrowserPath] = createSignal<
     string | null
@@ -150,12 +153,18 @@ export function WorkspaceShell() {
     startTransition(() => {
       setDirectoryState(nextState);
       setSelectedBrowserPath(
-        resolveSelectedPath(
-          nextState.listingKind,
-          nextState.current_directory_path,
-          nextState.entries,
-          requestedSelectedPath,
-        ),
+        directoryViewMode() === "tree" &&
+          nextState.listingKind === "directory" &&
+          requestedSelectedPath?.startsWith(
+            `${nextState.current_directory_path.replace(/\/$/, "")}/`,
+          )
+          ? requestedSelectedPath
+          : resolveSelectedPath(
+              nextState.listingKind,
+              nextState.current_directory_path,
+              nextState.entries,
+              requestedSelectedPath,
+            ),
       );
       setErrorMessage(null);
     });
@@ -220,11 +229,24 @@ export function WorkspaceShell() {
       next_offset: nextPage.offset + nextPage.entries.length,
       sort,
       query,
+      hideGitIgnored: hideIgnored,
+      refreshToken: requestId,
     };
 
     while (
+      directoryViewMode() !== "tree" &&
       selectedPath !== null &&
       selectedPath !== nextState.current_directory_path &&
+      !(
+        selectedPath.startsWith(
+          `${nextState.current_directory_path.replace(/\/$/, "")}/`,
+        ) &&
+        selectedPath
+          .slice(
+            `${nextState.current_directory_path.replace(/\/$/, "")}/`.length,
+          )
+          .includes("/")
+      ) &&
       !nextState.entries.some(
         (entry) =>
           entry.path === selectedPath || entry.canonical_path === selectedPath,
@@ -254,6 +276,8 @@ export function WorkspaceShell() {
         next_offset: nextPage.offset + nextPage.entries.length,
         sort,
         query,
+        hideGitIgnored: hideIgnored,
+        refreshToken: requestId,
       };
     }
 
@@ -404,6 +428,8 @@ export function WorkspaceShell() {
             next_offset: nextPage.offset + nextPage.entries.length,
             sort: previous.sort,
             query: previous.query,
+            hideGitIgnored: hideIgnored,
+            refreshToken: requestId,
           };
         });
       });
@@ -708,8 +734,8 @@ export function WorkspaceShell() {
           await loadDirectoryState(
             currentDirectory.current_directory_path,
             requestedSelectedPath,
-            currentDirectory.sort,
-            currentDirectory.query,
+            directorySort(),
+            directoryQuery(),
           );
         }
       } catch (error: unknown) {
@@ -870,13 +896,18 @@ export function WorkspaceShell() {
 
     if (
       currentDirectory === null ||
-      (currentDirectory.sort.field === nextSort.field &&
-        currentDirectory.sort.direction === nextSort.direction)
+      (directorySort().field === nextSort.field &&
+        directorySort().direction === nextSort.direction)
     ) {
       return;
     }
 
     setDirectorySort(nextSort);
+    if (
+      directoryViewMode() === "tree" &&
+      directoryState()?.listingKind === "directory"
+    )
+      return;
 
     try {
       if (currentDirectory.listingKind === "explicit_file_set") {
@@ -1100,6 +1131,11 @@ export function WorkspaceShell() {
   const handleChangeDirectoryQuery = async (nextQuery: string) => {
     const currentDirectory = directoryState();
     setDirectoryQuery(nextQuery);
+    if (
+      directoryViewMode() === "tree" &&
+      currentDirectory?.listingKind === "directory"
+    )
+      return;
 
     if (currentDirectory === null) {
       return;
@@ -1147,6 +1183,7 @@ export function WorkspaceShell() {
 
     const nextHideGitIgnored = !hideGitIgnored();
     setHideGitIgnored(nextHideGitIgnored);
+    if (directoryViewMode() === "tree") return;
 
     try {
       await loadDirectoryState(
@@ -1471,6 +1508,13 @@ export function WorkspaceShell() {
       }
 
       if (matchesShortcut(event, "s", { shift: true })) {
+        if (
+          event.isComposing ||
+          event.repeat ||
+          (event.target instanceof HTMLElement &&
+            event.target.closest(".file-browser") !== null)
+        )
+          return;
         event.preventDefault();
         void cycleColorScheme();
         return;
@@ -1543,8 +1587,57 @@ export function WorkspaceShell() {
               <Show when={isFileTreeOpen()}>
                 <FileBrowserPane
                   active={true}
+                  viewMode={directoryViewMode()}
+                  onChangeViewMode={(mode) => {
+                    setDirectoryViewMode(mode);
+                    const state = directoryState();
+                    if (mode === "list" && state?.listingKind === "directory") {
+                      if (
+                        state.sort.field === directorySort().field &&
+                        state.sort.direction === directorySort().direction &&
+                        state.query === directoryQuery() &&
+                        state.hideGitIgnored === hideGitIgnored()
+                      ) {
+                        setSelectedBrowserPath(
+                          resolveSelectedPath(
+                            state.listingKind,
+                            state.current_directory_path,
+                            state.entries,
+                            selectedBrowserPath(),
+                          ),
+                        );
+                        return;
+                      }
+                      void loadDirectoryState(
+                        state.current_directory_path,
+                        selectedBrowserPath(),
+                      ).catch((error: unknown) =>
+                        setErrorMessage(
+                          error instanceof Error
+                            ? error.message
+                            : "Failed to load directory",
+                        ),
+                      );
+                    }
+                  }}
                   listingKind={directoryState()?.listingKind ?? "directory"}
                   directory={directoryState()}
+                  treeRefreshToken={directoryState()?.refreshToken ?? 0}
+                  treeRootSeed={(() => {
+                    const state = directoryState();
+                    return state?.listingKind === "directory" &&
+                      state.hideGitIgnored !== undefined
+                      ? {
+                          root: state.current_directory_path,
+                          entries: state.entries,
+                          nextOffset: state.next_offset,
+                          hasMore: state.next_offset < state.total_entry_count,
+                          sort: state.sort,
+                          query: state.query,
+                          hideGitIgnored: state.hideGitIgnored,
+                        }
+                      : null;
+                  })()}
                   sort={directorySort()}
                   query={directoryQuery()}
                   hideGitIgnored={hideGitIgnored()}

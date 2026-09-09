@@ -163,7 +163,8 @@ Markdown source can be edited in the raw pane and saved back to disk. If the fil
 
 ## Features
 
-- Flat file browser with keyboard navigation inspired by terminal file managers, including a filter-row toggle for Git-ignored entries, compact absolute-path display with full-path hover text, a `Tab` directory-information tree, dedicated symbolic-link icons, and visible resolved link destinations
+- File browser with List and Tree views and keyboard navigation inspired by terminal file managers, including toolbar icons for filtering and Git-ignored visibility, compact absolute-path display with full-path hover text, a `Tab` directory-information tree, dedicated symbolic-link icons, and link destinations relative to the current directory with full-path hover text
+- Tree view roots the left pane at the current directory and expands folders inline. Ordinary browsing starts in List; Git and GitHub diffs start in Tree, with changed files grouped into folders. Use the List/Tree controls to switch views.
 - Markdown heading extraction and table of contents
 - Direct Markdown view selection with `1` for raw source and `2` for rendered preview
 - Backend-owned Markdown parsing in Rust
@@ -179,6 +180,28 @@ Markdown source can be edited in the raw pane and saved back to disk. If the fil
 - Direct CSV view selection with `1` for raw source and `2` for formatted table when available
 - Theme toggle with frontend CSS variables and backend syntax-theme synchronization
 - Custom undecorated desktop window chrome
+
+In directory Tree view, folders load as you expand them. The name filter applies
+to loaded files and keeps folders available for further browsing; use Load more
+for large folders. Diff filtering searches all changed paths and reveals matching
+files with their parent folders.
+
+List and Tree use icon buttons on the toolbar's left side; filter and Git-ignore
+visibility controls sit on the right. Click the filter icon or press `f` or `/` to show
+and focus the search field. Press `Esc` in that field to clear and close it.
+
+The directory toolbar also has **Search file contents** (`Shift+S`) and **Find files** (`s`) icons.
+Enter a query and press Enter to search recursively below the current directory.
+Content search finds literal, case-sensitive text and shows matching lines with
+their paths and line numbers. Find files matches part of a filename or relative
+path, ignoring case. Click a result or press Enter on it to open the file; Escape
+closes search and returns to browsing. Both searches follow Git-ignore visibility.
+Search skips symlinks and Git metadata; content search also skips binary,
+non-UTF-8 and oversized files. Skipped entries and incomplete results are reported.
+
+Each directory expansion reads only its immediate children, in pages of up to
+200 entries. Switching views reuses a compatible loaded root, and reopening a
+cached folder does not fetch another page. Unopened descendants remain unloaded.
 
 ## Keyboard Shortcuts
 
@@ -201,28 +224,34 @@ Global shortcuts:
 - `2`: select Markdown preview or formatted CSV view when available
 - `+` / `-`: zoom rendered Markdown and other rendered content from 50%-300%, or direct SVG and raster image previews from 50%-800%, in 10% steps
 - `Ctrl+mouse wheel`: zoom the rendered preview under the pointer
-- `Shift+S`: toggle light/dark theme
+- `Shift+S`: toggle light/dark theme outside the directory browser keyboard context
 
 File tree shortcuts:
 
-- `/`: focus filter
+- `t`: toggle List/Tree view in directory browsing and Git/PR diffs
+- `f` or `/`: show and focus filter
+- `s`: find files recursively by filename or relative path
+- `Shift+S`: search file contents recursively (literal, case-sensitive)
 - `.`: toggle Git-ignored entries in directory browsing
 - `Tab`: show the current directory's absolute path and metadata as a root-to-leaf tree
-- `Esc`: close directory information, or clear the filter and return to the list when the filter is focused
+- `Esc`: close directory information, or clear and close the filter and return to the list when the filter is focused
 - `J` or `ArrowDown`: move selection down
 - `K` or `ArrowUp`: move selection up
-- `0`: reset sort to default (`name` ascending)
-- `a`: sort by name ascending
-- `A`: sort by name descending
-- `e`: sort by extension ascending
-- `E`: sort by extension descending
-- `m`: sort by modified time ascending
-- `M`: sort by modified time descending
-- `s`: sort by size ascending
-- `S`: sort by size descending
-- `H` or `ArrowLeft`: go to parent directory
-- `L`, `ArrowRight`, `Enter`: open or confirm selection
+- `,` then `a` / `A`: sort by name ascending / descending
+- `,` then `e` / `E`: sort by extension ascending / descending
+- `,` then `m` / `M`: sort by modified time ascending / descending
+- `,` then `s` / `S`: sort by size ascending / descending
+- `,` then `0`, or plain `0`: reset sort to default (`name` ascending)
+- `H` or `ArrowLeft`: go to the parent directory in List view; in Tree view, collapse the current folder or select its parent
+- `L` or `ArrowRight`: open the selection in List view; in Tree view, expand a folder or move to its first child
+- `Enter`: open a file or toggle a folder in Tree view
 - `Ctrl+M`: same as `Enter` in the filter field
+
+Press the comma prefix first, then release it and press the second key.
+A popup at the app window's bottom-right lists all available next keys and their actions, remaining open while
+you read it. Choose a key or press `Esc` to close it; moving focus away or
+changing browser context also cancels the sequence. Uppercase second keys use
+Shift. Recursive search shortcuts apply only to filesystem directory browsing.
 
 Video preview:
 

@@ -14,6 +14,7 @@ const documentMocks = vi.hoisted(() => ({
   openDocument: vi.fn(),
   openFilePreview: vi.fn(),
   reloadDocument: vi.fn(),
+  saveDocument: vi.fn(),
   listenDocumentRefreshed: vi.fn(),
   stopDocumentWatch: vi.fn(),
 }));
@@ -80,6 +81,7 @@ vi.mock("../../lib/tauri/document", async (importOriginal) => {
     openDocument: documentMocks.openDocument,
     openFilePreview: documentMocks.openFilePreview,
     reloadDocument: documentMocks.reloadDocument,
+    saveDocument: documentMocks.saveDocument,
     listenDocumentRefreshed: documentMocks.listenDocumentRefreshed,
     stopDocumentWatch: documentMocks.stopDocumentWatch,
   };
@@ -295,6 +297,235 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     document.body.innerHTML = "";
   });
 
+  it("restores the default Tree sort after another sort without stale listing state", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/note.md"),
+    );
+    dispose = renderWorkspace();
+    const treeToggle = await waitForElement<HTMLButtonElement>(
+      ".file-browser__view-option:nth-child(2)",
+    );
+    treeToggle.click();
+    await waitFor(() =>
+      expect(document.querySelector('[role="treeitem"]')).not.toBeNull(),
+    );
+    for (const key of ["m", "0", "m", "a"]) {
+      const row =
+        document.querySelector<HTMLButtonElement>('[role="treeitem"]');
+      if (row === null) throw new Error("missing Tree row");
+      if (key !== "0")
+        row.dispatchEvent(
+          new KeyboardEvent("keydown", { key: ",", bubbles: true }),
+        );
+      row.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      await waitFor(() => {
+        if (key === "m")
+          expect(documentMocks.listDirectory).toHaveBeenLastCalledWith(
+            "/workspace",
+            { field: "mtime", direction: "asc" },
+            "",
+            false,
+            0,
+            200,
+          );
+        expect(document.querySelector(".pane__header")?.textContent).toContain(
+          key === "m" ? "mtime" : "name",
+        );
+        expect(document.querySelector('[role="treeitem"]')).not.toBeNull();
+      });
+    }
+  });
+
+  it("owns browser S and comma continuations without changing theme or preview, while preserving save", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/note.md"),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/note.md"),
+    );
+    documentMocks.openDocument.mockResolvedValue(markdownSnapshot());
+    documentMocks.saveDocument.mockResolvedValue(markdownSnapshot());
+    dispose = renderWorkspace();
+    await waitFor(() => expectActiveMode("Markdown preview"));
+    if (document.querySelector(".file-browser__button") === null)
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "L", shiftKey: true }),
+      );
+    const row = await waitForElement<HTMLButtonElement>(
+      ".file-browser__button",
+    );
+    row.focus();
+    const theme = document
+      .querySelector(".workspace__theme-toggle")
+      ?.getAttribute("aria-label");
+    const press = (key: string, init: KeyboardEventInit = {}) =>
+      row.dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, ...init }),
+      );
+    press(",");
+    press("S", { shiftKey: true });
+    await waitFor(() =>
+      expect(document.querySelector(".pane__header")?.textContent).toContain(
+        "size",
+      ),
+    );
+    expect(
+      document
+        .querySelector(".workspace__theme-toggle")
+        ?.getAttribute("aria-label"),
+    ).toBe(theme);
+    expect(document.querySelector(".directory-search")).toBeNull();
+    const currentRow = await waitForElement<HTMLButtonElement>(
+      ".file-browser__button",
+    );
+    for (const key of ["1", "2", "?"]) {
+      currentRow.dispatchEvent(
+        new KeyboardEvent("keydown", { key: ",", bubbles: true }),
+      );
+      currentRow.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key,
+          shiftKey: key === "?",
+          bubbles: true,
+        }),
+      );
+      expectActiveMode("Markdown preview");
+      expect(document.querySelector(".shortcuts-help")).toBeNull();
+    }
+    currentRow.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "S", shiftKey: true, bubbles: true }),
+    );
+    expect(
+      document.querySelector('[aria-label="Search file contents query"]'),
+    ).not.toBeNull();
+    expect(
+      document
+        .querySelector(".workspace__theme-toggle")
+        ?.getAttribute("aria-label"),
+    ).toBe(theme);
+    document
+      .querySelector<HTMLButtonElement>('[aria-label="Close directory search"]')
+      ?.click();
+    for (const modifier of [{ ctrlKey: true }, { metaKey: true }]) {
+      currentRow.dispatchEvent(
+        new KeyboardEvent("keydown", { key: ",", bubbles: true }),
+      );
+      currentRow.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "s", bubbles: true, ...modifier }),
+      );
+    }
+    await waitFor(() =>
+      expect(documentMocks.saveDocument).toHaveBeenCalledTimes(2),
+    );
+    expect(document.querySelector(".file-browser__sequence-popup")).toBeNull();
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "S", shiftKey: true }),
+    );
+    await waitFor(() =>
+      expect(
+        document
+          .querySelector(".workspace__theme-toggle")
+          ?.getAttribute("aria-label"),
+      ).not.toBe(theme),
+    );
+  });
+
+  it("reuses the loaded directory across repeated List/Tree switches", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/note.md"),
+    );
+    dispose = renderWorkspace();
+    await waitForElement<HTMLButtonElement>(".file-browser__button");
+    for (const mode of ["tree", "list", "tree", "list"]) {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "t" }));
+      await waitFor(() =>
+        expect(document.querySelector('[role="tree"]') !== null).toBe(
+          mode === "tree",
+        ),
+      );
+    }
+    expect(documentMocks.listDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not page through the root searching for a nested Tree selection on List return", async () => {
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, "scrollHeight", "get")
+      .mockReturnValue(1000);
+    try {
+      const rootPage = {
+        ...directoryPage("/workspace/src"),
+        entries: directoryPage("/workspace/src").entries.map((entry) => ({
+          ...entry,
+          is_directory: true,
+        })),
+      };
+      documentMocks.getStartupContext.mockResolvedValue(
+        directoryStartupContext(null),
+      );
+      documentMocks.openFilePreview.mockResolvedValue(
+        csvPreview({ path: "/workspace/src/data.csv" }),
+      );
+      documentMocks.listDirectory.mockImplementation(
+        async (path: string, sort: { field: string }) =>
+          path === "/workspace/src"
+            ? {
+                ...directoryPage("/workspace/src/data.csv"),
+                current_directory_path: path,
+              }
+            : sort.field === "mtime"
+              ? { ...rootPage, total_entry_count: 201, has_more: true }
+              : rootPage,
+      );
+      dispose = renderWorkspace();
+      await waitForElement<HTMLButtonElement>(".file-browser__button");
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "t" }));
+      (
+        await waitForElement<HTMLButtonElement>('[data-path="/workspace/src"]')
+      ).click();
+      (
+        await waitForElement<HTMLButtonElement>(
+          '[data-path="/workspace/src/data.csv"]',
+        )
+      ).click();
+      const nested = await waitForElement<HTMLButtonElement>(
+        '[data-path="/workspace/src/data.csv"]',
+      );
+      nested.dispatchEvent(
+        new KeyboardEvent("keydown", { key: ",", bubbles: true }),
+      );
+      nested.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "m", bubbles: true }),
+      );
+      await waitFor(() =>
+        expect(
+          document.querySelector('[data-path="/workspace/src/data.csv"]'),
+        ).not.toBeNull(),
+      );
+      documentMocks.listDirectory.mockClear();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "t" }));
+      await waitFor(() => {
+        expect(document.querySelector('[role="tree"]')).toBeNull();
+        expect(documentMocks.listDirectory).toHaveBeenCalledWith(
+          "/workspace",
+          { field: "mtime", direction: "asc" },
+          "",
+          false,
+          0,
+          200,
+        );
+      });
+      expect(documentMocks.listDirectory).toHaveBeenCalledTimes(1);
+    } finally {
+      scrollHeight.mockRestore();
+    }
+  });
+
   it("switches Markdown raw and preview modes with 1 and 2", async () => {
     documentMocks.getStartupContext.mockResolvedValue(
       directoryStartupContext("/workspace/note.md"),
@@ -459,6 +690,10 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       );
       expect(document.body.textContent).toContain(
         "Select Preview view (Markdown) or Formatted view (CSV)",
+      );
+      expect(document.body.textContent).toContain(", then s/S");
+      expect(document.body.textContent).toContain(
+        "Search file contents recursively",
       );
 
       const dialog = document.querySelector<HTMLElement>(

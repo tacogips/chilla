@@ -121,6 +121,7 @@ pub fn run(startup_target: StartupTarget) -> Result<(), String> {
             commands::document::load_pr_diff,
             commands::document::load_pr_diff_file_text,
             commands::document::list_directory,
+            commands::search::search_directory,
             commands::document::list_explicit_file_set,
             commands::document::open_file_preview,
             commands::document::open_document,

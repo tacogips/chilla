@@ -6,6 +6,7 @@ This directory contains reference materials for system design and implementation
 
 | Name | URL | Description |
 |------|-----|-------------|
+| Yazi Quick Start | https://yazi-rs.github.io/docs/quick-start/ | Browser navigation, comma-prefixed sorting, filter and recursive search key bindings |
 | The Rust Book | https://doc.rust-lang.org/book/ | Official Rust programming language book |
 | Rust API Guidelines | https://rust-lang.github.io/api-guidelines/ | Rust API design best practices |
 | Rust Design Patterns | https://rust-unofficial.github.io/patterns/ | Common Rust design patterns |

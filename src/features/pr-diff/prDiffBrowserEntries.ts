@@ -15,6 +15,43 @@ export type BrowserEntry =
       readonly path: string;
       readonly file: PrDiffFile;
     };
+
+export type TreeEntry = BrowserEntry & { readonly depth: number };
+
+/** Projects changed paths into visible rows without consulting the filesystem. */
+export function buildTreeEntries(
+  files: readonly PrDiffFile[],
+  root: string,
+  query: string,
+  expanded: ReadonlySet<string>,
+): readonly TreeEntry[] {
+  const rows: TreeEntry[] = [];
+  const filtering = query.trim().length > 0;
+  const visit = (directory: string, depth: number): void => {
+    for (const entry of buildDirectoryEntries(files, directory, query)) {
+      rows.push({ ...entry, depth });
+      if (
+        entry.kind === "directory" &&
+        (filtering || expanded.has(entry.path))
+      ) {
+        visit(entry.path, depth + 1);
+      }
+    }
+  };
+  visit(root, 0);
+  return rows;
+}
+
+/** Lists ancestors within a fixed root, for revealing a selected diff file. */
+export function treeAncestors(path: string, root: string): readonly string[] {
+  const ancestors: string[] = [];
+  let directory = parentDir(path);
+  while (directory !== null && directory !== root && directory.length > 0) {
+    ancestors.push(directory);
+    directory = parentDir(directory);
+  }
+  return ancestors;
+}
 function dirname(path: string): string {
   const index = path.lastIndexOf("/");
   return index === -1 ? "" : path.slice(0, index);

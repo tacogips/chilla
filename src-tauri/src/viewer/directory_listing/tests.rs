@@ -63,6 +63,55 @@ fn initialize_git_repository(path: &Path) {
 }
 
 #[test]
+fn lists_only_immediate_children_at_each_requested_directory_level() {
+    let test_dir = TestDir::new();
+    let child = test_dir.path().join("child");
+    let grandchild = child.join("grandchild");
+    fs::create_dir_all(&grandchild).expect("create nested directories");
+    fs::write(test_dir.path().join("root.txt"), "root").expect("write root file");
+    fs::write(child.join("child.txt"), "child").expect("write child file");
+    fs::write(grandchild.join("leaf.txt"), "leaf").expect("write grandchild file");
+
+    let service = ViewerService::new();
+    for field in [
+        DirectorySortField::Name,
+        DirectorySortField::Extension,
+        DirectorySortField::Mtime,
+        DirectorySortField::Size,
+    ] {
+        let sort = DirectoryListSort {
+            field,
+            direction: DirectorySortDirection::Asc,
+        };
+        for (path, expected_names) in [
+            (test_dir.path(), vec!["child", "root.txt"]),
+            (child.as_path(), vec!["child.txt", "grandchild"]),
+            (grandchild.as_path(), vec!["leaf.txt"]),
+        ] {
+            let page = service
+                .list_directory(path, sort, None, false, 0, 200)
+                .expect("list a single directory level");
+            let mut names: Vec<_> = page
+                .entries
+                .iter()
+                .map(|entry| entry.name.as_str())
+                .collect();
+            names.sort_unstable();
+            assert_eq!(names, expected_names);
+            assert_eq!(page.total_entry_count, expected_names.len());
+            assert!(!page.has_more);
+            for entry in &page.entries {
+                assert_eq!(
+                    Path::new(&entry.path).parent(),
+                    Some(Path::new(&page.current_directory_path)),
+                    "each returned entry must be an immediate child"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn hides_direct_git_ignored_files_and_directories_when_enabled() {
     let test_dir = TestDir::new();
     initialize_git_repository(test_dir.path());
