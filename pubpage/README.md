@@ -52,7 +52,7 @@ No application source was changed or rebuilt for this website task.
 | `public/og.png` | Exact `src-tauri/icons/icon.png`, square social card | 512×512 | `35f682ce10b3e596e1bebae43e904878281c8e2c783ee04040fb6e090d8d22d8` |
 
 Fresh screenshot WebP derivatives use `cwebp -q 86` and are about 54 and 90 KiB.
-The JPEG originals are linked for full-size inspection. Captures are unretouched;
+Screenshots are non-interactive and do not open when clicked. Captures are unretouched;
 they show actual local app behavior and public repository documentation.
 Observed keyboard behavior: `Shift+L` revealed the file browser and `g` opened
 local Git diff. Selecting README displayed the actual split comparison.
@@ -83,7 +83,7 @@ icon; the page uses a square summary social-card format.
 - Mobile menu opens and its Keyboard link reaches `#keyboard`.
 - The Japanese production page loads in Chrome over HTTPS.
 - Live HTML and fresh screenshot assets return 200; `www` redirects with 301.
-- Production Worker version: `0927037d-24b6-4603-ac4f-6939037f22f7`.
+- Production Worker version: `40088fba-b9b8-402b-ae32-bfebb495659b`.
 - Browser inspection found an automatically injected Cloudflare analytics
   script blocked by CSP. `Cache-Control: no-transform` now prevents that injection;
   live HTML contains only the local application script. See

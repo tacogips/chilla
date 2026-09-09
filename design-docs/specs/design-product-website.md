@@ -54,6 +54,9 @@ The product page includes:
 
 ## Visual Direction
 
+Product screenshots are non-interactive images. Clicking them must not navigate
+to image files or open a lightbox; preserve their descriptive alternative text.
+
 Place the full DMG/Homebrew installation guide immediately after the hero and
 feature strip, before app screenshots and detailed features. Installation must
 not require scrolling through the product tour; retain the `#install` anchor.

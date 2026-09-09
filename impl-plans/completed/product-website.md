@@ -7,6 +7,25 @@
 
 ## Scope
 
+### Installation heading clarification — completed 2026-09-09
+
+- [x] Replace the promotional installation eyebrow with "INSTALLATION" /
+  "インストール方法", retaining the direct "Install chilla" heading.
+- [x] Add a regression check against "MAKE YOURSELF AT HOME", build, and deploy.
+
+Deployment: `40088fba-b9b8-402b-ae32-bfebb495659b`.
+
+### Non-interactive screenshots follow-up
+
+- [x] Remove browsing/diff screenshot links in both locales, preserving images
+  and alternative text (`pubpage/index.html`, `pubpage/ja/index.html`).
+- [x] Run regression checks, deploy, and verify no screenshot links remain in
+  production (`pubpage/scripts/validate-build.mjs`).
+
+**Completion log (2026-09-09)**: Build and validator passed. Both production
+locales serve the browsing and diff pictures without anchor wrappers.
+Deployment: `1c675089-7ca0-4470-bb7f-ec63968f0e56`.
+
 ### Installation placement follow-up
 
 - [x] Move installation immediately below the introduction in both locales,

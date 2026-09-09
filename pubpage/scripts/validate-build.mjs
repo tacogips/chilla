@@ -100,6 +100,12 @@ for (const [source, label, required] of productRequirements) {
 }
 
 for (const [source, label] of [[english, "English"], [japanese, "Japanese"]]) {
+  if (source.includes("MAKE YOURSELF AT HOME")) {
+    failures.push(`${label} installation heading must use clear instructional wording`);
+  }
+  if (/<a\b[^>]*href=["']\/screenshots\//i.test(source)) {
+    failures.push(`${label} screenshots must not navigate to image files`);
+  }
   const installIndex = source.indexOf('id="install"');
   if (installIndex < 0 || installIndex > source.indexOf('id="proof"') ||
       installIndex > source.indexOf('id="features"')) {
