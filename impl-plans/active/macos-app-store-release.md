@@ -94,7 +94,7 @@ record, listing metadata, privacy answers, screenshots, review information
 | Feature | Depends On | Status |
 | --- | --- | --- |
 | Signed app | Mac App Store profile and Apple Distribution identity | Profile missing |
-| Signed package | Mac Installer Distribution identity | Missing |
+| Signed package | Mac Installer Distribution identity | Available |
 | App record | registered bundle identifier and owner metadata | Missing |
 | Final submission | processed build and owner decisions | Blocked |
 
@@ -119,10 +119,25 @@ automation, and release documentation. Full repository verification passes.
 
 **Tasks In Progress**: TASK-001.
 
-**Blockers**: No chilla Mac App Store provisioning profile, no Mac Installer
-Distribution identity, no App Store Connect app record, and owner decisions for
-price/availability/release timing/review contact are not yet recorded.
+**Blockers**: No chilla Mac App Store provisioning profile, no App Store Connect
+app record, and owner decisions for price/availability/release timing/review
+contact are not yet recorded.
 
 **Notes**: The App Store Connect individual key can read application records but
 cannot authenticate the Certificates, Identifiers & Profiles API. Xcode can issue
 the missing installer certificate after action-time confirmation.
+
+### Session: 2026-09-09 (Registration Execution)
+
+**Tasks Completed**: Created and installed the Mac Installer Distribution
+certificate through the signed-in Xcode Admin account, then verified its local
+keychain identity by status only. Corrected the release script to query installer
+identities with the keychain `basic` policy.
+
+**Tasks In Progress**: TASK-003 bundle-identifier/profile registration.
+
+**Blockers**: Apple Developer portal authentication is waiting for local passkey
+biometric approval. Price, availability, release timing, and review contact
+remain required before submission.
+
+**Notes**: No certificate, account, team, or private-key values are recorded.

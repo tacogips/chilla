@@ -40,11 +40,7 @@ single_identity() {
   local identities
   local count
 
-  if [ "$policy" = all ]; then
-    identities="$(security find-identity -v | awk -F '"' -v pattern="$pattern" '$2 ~ pattern { print $2 }')"
-  else
-    identities="$(security find-identity -v -p "$policy" | awk -F '"' -v pattern="$pattern" '$2 ~ pattern { print $2 }')"
-  fi
+  identities="$(security find-identity -v -p "$policy" | awk -F '"' -v pattern="$pattern" '$2 ~ pattern { print $2 }')"
   count="$(printf '%s\n' "$identities" | awk 'NF { count += 1 } END { print count + 0 }')"
   [ "$count" -eq 1 ] || fail "expected exactly one valid $pattern identity; found $count"
   printf '%s' "$identities"
@@ -100,7 +96,7 @@ cargo_version="$(awk -F ' *= *' '/^version *=/ { gsub(/"/, "", $2); print $2; ex
 [ "$product_version" = "$cargo_version" ] || fail "Tauri and Cargo versions differ"
 
 app_identity="$(single_identity '^Apple Distribution:')"
-installer_identity="$(single_identity '^(Mac Installer Distribution|3rd Party Mac Developer Installer):' all)"
+installer_identity="$(single_identity '^(Mac Installer Distribution|3rd Party Mac Developer Installer):' basic)"
 
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/chilla-app-store.XXXXXX")"
 cleanup() {
