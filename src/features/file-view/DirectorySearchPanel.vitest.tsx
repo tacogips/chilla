@@ -47,6 +47,8 @@ function setup() {
   const [hide, setHide] = createSignal(false);
   const onClose = vi.fn();
   const onOpen = vi.fn();
+  const onReveal = vi.fn();
+  const onPreview = vi.fn();
   dispose = render(
     () => (
       <DirectorySearchPanel
@@ -55,6 +57,8 @@ function setup() {
         hideGitIgnored={hide()}
         onClose={onClose}
         onOpen={onOpen}
+        onReveal={onReveal}
+        onPreview={onPreview}
       />
     ),
     container,
@@ -69,7 +73,18 @@ function setup() {
     input.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
     );
-  return { input, type, submit, setRoot, setKind, setHide, onClose, onOpen };
+  return {
+    input,
+    type,
+    submit,
+    setRoot,
+    setKind,
+    setHide,
+    onClose,
+    onOpen,
+    onReveal,
+    onPreview,
+  };
 }
 describe("DirectorySearchPanel", () => {
   it("submits only nonempty explicit queries, blocks duplicate pending submits, and opens escaped results", async () => {
@@ -119,6 +134,110 @@ describe("DirectorySearchPanel", () => {
     );
     expect(panel.onClose).toHaveBeenCalledTimes(1);
   });
+
+  it.each(["name", "content"] as const)(
+    "navigates %s results with j/k and previews on focus and reveals with l, Shift+Enter or the jump button",
+    async (kind) => {
+      const first = result.matches[0];
+      if (first === undefined) throw new Error("Missing fixture");
+      vi.mocked(searchDirectory).mockResolvedValue({
+        ...result,
+        matches: [
+          first,
+          {
+            ...first,
+            relative_path: "sub/second.txt",
+            entry: {
+              ...first.entry,
+              path: "/workspace/sub/second.txt",
+              name: "second.txt",
+            },
+          },
+        ],
+      });
+      const panel = setup();
+      panel.setKind(kind);
+      panel.type("file");
+      panel.submit();
+      await vi.waitFor(() =>
+        expect(
+          document.querySelectorAll(".directory-search__result"),
+        ).toHaveLength(2),
+      );
+      const key = (
+        target: Element,
+        key: string,
+        options: KeyboardEventInit = {},
+      ) => {
+        const event = new KeyboardEvent("keydown", {
+          key,
+          bubbles: true,
+          cancelable: true,
+          ...options,
+        });
+        target.dispatchEvent(event);
+        return event;
+      };
+      panel.input.focus();
+      expect(key(panel.input, "j").defaultPrevented).toBe(false);
+      expect(key(panel.input, "k").defaultPrevented).toBe(false);
+      expect(key(panel.input, "l").defaultPrevented).toBe(false);
+      expect(panel.onPreview).not.toHaveBeenCalled();
+      expect(panel.onReveal).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(panel.input);
+      key(panel.input, "ArrowDown");
+      const buttons = document.querySelectorAll<HTMLButtonElement>(
+        ".directory-search__result",
+      );
+      const firstButton = buttons.item(0);
+      const secondButton = buttons.item(1);
+      expect(document.activeElement).toBe(firstButton);
+      expect(panel.onPreview).toHaveBeenLastCalledWith(first.entry);
+      for (const options of [
+        { ctrlKey: true },
+        { metaKey: true },
+        { altKey: true },
+        { shiftKey: true },
+        { isComposing: true },
+      ]) {
+        expect(key(firstButton, "j", options).defaultPrevented).toBe(false);
+        expect(key(firstButton, "l", options).defaultPrevented).toBe(false);
+        expect(panel.onReveal).not.toHaveBeenCalled();
+        expect(document.activeElement).toBe(firstButton);
+      }
+      key(firstButton, "j");
+      expect(document.activeElement).toBe(secondButton);
+      expect(secondButton.getAttribute("aria-current")).toBe("true");
+      expect(panel.onPreview).toHaveBeenLastCalledWith(
+        expect.objectContaining({ path: "/workspace/sub/second.txt" }),
+      );
+      expect(panel.onReveal).not.toHaveBeenCalled();
+      key(secondButton, "j");
+      expect(document.activeElement).toBe(secondButton);
+      key(secondButton, "k");
+      expect(document.activeElement).toBe(firstButton);
+      key(firstButton, "k");
+      expect(document.activeElement).toBe(firstButton);
+      expect(panel.onPreview).toHaveBeenLastCalledWith(first.entry);
+      key(firstButton, "l");
+      expect(panel.onReveal).toHaveBeenCalledExactlyOnceWith(first.entry);
+      key(firstButton, "Enter", { shiftKey: true });
+      expect(panel.onReveal).toHaveBeenCalledTimes(2);
+      expect(panel.onOpen).not.toHaveBeenCalled();
+      const jump = document.querySelector<HTMLButtonElement>(
+        ".directory-search__jump",
+      );
+      expect(jump?.parentElement).toBe(firstButton.parentElement);
+      jump?.focus();
+      expect(panel.onPreview).toHaveBeenLastCalledWith(first.entry);
+      jump?.click();
+      expect(panel.onReveal).toHaveBeenCalledTimes(3);
+      key(firstButton, "Enter");
+      expect(panel.onOpen).toHaveBeenCalledExactlyOnceWith(first.entry);
+      firstButton.click();
+      expect(panel.onOpen).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it.each(["query", "root", "kind", "ignore", "close"])(
     "discards pending results after %s changes",

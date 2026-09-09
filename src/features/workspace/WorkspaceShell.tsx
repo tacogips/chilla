@@ -1,3 +1,4 @@
+import { dirname } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   Show,
@@ -156,7 +157,7 @@ export function WorkspaceShell() {
     nextState: LoadedDirectoryState,
     requestedSelectedPath: string | null,
   ) => {
-    startTransition(() => {
+    return startTransition(() => {
       setDirectoryState(nextState);
       setSelectedBrowserPath(
         directoryViewMode() === "tree" &&
@@ -207,7 +208,8 @@ export function WorkspaceShell() {
     sort: DirectoryListSort = directorySort(),
     query: string = directoryQuery(),
     hideIgnored: boolean = hideGitIgnored(),
-  ) => {
+    requireSelectedEntry = false,
+  ): Promise<boolean> => {
     clearSelectionPreviewDebounce();
     const requestId = ++directoryRequestId;
     setLoadingMoreDirectoryEntries(false);
@@ -222,7 +224,7 @@ export function WorkspaceShell() {
     );
 
     if (requestId !== directoryRequestId) {
-      return;
+      return false;
     }
 
     let nextState: LoadedDirectoryState = {
@@ -240,7 +242,7 @@ export function WorkspaceShell() {
     };
 
     while (
-      directoryViewMode() !== "tree" &&
+      (requireSelectedEntry || directoryViewMode() !== "tree") &&
       selectedPath !== null &&
       selectedPath !== nextState.current_directory_path &&
       !(
@@ -269,7 +271,7 @@ export function WorkspaceShell() {
       );
 
       if (requestId !== directoryRequestId) {
-        return;
+        return false;
       }
 
       nextState = {
@@ -288,10 +290,22 @@ export function WorkspaceShell() {
     }
 
     if (requestId !== directoryRequestId) {
-      return;
+      return false;
     }
 
-    applyDirectoryState(nextState, selectedPath);
+    if (
+      requireSelectedEntry &&
+      !nextState.entries.some(
+        (entry) =>
+          entry.path === selectedPath || entry.canonical_path === selectedPath,
+      )
+    ) {
+      throw new Error(
+        "The selected file is no longer available in its directory",
+      );
+    }
+    await applyDirectoryState(nextState, selectedPath);
+    return requestId === directoryRequestId;
   };
 
   const loadExplicitFileSetState = async (
@@ -1007,6 +1021,30 @@ export function WorkspaceShell() {
     }
   };
 
+  const handleRevealEntry = async (entry: DirectoryEntry): Promise<boolean> => {
+    try {
+      const parent = await dirname(entry.path);
+      const loaded = await loadDirectoryState(
+        parent,
+        entry.path,
+        directorySort(),
+        "",
+        hideGitIgnored(),
+        true,
+      );
+      if (!loaded) return false;
+      setDirectoryQuery("");
+      if (currentOpenPath() !== entry.path)
+        void previewSelectedFile(entry.path);
+      return true;
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to reveal file",
+      );
+      return false;
+    }
+  };
+
   const handleNavigateToParent = async () => {
     if (directoryState()?.listingKind === "explicit_file_set") {
       return;
@@ -1540,6 +1578,7 @@ export function WorkspaceShell() {
                     onToggleGitIgnored={() => void handleToggleGitIgnored()}
                     onNavigateToParent={() => void handleNavigateToParent()}
                     onSelectEntry={handleSelectEntry}
+                    onRevealEntry={handleRevealEntry}
                     resizeHandle={{
                       getBounds: () => fileTreeWidthBounds(window.innerWidth),
                       onResize: handleFileTreeResize,

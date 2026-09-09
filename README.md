@@ -201,8 +201,12 @@ The directory toolbar also has **Search file contents** (`Shift+S`) and **Find f
 Enter a query and press Enter to search recursively below the current directory.
 Content search finds literal, case-sensitive text and shows matching lines with
 their paths and line numbers. Find files matches part of a filename or relative
-path, ignoring case. Click a result or press Enter on it to open the file; Escape
-closes search and returns to browsing. Both searches follow Git-ignore visibility.
+path, ignoring case. Use the arrow keys to enter and navigate results; `j`/`k`
+also move down/up while a result is focused. Focusing a result previews the file.
+Click a result or press Enter on it to open the file. Press `l` on a result, or
+click its right-hand jump icon, to browse its containing directory with that file
+selected and focused.
+Escape closes search and returns to browsing. Both searches follow Git-ignore visibility.
 Search skips symlinks and Git metadata; content search also skips binary,
 non-UTF-8 and oversized files. Skipped entries and incomplete results are reported.
 

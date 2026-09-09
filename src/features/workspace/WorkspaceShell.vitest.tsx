@@ -13,6 +13,7 @@ const documentMocks = vi.hoisted(() => ({
   loadGitDiff: vi.fn(),
   loadPrDiff: vi.fn(),
   listDirectory: vi.fn(),
+  searchDirectory: vi.fn(),
   listExplicitFileSet: vi.fn(),
   openDocument: vi.fn(),
   openFilePreview: vi.fn(),
@@ -30,6 +31,10 @@ vi.mock("@tauri-apps/api/core", () => ({
     return `asset://${path}`;
   },
 }));
+vi.mock("../../lib/tauri/directory-search", () => ({
+  searchDirectory: documentMocks.searchDirectory,
+}));
+
 vi.mock("../../lib/tauri/keymap", () => ({
   getKeymapConfig: documentMocks.getKeymapConfig,
 }));
@@ -294,6 +299,7 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       error: null,
     });
     documentMocks.listDirectory.mockReset();
+    documentMocks.searchDirectory.mockReset();
     documentMocks.listExplicitFileSet.mockReset();
     documentMocks.openDocument.mockReset();
     documentMocks.openFilePreview.mockReset();
@@ -571,6 +577,300 @@ describe("WorkspaceShell numeric view shortcuts", () => {
         expect(document.querySelector('[role="treeitem"]')).not.toBeNull();
       });
     }
+  });
+
+  it.each(["list", "tree"])(
+    "reveals a later-page search file with exact selection and focus in %s mode, clearing stale filters",
+    async (mode) => {
+      documentMocks.getStartupContext.mockResolvedValue(
+        directoryStartupContext(null),
+      );
+      documentMocks.listDirectory.mockResolvedValue(
+        directoryPage("/workspace/note.md"),
+      );
+      const targetPage = {
+        ...directoryPage("/workspace/sub/target.txt"),
+        current_directory_path: "/workspace/sub",
+        parent_directory_path: "/workspace",
+        offset: 1,
+        total_entry_count: 2,
+      };
+      const target = targetPage.entries[0];
+      if (target === undefined) throw new Error("Missing fixture");
+      documentMocks.searchDirectory.mockResolvedValue({
+        root_path: "/workspace",
+        matches: [
+          {
+            entry: target,
+            relative_path: "sub/target.txt",
+            line_number: null,
+            line_text: null,
+          },
+        ],
+        truncated: false,
+        skipped_count: 0,
+        scanned_files: 2,
+      });
+      documentMocks.openFilePreview.mockResolvedValue({
+        ...textPreview(),
+        path: target.path,
+        file_name: target.name,
+      });
+      dispose = renderWorkspace();
+      await waitForElement(".file-browser__button");
+      if (mode === "tree") {
+        document
+          .querySelector<HTMLButtonElement>('[aria-label="Tree"]')
+          ?.click();
+        expect(document.querySelector('[role="tree"]')).not.toBeNull();
+      }
+      document
+        .querySelector<HTMLButtonElement>('[aria-label="Show filter"]')
+        ?.click();
+      const filter = await waitForElement<HTMLInputElement>(
+        '[aria-label="Filter files"]',
+      );
+      filter.value = "note";
+      filter.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      await waitFor(() => expect(filter.value).toBe("note"));
+      document
+        .querySelector<HTMLButtonElement>('[aria-label="Find files"]')
+        ?.click();
+      const query = await waitForElement<HTMLInputElement>(
+        '[aria-label="Find files query"]',
+      );
+      query.value = "target";
+      query.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      query.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+      const resultButton = await waitForElement<HTMLButtonElement>(
+        ".directory-search__result",
+      );
+      documentMocks.listDirectory.mockImplementation(
+        async (
+          path: string,
+          _sort: unknown,
+          query: string,
+          _hide: boolean,
+          offset: number,
+        ) => {
+          if (path !== "/workspace/sub")
+            return directoryPage("/workspace/note.md");
+          expect(query).toBe("");
+          if (offset === 0)
+            return {
+              ...directoryPage("/workspace/sub/first.txt"),
+              current_directory_path: path,
+              parent_directory_path: "/workspace",
+              total_entry_count: 2,
+              has_more: true,
+            };
+          return targetPage;
+        },
+      );
+      resultButton.focus();
+      if (mode === "list")
+        resultButton.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "l",
+            bubbles: true,
+          }),
+        );
+      else
+        document
+          .querySelector<HTMLButtonElement>(".directory-search__jump")
+          ?.click();
+      await waitFor(() => {
+        expect(document.querySelector(".directory-search")).toBeNull();
+        expect(document.activeElement?.getAttribute("data-path")).toBe(
+          target.path,
+        );
+        expect(
+          document.activeElement?.classList.contains(
+            "file-browser__button--active",
+          ),
+        ).toBe(true);
+        if (mode === "tree")
+          expect(document.activeElement?.getAttribute("aria-selected")).toBe(
+            "true",
+          );
+      });
+      expect(document.querySelector('[aria-label="Filter files"]')).toBeNull();
+      await waitFor(() =>
+        expect(documentMocks.openFilePreview).toHaveBeenCalledExactlyOnceWith(
+          target.path,
+        ),
+      );
+      await waitFor(() =>
+        expect(document.querySelector(".file-preview")?.textContent).toContain(
+          "keep",
+        ),
+      );
+    },
+  );
+
+  it.each(["name", "content"])(
+    "previews the last focused %s result without leaving search or changing directory",
+    async (kind) => {
+      documentMocks.getStartupContext.mockResolvedValue(
+        directoryStartupContext(null),
+      );
+      documentMocks.listDirectory.mockResolvedValue(
+        directoryPage("/workspace/note.md"),
+      );
+      const entries = directoryPageWithPaths([
+        "/workspace/sub/first.txt",
+        "/workspace/sub/second.txt",
+      ]).entries;
+      documentMocks.searchDirectory.mockResolvedValue({
+        root_path: "/workspace",
+        matches: entries.map((entry) => ({
+          entry,
+          relative_path: `sub/${entry.name}`,
+          line_number: kind === "content" ? 1 : null,
+          line_text: kind === "content" ? "match" : null,
+        })),
+        truncated: false,
+        skipped_count: 0,
+        scanned_files: 2,
+      });
+      documentMocks.openFilePreview.mockImplementation(
+        async (path: string) => ({
+          ...textPreview(),
+          path,
+          file_name: path.slice(path.lastIndexOf("/") + 1),
+          html: `<section class="file-preview"><pre>${path}</pre></section>`,
+        }),
+      );
+      dispose = renderWorkspace();
+      await waitForElement(".file-browser__button");
+      document
+        .querySelector<HTMLButtonElement>(
+          kind === "name"
+            ? '[aria-label="Find files"]'
+            : '[aria-label="Search file contents"]',
+        )
+        ?.click();
+      const query = await waitForElement<HTMLInputElement>(
+        ".directory-search__input",
+      );
+      query.value = "match";
+      query.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      query.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+      const first = await waitForElement<HTMLButtonElement>(
+        ".directory-search__result",
+      );
+      first.focus();
+      first.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "j", bubbles: true }),
+      );
+      await waitFor(() =>
+        expect(documentMocks.openFilePreview).toHaveBeenCalledExactlyOnceWith(
+          "/workspace/sub/second.txt",
+        ),
+      );
+      await waitFor(() =>
+        expect(document.querySelector(".file-preview")?.textContent).toContain(
+          "/workspace/sub/second.txt",
+        ),
+      );
+      expect(document.querySelector(".directory-search")).not.toBeNull();
+      expect(document.activeElement?.getAttribute("aria-label")).toContain(
+        "sub/second.txt",
+      );
+      expect(documentMocks.listDirectory).toHaveBeenCalledTimes(1);
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "k", bubbles: true }),
+      );
+      await waitFor(() =>
+        expect(documentMocks.openFilePreview).toHaveBeenLastCalledWith(
+          "/workspace/sub/first.txt",
+        ),
+      );
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2);
+      expect(document.querySelector(".directory-search")).not.toBeNull();
+      expect(documentMocks.listDirectory).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("keeps results available after a failed reveal and allows retry", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/note.md"),
+    );
+    const target = directoryPage("/workspace/sub/target.txt").entries[0];
+    documentMocks.searchDirectory.mockResolvedValue({
+      root_path: "/workspace",
+      matches: [
+        {
+          entry: target,
+          relative_path: "sub/target.txt",
+          line_number: 2,
+          line_text: "target",
+        },
+      ],
+      truncated: false,
+      skipped_count: 0,
+      scanned_files: 1,
+    });
+    documentMocks.openFilePreview.mockResolvedValue({
+      ...textPreview(),
+      path: "/workspace/sub/target.txt",
+      file_name: "target.txt",
+    });
+    dispose = renderWorkspace();
+    await waitForElement(".file-browser__button");
+    document
+      .querySelector<HTMLButtonElement>('[aria-label="Search file contents"]')
+      ?.click();
+    const query = await waitForElement<HTMLInputElement>(
+      '[aria-label="Search file contents query"]',
+    );
+    query.value = "target";
+    query.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    query.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+    const jump = await waitForElement<HTMLButtonElement>(
+      ".directory-search__jump",
+    );
+    documentMocks.listDirectory.mockRejectedValueOnce(
+      new Error("Directory unavailable"),
+    );
+    jump.click();
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("Directory unavailable"),
+    );
+    expect(jump.isConnected).toBe(true);
+    documentMocks.listDirectory.mockResolvedValueOnce({
+      ...emptyDirectoryPage(),
+      current_directory_path: "/workspace/sub",
+      parent_directory_path: "/workspace",
+    });
+    jump.click();
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(
+        "The selected file is no longer available",
+      ),
+    );
+    expect(jump.isConnected).toBe(true);
+    documentMocks.listDirectory.mockResolvedValue({
+      ...directoryPage("/workspace/sub/target.txt"),
+      current_directory_path: "/workspace/sub",
+      parent_directory_path: "/workspace",
+    });
+    jump.click();
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute("data-path")).toBe(
+        "/workspace/sub/target.txt",
+      ),
+    );
+    expect(document.querySelector(".directory-search")).toBeNull();
   });
 
   it("runs custom manager/workspace sequences and shows only effective configured help and tooltips", async () => {

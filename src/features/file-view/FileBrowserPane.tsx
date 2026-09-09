@@ -157,6 +157,7 @@ interface FileBrowserPaneProps {
     options?: FileBrowserSelectOptions,
   ) => void;
   readonly onNavigateToParent: () => void;
+  readonly onRevealEntry?: (entry: DirectoryEntry) => Promise<boolean>;
   readonly onToggleGitIgnored: VoidFunction;
   readonly treeRootSeed?: DirectoryTreeSeed | null;
   readonly treeRefreshToken?: number;
@@ -994,6 +995,26 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
               hideGitIgnored={props.hideGitIgnored}
               onClose={closeSearch}
               onOpen={(entry) => props.onConfirmEntry(entry)}
+              onPreview={(entry) => props.onSelectEntry(entry)}
+              onReveal={(entry) => {
+                void (async () => {
+                  if (!(await props.onRevealEntry?.(entry))) return;
+                  setSearchKind(null);
+                  setFilterOpen(false);
+                  queueMicrotask(() => {
+                    const buttons =
+                      resolveFileBrowserListEl()?.querySelectorAll<HTMLButtonElement>(
+                        ".file-browser__button",
+                      );
+                    const button = Array.from(buttons ?? []).find(
+                      (candidate) =>
+                        candidate.getAttribute("data-path") ===
+                        props.selectedPath,
+                    );
+                    if (button !== undefined) focusListButton(button);
+                  });
+                })();
+              }}
             />
           )}
         </Show>

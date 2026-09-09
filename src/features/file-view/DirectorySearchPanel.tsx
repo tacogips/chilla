@@ -21,6 +21,8 @@ export function DirectorySearchPanel(props: {
   readonly hideGitIgnored: boolean;
   readonly onClose: VoidFunction;
   readonly onOpen: (entry: DirectoryEntry) => void;
+  readonly onReveal: (entry: DirectoryEntry) => void;
+  readonly onPreview: (entry: DirectoryEntry) => void;
 }) {
   const [query, setQuery] = createSignal("");
   const [result, setResult] = createSignal<DirectorySearchResult | null>(null);
@@ -109,14 +111,33 @@ export function DirectorySearchPanel(props: {
       }}
       onKeyDown={(event) => {
         event.stopPropagation();
-        if (event.isComposing) return;
+        if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey)
+          return;
+        const inResults =
+          event.target instanceof Element &&
+          event.target.closest(".directory-search__results") !== null;
         if (event.key === "Escape") {
           event.preventDefault();
           props.onClose();
-        } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        } else if (
+          !event.shiftKey &&
+          (event.key === "ArrowDown" ||
+            event.key === "ArrowUp" ||
+            (inResults && (event.key === "j" || event.key === "k")))
+        ) {
           event.preventDefault();
-          move(event.key === "ArrowDown" ? 1 : -1);
-        } else if (event.key === "Enter" && event.target === input) {
+          move(event.key === "ArrowDown" || event.key === "j" ? 1 : -1);
+        } else if (inResults && event.key === "l" && !event.shiftKey) {
+          const match = result()?.matches[selected()];
+          if (match !== undefined) {
+            event.preventDefault();
+            props.onReveal(match.entry);
+          }
+        } else if (
+          event.key === "Enter" &&
+          !event.shiftKey &&
+          event.target === input
+        ) {
           event.preventDefault();
           void submit();
         }
@@ -209,18 +230,28 @@ export function DirectorySearchPanel(props: {
       >
         <For each={result()?.matches ?? []}>
           {(match, index) => (
-            <li>
+            <li class="directory-search__row">
               <button
                 type="button"
                 class="directory-search__result"
                 aria-label={`${match.relative_path}${match.line_number === null ? "" : `, line ${match.line_number}`}`}
                 aria-current={selected() === index() ? "true" : undefined}
-                onFocus={() => setSelected(index())}
+                onFocus={() => {
+                  setSelected(index());
+                  props.onPreview(match.entry);
+                }}
                 onClick={() => props.onOpen(match.entry)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.isComposing) {
+                  if (
+                    event.key === "Enter" &&
+                    !event.isComposing &&
+                    !event.ctrlKey &&
+                    !event.metaKey &&
+                    !event.altKey
+                  ) {
                     event.preventDefault();
-                    props.onOpen(match.entry);
+                    if (event.shiftKey) props.onReveal(match.entry);
+                    else props.onOpen(match.entry);
                   }
                 }}
               >
@@ -237,6 +268,43 @@ export function DirectorySearchPanel(props: {
                     {match.line_text}
                   </span>
                 </Show>
+              </button>
+              <button
+                type="button"
+                class="directory-search__jump"
+                aria-label={`Show ${match.relative_path} in containing directory`}
+                title="Show in containing directory (l; Shift+Enter)"
+                onFocus={() => {
+                  setSelected(index());
+                  props.onPreview(match.entry);
+                }}
+                onClick={() => props.onReveal(match.entry)}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    !event.isComposing &&
+                    !event.ctrlKey &&
+                    !event.metaKey &&
+                    !event.altKey
+                  ) {
+                    event.preventDefault();
+                    props.onReveal(match.entry);
+                  }
+                }}
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M10 5H4v15h15v-6M14 4h6v6M20 4 10 14" />
+                </svg>
               </button>
             </li>
           )}

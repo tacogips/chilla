@@ -904,3 +904,20 @@ file pane, including when the pane is hidden. It uses the same state and action
 as the default Shift+L shortcut. Its accessible label describes the next action,
 its expanded state reflects actual visibility, and its tooltip uses the effective
 configured shortcut. The control remains available in file and Git diff modes.
+
+### Recursive Search Result Navigation
+
+Both filename and content search support unmodified `j`/`k` while focus is in
+the result list, alongside the existing arrow keys. Query inputs retain normal
+text entry, including `j` and `k`; arrow keys enter the results from the input.
+Selection follows focus and remains visible when navigating long results.
+Focusing a result previews that file using the existing debounced selection
+preview path while keeping search open and the current directory unchanged.
+
+Unmodified `l` on a result and a separately focusable jump icon at the right end
+of each row reveal that file in the application's directory browser. This loads
+its containing directory, clears any stale filename filter, selects the exact
+file even beyond the first directory page, and returns focus to that row. Search
+closes on successful navigation; navigation errors remain visible and must not
+leave a mismatched selection. Existing Enter/click opening behavior is preserved.
+The jump button has an accessible file-specific name and shortcut tooltip.

@@ -2,6 +2,8 @@
 
 This directory contains implementation plans that translate design documents into actionable implementation specifications.
 
+- [Search Result Navigation](completed/search-result-navigation.md): j/k navigation and keyboard/mouse reveal with exact file selection.
+
 - [GitHub Diff Shorthand](completed/github-diff-shorthand.md): verified repository shorthand for commits and branch comparisons.
 
 - [JSON Preview Performance](completed/json-preview-performance.md): measured debug/release bottleneck and verified dedicated JSON source highlighting.
