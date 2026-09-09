@@ -60,7 +60,7 @@ record, listing metadata, privacy answers, screenshots, review information
 
 **Completion Criteria**:
 
-- [ ] owner decisions recorded for price, availability, and release timing
+- [x] owner decisions recorded for price, availability, and release timing
 - [ ] review contact and notes are complete
 - [x] app record uses the exact bundle identifier and product identity
 - [ ] one to ten compliant 16:10 macOS screenshots are uploaded
@@ -95,8 +95,8 @@ record, listing metadata, privacy answers, screenshots, review information
 | --- | --- | --- |
 | Signed app | Mac App Store profile and Apple Distribution identity | Available |
 | Signed package | Mac Installer Distribution identity | Available and Keychain-authorized |
-| App record | registered bundle identifier and owner metadata | Record created; owner metadata remains |
-| Final submission | processed build and owner decisions | Blocked |
+| App record | registered bundle identifier and owner metadata | Free, worldwide, manual release, and copyright configured; review metadata remains |
+| Final submission | processed build and owner decisions | Blocked by screenshots, review/compliance metadata, and Apple agreement |
 
 ## Completion Criteria
 
@@ -166,3 +166,21 @@ the profile read-only for all users, after which validation and upload succeeded
 without errors. A distribution-signed App Store bundle cannot be launched
 directly outside the Store installation path; strict code-signature and
 entitlement checks pass, while installed-build runtime QA remains pending.
+
+### Session: 2026-09-09 (Commercial Availability)
+
+**Tasks Completed**: Configured version 0.2.0 as a free app, made it available in
+all 175 App Store countries or regions, selected manual release after App Review,
+and saved `2026 tacogips` as the copyright notice.
+
+**Tasks In Progress**: TASK-002 runtime QA, TASK-003 screenshots, review contact,
+content-rights/privacy/compliance metadata, and TASK-004 final validation and
+submission.
+
+**Blockers**: The Account Holder must explicitly authorize acceptance of the
+updated Apple Developer Program License Agreement because it legally binds the
+developer account. App Review contact details, content-rights/compliance answers,
+and compliant 16:10 screenshots remain required.
+
+**Notes**: Release remains manual, so approval by App Review will not publish the
+app until the Account Holder explicitly releases it.
