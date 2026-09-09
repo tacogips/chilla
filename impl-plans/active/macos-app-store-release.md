@@ -63,7 +63,7 @@ record, listing metadata, privacy answers, screenshots, review information
 - [x] owner decisions recorded for price, availability, and release timing
 - [x] review contact and notes are complete
 - [x] app record uses the exact bundle identifier and product identity
-- [ ] one to ten compliant 16:10 macOS screenshots are uploaded
+- [x] one to ten compliant 16:10 macOS screenshots are uploaded
 - [ ] privacy and encryption answers match shipped behavior
 
 ### TASK-004: Upload, Processing, And Submission
@@ -191,11 +191,27 @@ app until the Account Holder explicitly releases it.
 Agreement with explicit Account Holder authorization and saved confirmation that
 Chilla has the necessary rights to display third-party content.
 
-**Tasks In Progress**: TASK-002 runtime QA, TASK-003 screenshots and
-privacy/compliance metadata, and TASK-004 final validation and submission.
+**Tasks In Progress**: TASK-002 runtime QA, TASK-003 privacy/compliance metadata,
+and TASK-004 final validation and submission.
 
-**Blockers**: Compliant 16:10 screenshots and remaining privacy/compliance
-answers are required.
+**Blockers**: Remaining privacy/compliance answers are required.
 
 **Notes**: App Review contact information is complete in App Store Connect.
 Personal review-contact values are intentionally not recorded in the repository.
+
+### Session: 2026-09-09 (Mac Screenshots)
+
+**Tasks Completed**: Captured and visually verified three truthful macOS
+screenshots showing the rendered README, local Git diff review, and video
+preview. Uploaded all three to the Mac screenshot set in App Store Connect at the
+accepted 2560 by 1600 pixel size.
+
+**Tasks In Progress**: TASK-002 installed-build runtime QA, TASK-003
+privacy/compliance metadata, and TASK-004 final validation and submission.
+
+**Blockers**: Remaining privacy/compliance answers are required before final
+submission validation.
+
+**Notes**: Screenshot source files remain local in Downloads and are not tracked
+in Git. A temporary capture that exposed unrelated desktop windows was deleted
+before upload; only Chilla-only captures were retained and uploaded.
