@@ -1,0 +1,9 @@
+require "json"
+
+app_identifier "com.tacogips.chilla"
+app_version JSON.parse(File.read(File.expand_path("src-tauri/tauri.conf.json", Dir.pwd))).fetch("version")
+platform "osx"
+
+skip_binary_upload true
+force true
+precheck_include_in_app_purchases false

@@ -68,9 +68,34 @@ App Review submission as one release workflow rather than ending at upload.
 
 ## UI And Verification
 
-Prefer App Store Connect APIs or purpose-built release commands when they cover
-the operation. Use the macOS Computer Use workflow for authenticated web UI
-steps, screenshot capture, or visual verification that APIs cannot provide.
+Use Fastlane and the App Store Connect API as the default for processing checks,
+version creation or update, build attachment, metadata validation, submission,
+and live-state verification. Run secret-dependent commands through `kinko exec`
+and the repository-managed Fastlane installation through `mise exec --`.
+Run `fastlane deliver run` from the repository root so
+`fastlane/Deliverfile` supplies the non-interactive Chilla defaults.
+
+Generate Fastlane's API-key JSON only in a protected temporary file. Normalize
+escaped newlines in the injected private key, set the file mode to `0600`, do
+not print the file or credential environment, and remove it with an exit trap.
+For individual keys, use a null issuer ID; for team keys, use the injected
+issuer ID. Target `com.tacogips.chilla`, platform `osx`, the exact marketing
+version, and the already-uploaded build number.
+
+Do not open App Store Connect in a browser for an operation Fastlane or the API
+can perform. Use the macOS Computer Use workflow only for fields unavailable
+through the API, authentication recovery, screenshot capture, or visual
+verification that cannot be established from API state. Never use browser
+automation to guess or bypass an owner-controlled or legal gate.
+
+When a high-level Fastlane wrapper calls a removed Apple relationship, keep the
+release on the Fastlane path by using its `Spaceship::ConnectAPI` models against
+the supported endpoint. In particular, query macOS builds with
+`Spaceship::ConnectAPI::Build.all` rather than treating a failing `pilot builds`
+wrapper as an authentication or processing failure. Verify the platform in
+precheck output; if generic precheck switches a macOS app to iOS or cannot
+finish, inspect the individual App Store Connect gates through Spaceship and do
+not report precheck as passed.
 
 After upload, do not report completion until the requested terminal state is
 observed. Distinguish these states in status reports:

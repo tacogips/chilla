@@ -26,9 +26,12 @@ taplo = "latest"
 "cargo:cargo-audit" = "latest"
 gitleaks = "latest"
 pre-commit = "latest"
+ruby = "3.4.10"
+"gem:fastlane" = "2.239.0"
 
 [env]
 CARGO_TERM_QUIET = "true"
+GEMRC = "{{config_root}}/.gemrc"
 
 [tasks.install]
 description = "Install locked frontend dependencies"

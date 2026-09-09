@@ -34,6 +34,10 @@ For installer tarballs use `native-release-build` and `release/README.md`.
   variant.
 - `mise run release-macos-app-store-local -- build|upload` builds, validates,
   signs, and optionally uploads the Mac App Store package.
+- Fastlane is managed by `mise.toml` for App Store Connect API operations after
+  package upload.
+- `fastlane/Deliverfile` pins the Chilla bundle identifier, macOS platform,
+  repository version source, and non-interactive delivery defaults.
 - local macOS bundle outputs land under:
 
 ```text
@@ -87,10 +91,16 @@ and these secret names through `kinko exec`:
 - `APPLE_ID`
 - `APPLE_PASSWORD`
 - `APPLE_TEAM_ID`
+- `APP_STORE_CONNECT_API_KEY_ID`
+- `APP_STORE_CONNECT_API_PRIVATE_KEY`
+- `APP_STORE_CONNECT_ISSUER_ID`
+- `APP_STORE_CONNECT_API_KEY_TYPE`
 
 Meaning:
 - `APPLE_SIGNING_IDENTITY` is the codesigning identity name
 - `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` support notarization
+- the App Store Connect API values support non-browser Fastlane processing,
+  build attachment, metadata validation, and review submission
 
 Do not add Apple credentials to the validation-only GitHub Actions workflow.
 Publication remains the explicitly requested local `mise run release-macos-dmg-local` task.
@@ -137,6 +147,14 @@ the submission, and submit for App Review when submission is in scope.
 Read [references/app-store-connect-release.md](references/app-store-connect-release.md)
 before performing this mode. It defines the required order, verification, secret
 handling, and authorization boundaries.
+
+Use Fastlane with kinko-injected App Store Connect API credentials as the
+default control path after upload. Do not open App Store Connect in a browser
+for operations Fastlane or the App Store Connect API can perform. Browser use
+is a fallback only for a field unavailable through the API, an authentication
+recovery step, or a required owner/legal decision. Keep temporary API-key JSON
+outside the repository with mode `0600`, never print it, and delete it when the
+command exits.
 
 A request limited to build, signing, notarization, DMG, GitHub, or Homebrew does
 not authorize App Store Connect mutations. Conversely, an explicit Apple/App
