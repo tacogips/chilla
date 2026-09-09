@@ -3,7 +3,7 @@
 **Status**: In Progress
 **Design Reference**: `design-docs/specs/design-macos-dmg-release.md#official-homebrew-cask-distribution`
 **Created**: 2026-07-15
-**Last Updated**: 2026-07-29
+**Last Updated**: 2026-09-09
 
 ---
 
@@ -44,8 +44,8 @@ Authoritative evidence:
 **Checklist**:
 
 - [ ] Homebrew self-submission notability threshold satisfied
-- [x] Stable v0.1.11 DMG checksum recorded as `868f49519ebecf731a901c099adb6cb23784e765f93d2b82f79ec9f426b7a91f`
-- [x] Stable v0.1.11 application verified as Developer ID signed and notarized
+- [x] Stable v0.2.0 DMG checksum recorded as `585c4f571f37159a392213d11a5dfe16a4d4f5ce7f83a509323c0b8a76f49eb3`
+- [x] Stable v0.2.0 application verified as Developer ID signed and notarized
 - [x] No prior `Homebrew/homebrew-cask` pull request or issue found for `chilla`
 
 ### 2. Official Cask Contribution
@@ -91,7 +91,7 @@ custom tap command from the primary installation flow and document
 
 | Deliverable | File Path | Status | Verification |
 | --- | --- | --- | --- |
-| Release and eligibility evidence | GitHub and v0.1.11 DMG | BLOCKED | Metrics, `codesign`, `spctl` |
+| Release and eligibility evidence | GitHub and v0.2.0 DMG | BLOCKED | Metrics, `codesign`, `spctl` |
 | Official cask | `Homebrew/homebrew-cask/Casks/c/chilla.rb` | BLOCKED | Audit, style, install, uninstall, upstream CI |
 | Tap-free documentation | `README.md` | BLOCKED | Official API install smoke test |
 
@@ -185,6 +185,23 @@ modified. The authenticated GitHub API metrics and current Homebrew source are
 sufficient to prove the notability condition fails. Resume after an objective
 eligibility change, then regenerate and validate the cask against the latest stable
 release before submission.
+
+### Session: 2026-09-09 (v0.2.0 Release Audit)
+
+**Tasks Completed**: Published v0.2.0, verified its mounted DMG app as Developer
+ID signed/notarized/Gatekeeper-accepted, updated and pushed the custom tap, passed
+online cask audit and style, and upgraded the installed app to 0.2.0. Rechecked
+GitHub metrics, the official cask index, and upstream pull requests.
+
+**Tasks In Progress**: None; the official contribution remains policy-blocked.
+
+**Blockers**: The repository remains at 0 forks, 0 watchers, and 2 stars, below
+all owner-submission thresholds of 90 forks, 90 watchers, or 225 stars. There is
+still no official cask, upstream pull request, or documented exception.
+
+**Notes**: The custom cask commit is `80e7792`. Do not open a knowingly failing
+upstream pull request; regenerate the official-layout candidate from v0.2.0 when
+one notability threshold or a documented exception is available.
 
 ## Related Plans
 

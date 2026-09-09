@@ -162,6 +162,59 @@ Excluded from this slice:
 The official Homebrew migration is tracked separately in
 `impl-plans/active/official-homebrew-cask.md`.
 
+## Mac App Store Distribution
+
+The Mac App Store is a separate distribution channel from the Developer ID DMG.
+It must preserve the v0.2.0 product version while using an independently
+increasing `CFBundleVersion`, and it must not replace or weaken the notarized DMG
+flow. The first App Store build remains Apple Silicon-only and requires macOS
+12.0 or later.
+
+The App Store variant must be built through a dedicated Tauri override so its
+App Sandbox entitlements and embedded Mac App Store provisioning profile do not
+affect the Developer ID artifact. The committed release inputs must not contain
+the Apple team identifier, signing identities, provisioning-profile contents,
+private keys, account identifiers, or passwords. A local release script renders
+ephemeral entitlements/configuration from injected secrets and deletes those
+files after packaging.
+
+The sandbox entitlement set is intentionally narrow:
+
+- App Sandbox enabled
+- user-selected files and directories readable and writable
+- outbound network connections allowed for GitHub diff retrieval
+- application and team identifiers derived from the release environment
+
+Paths supplied by shell arguments do not pass through the macOS Powerbox and
+therefore are not a supported App Store access mechanism. The App Store listing
+and QA evidence must describe and exercise the in-app file/folder picker flow.
+The direct DMG and Homebrew variants continue to support `chilla .`.
+
+The release pipeline follows the evidence discipline used by Konjac while
+adapting it to a macOS Tauri application:
+
+1. verify version/build-number consistency and placeholder-free metadata
+2. verify Apple Distribution and Mac Installer Distribution identities by
+   status only
+3. validate the Mac App Store provisioning profile against
+   `com.tacogips.chilla` without recording its contents
+4. build and sign the sandboxed `.app`, then inspect its entitlements
+5. launch and exercise the packaged app in its sandbox
+6. create a Mac Installer Distribution-signed `.pkg`
+7. validate and upload the package, then record build-processing evidence
+8. submit only after the owner has fixed price, availability, release timing,
+   review contact information, and any required review notes
+
+App Store Connect record creation and final review submission are external
+state changes. The default record identity is product name `chilla`, bundle ID
+`com.tacogips.chilla`, primary language English (U.S.), and a stable macOS SKU;
+if any value is unavailable or conflicts with an existing record, stop rather
+than silently changing product identity. Pricing, countries/regions, release
+mode, and review contact details are owner decisions and must never be inferred.
+
+The Mac App Store work is tracked in
+`impl-plans/active/macos-app-store-release.md`.
+
 ## References
 
 See `design-docs/references/README.md` for external references.

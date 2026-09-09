@@ -102,6 +102,12 @@ run = '''
 bash scripts/release-macos-dmg-local.sh "$@"
 '''
 
+[tasks."release-macos-app-store-local"]
+description = "Build or upload a sandboxed Mac App Store package"
+run = '''
+bash scripts/release-macos-app-store-local.sh "$@"
+'''
+
 [tasks."test"]
 description = "Run frontend and backend verification"
 run = '''

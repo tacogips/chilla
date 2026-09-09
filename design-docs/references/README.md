@@ -30,6 +30,12 @@ This directory contains reference materials for system design and implementation
 | Homebrew Acceptable Casks | https://docs.brew.sh/Acceptable-Casks | Official eligibility, notability, and rejection policy for cask submissions |
 | Adding Software to Homebrew | https://docs.brew.sh/Adding-Software-to-Homebrew#casks | Official cask authoring, validation, and submission workflow |
 | Homebrew Cask Cookbook | https://docs.brew.sh/Cask-Cookbook | Official cask stanza order and DSL reference |
+| Tauri App Store distribution | https://v2.tauri.app/distribute/app-store/ | Official macOS App Store bundle, sandbox, provisioning, package, and upload guidance |
+| App Store Connect app records | https://developer.apple.com/help/app-store-connect/create-an-app-record/add-a-new-app | Required app-record fields and role prerequisites |
+| App Store Connect build uploads | https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds | Supported upload tools and build-processing lifecycle |
+| App Store Connect submissions | https://developer.apple.com/help/app-store-connect/manage-submissions-to-app-review/submit-an-app | Version selection, review submission, and release workflow |
+| App Store screenshot specifications | https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/ | Required macOS screenshot counts, aspect ratio, and dimensions |
+| Konjac App Store release skill | sibling Konjac checkout: `../konjac/.agents/skills/konjac-app-store-release/SKILL.md` | Local evidence-driven reference for owner decisions, readiness gates, upload evidence, and submission boundaries |
 | qraftbox DiffView.svelte | sibling qraftbox checkout: `client-legacy/components/DiffView.svelte` | Local behavioral reference for PR diff mode controls, file diff rendering, and navigation buttons |
 | qraftbox diff types | sibling qraftbox checkout: `client-legacy/src/types/diff.ts` | Local reference for diff file, hunk/chunk, change-line, and view-mode shape |
 | qraftbox GitHub PR service | sibling qraftbox checkout: `src/server/github/pr-service.ts` | Local reference for GitHub PR metadata service boundaries |

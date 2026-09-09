@@ -40,13 +40,14 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan | Created | Design Reference |
 | ---- | ------- | ---------------- |
-| `macos-mounted-dmg-trust-gate.md` | 2026-09-08 | `design-docs/specs/design-macos-dmg-release.md#mounted-artifact-trust-gate` |
+| `macos-app-store-release.md` | 2026-09-09 | `design-docs/specs/design-macos-dmg-release.md#mac-app-store-distribution` |
 | `official-homebrew-cask.md` | 2026-07-15 | `design-docs/specs/design-macos-dmg-release.md#official-homebrew-cask-distribution` |
 
 ## Completed Plans
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `macos-mounted-dmg-trust-gate.md` | 2026-09-09 | `design-docs/specs/design-macos-dmg-release.md#mounted-artifact-trust-gate` |
 | `mise-native-toolchain.md` | 2026-09-09 | `design-docs/specs/architecture.md#mise-native-toolchain` |
 | `github-diff-shortcut-reload.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#github-diff-startup-and-reload` |
 | `product-website.md` | 2026-09-09 | `design-docs/specs/design-product-website.md` |

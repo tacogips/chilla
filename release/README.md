@@ -135,3 +135,36 @@ Users can install it with:
 brew tap tacogips/tap
 brew install --cask chilla
 ```
+
+## Mac App Store Flow
+
+The Mac App Store build is isolated from the Developer ID DMG. It enables App
+Sandbox, user-selected read/write access, and outbound networking, embeds a Mac
+App Store Connect provisioning profile, and produces a Mac Installer
+Distribution-signed package.
+
+Required local prerequisites are an Apple Distribution identity, a Mac
+Installer Distribution identity, and a Mac App Store Connect profile for
+`com.tacogips.chilla`. Keep the profile outside the repository and inject only
+its path:
+
+```bash
+kinko exec --env APPLE_TEAM_ID -- env \
+  CHILLA_APP_STORE_PROFILE=/absolute/path/to/chilla.provisionprofile \
+  mise run release-macos-app-store-local -- build
+```
+
+After the App Store Connect record and listing metadata are complete, validate
+and upload the package with application credentials:
+
+```bash
+kinko exec --env APPLE_TEAM_ID,APPLE_ID,APPLE_PASSWORD -- env \
+  CHILLA_APP_STORE_PROFILE=/absolute/path/to/chilla.provisionprofile \
+  mise run release-macos-app-store-local -- upload
+```
+
+The task renders team-specific entitlements in a protected temporary directory,
+checks the effective signed entitlements, signs the `.pkg`, and deletes temporary
+credentials/profile copies on exit. The App Store variant supports directories
+opened through the in-app picker; shell-provided paths remain a DMG/Homebrew
+feature because they do not receive App Sandbox Powerbox access.
