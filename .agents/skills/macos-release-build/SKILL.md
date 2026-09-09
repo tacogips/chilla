@@ -1,6 +1,6 @@
 ---
 name: macos-release-build
-description: Build, sign, notarize, validate, publish, or register chilla macOS releases with GitHub and Apple App Store Connect using mise tasks and local Apple credentials.
+description: Build, sign, notarize, validate, and publish chilla macOS releases across GitHub, the Homebrew cask, and Apple App Store Connect using mise tasks and local Apple credentials.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
@@ -148,11 +148,22 @@ subject to the legal and owner-decision gates in the reference.
 
 The tap repository does not create or sign macOS artifacts. It only consumes them.
 
-After switching the macOS distribution artifact shape, update `tacogips/homebrew-tap` when:
-- the artifact URL changes
-- the SHA-256 changes
-- the cask artifact type/path changes
-- the cask should move from the tarball `binary` path to a DMG/app-based install flow
+Every public version release that publishes a GitHub macOS artifact must also
+publish the matching cask update in `tacogips/homebrew-tap`. The release is not
+complete until the cask is updated and verified. For each version:
+
+1. Read and follow the tap repository's `AGENTS.md`, if present.
+2. Update `Casks/chilla.rb` to the released version, exact SHA-256 of the
+   published DMG, and current artifact URL/type/install flow.
+3. Run the tap's cask validation tasks and verify Homebrew can fetch the
+   published artifact.
+4. Commit and push the tap change when the release request includes publication.
+5. Verify the remote cask contains the released version and checksum.
+
+Do not compute the cask checksum from a pre-publication artifact when the
+published asset can be downloaded; validate against the asset users will fetch.
+An App Store-only operation that does not publish a GitHub macOS artifact does
+not require a cask update.
 
 ## Validation Notes
 
