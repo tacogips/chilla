@@ -96,7 +96,7 @@ record, listing metadata, privacy answers, screenshots, review information
 | Signed app | Mac App Store profile and Apple Distribution identity | Available |
 | Signed package | Mac Installer Distribution identity | Available and Keychain-authorized |
 | App record | registered bundle identifier and owner metadata | Free, worldwide, manual release, and copyright configured; review metadata remains |
-| Final submission | processed build and owner decisions | Blocked by screenshots, review/compliance metadata, and Apple agreement |
+| Final submission | processed build and owner decisions | Blocked by screenshots and review/compliance metadata |
 
 ## Completion Criteria
 
@@ -184,3 +184,19 @@ and compliant 16:10 screenshots remain required.
 
 **Notes**: Release remains manual, so approval by App Review will not publish the
 app until the Account Holder explicitly releases it.
+
+### Session: 2026-09-09 (Agreement And Content Rights)
+
+**Tasks Completed**: Accepted the updated Apple Developer Program License
+Agreement with explicit Account Holder authorization and saved confirmation that
+Chilla has the necessary rights to display third-party content.
+
+**Tasks In Progress**: TASK-002 runtime QA, TASK-003 screenshots, review contact,
+privacy/compliance metadata, and TASK-004 final validation and submission.
+
+**Blockers**: App Store Connect requires the review-contact email address before
+it will save the supplied name and international-format phone number. Compliant
+16:10 screenshots and remaining privacy/compliance answers are also required.
+
+**Notes**: Personal review-contact values are intentionally not recorded in the
+repository.
