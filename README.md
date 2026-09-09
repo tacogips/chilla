@@ -205,25 +205,25 @@ cached folder does not fetch another page. Unopened descendants remain unloaded.
 
 ## Keyboard Shortcuts
 
-Global shortcuts:
+Default global shortcuts:
 
 - `?`: show help
 - `Esc`: close help
-- `Q`: quit the app
+- `q`: quit the app
 - `Ctrl+D`: page the active file view down; in Git diff mode, page the selected diff file view rather than the changed-file sidebar
 - `Ctrl+U`: page the active file view up; in Git diff mode, page the selected diff file view rather than the changed-file sidebar
-- `J` or `ArrowDown`: scroll the active file view down one line when the file tree is hidden
-- `K` or `ArrowUp`: scroll the active file view up one line when the file tree is hidden
+- `j` or `ArrowDown`: scroll the active file view down one line when the file tree is hidden
+- `k` or `ArrowUp`: scroll the active file view up one line when the file tree is hidden
 - `Shift+L`: toggle file tree
-- `G`: toggle local Git diff for the opened repository
-- `Y`: copy the selected file or directory absolute path
-- `R`: refresh the current directory or explicit file set and active local file
+- `g`: toggle local Git diff for the opened repository
+- `y`: copy the selected file or directory absolute path
+- `r`: refresh the current directory or explicit file set and active local file
 - `Shift+T`: toggle table of contents for Markdown
 - `Shift+P`: switch Markdown raw/preview pane
 - `1`: select raw view for Markdown or CSV
 - `2`: select Markdown preview or formatted CSV view when available
-- `+` / `-`: zoom rendered Markdown and other rendered content from 50%-300%, or direct SVG and raster image previews from 50%-800%, in 10% steps
-- `Ctrl+mouse wheel`: zoom the rendered preview under the pointer
+- `+` / `-`: native preview zoom, from 50%-300% for rendered content or 50%-800% for direct SVG/raster images, in 10% steps (not configured by keymap.toml)
+- `Ctrl+mouse wheel`: native preview zoom under the pointer (not configured by keymap.toml)
 - `Shift+S`: toggle light/dark theme outside the directory browser keyboard context
 
 File tree shortcuts:
@@ -235,15 +235,15 @@ File tree shortcuts:
 - `.`: toggle Git-ignored entries in directory browsing
 - `Tab`: show the current directory's absolute path and metadata as a root-to-leaf tree
 - `Esc`: close directory information, or clear and close the filter and return to the list when the filter is focused
-- `J` or `ArrowDown`: move selection down
-- `K` or `ArrowUp`: move selection up
+- `j` or `ArrowDown`: move selection down
+- `k` or `ArrowUp`: move selection up
 - `,` then `a` / `A`: sort by name ascending / descending
 - `,` then `e` / `E`: sort by extension ascending / descending
 - `,` then `m` / `M`: sort by modified time ascending / descending
 - `,` then `s` / `S`: sort by size ascending / descending
 - `,` then `0`, or plain `0`: reset sort to default (`name` ascending)
-- `H` or `ArrowLeft`: go to the parent directory in List view; in Tree view, collapse the current folder or select its parent
-- `L` or `ArrowRight`: open the selection in List view; in Tree view, expand a folder or move to its first child
+- `h` or `ArrowLeft`: go to the parent directory in List view; in Tree view, collapse the current folder or select its parent
+- `l` or `ArrowRight`: open the selection in List view; in Tree view, expand a folder or move to its first child
 - `Enter`: open a file or toggle a folder in Tree view
 - `Ctrl+M`: same as `Enter` in the filter field
 
@@ -278,7 +278,11 @@ Diff viewer:
   - `https://github.com/<owner>/<repo>/pull/<number>/files`
   - `https://github.com/<owner>/<repo>/commit/<sha>`
   - `https://github.com/<owner>/<repo>/compare/<base>...<head>`
-- Add `--no-github-diff-cache` before the URL to bypass the temp-directory cache. The older `--no-pr-diff-cache` flag remains available as a compatibility alias.
+- PR, commit and compare `.diff`/`.patch` URLs are accepted as equivalent startup targets. A literal trailing `.diff`/`.patch` is treated as a transport suffix; use an encoded dot (`%2E`) when it belongs to a compare ref name.
+- Short PR syntax: `chilla github:<owner>/<repo> <number>`.
+- Changed files open in Tree view by default; expand directories to navigate the diff like a file tree.
+- Use the header reload button or `r` (configurable `document.reload`) to fetch the active diff again. GitHub reload bypasses snapshot cache reuse, preserves surviving selection/tree context, and clears stale full-file previews.
+- Add `--no-github-diff-cache` before the URL or shorthand to bypass the temp-directory cache. The older `--no-pr-diff-cache` flag remains available as a compatibility alias.
 - Open a directory inside a Git repository and use `Git diff` to switch to uncommitted-change diff mode.
 - Start commit/range diff mode with:
   - `chilla <git-dir> <commit>`
@@ -291,9 +295,92 @@ Diff viewer:
 - `Tab`: cycle diff modes in the same order, including image view for SVG files
 - `Ctrl+D`: page the selected diff file view down
 - `Ctrl+U`: page the selected diff file view up
-- `O`: open the pull request, commit, or compare source in GitHub when reviewing a GitHub diff
+- `o`: open the pull request, commit, or compare source in GitHub when reviewing a GitHub diff
 - Full-file view shows the latest file content, highlights added and modified lines, and marks deleted locations with a thin red line without rendering deleted content.
 - SVG image view renders the latest complete SVG in an isolated image without replacing the existing XML/text review modes.
+
+Workspace errors and keymap warnings appear as top-right overlays without moving
+the panes. Close a message with its dismiss button, or let it disappear after
+8 seconds; hovering or focusing the message pauses the timer. Conflict-resolution
+prompts remain visible until addressed.
+
+## Custom Keybindings
+
+Create `~/.config/chilla/keymap.toml` and restart chilla to customize browser
+and workspace shortcuts. This location also applies on macOS. If
+`XDG_CONFIG_HOME` is an absolute path, chilla instead reads
+`$XDG_CONFIG_HOME/chilla/keymap.toml`. Missing configuration keeps the defaults;
+chilla does not create or overwrite the file automatically.
+
+The format follows [Yazi's keymap model](https://yazi-rs.github.io/docs/configuration/keymap/),
+using chilla's own built-in action names:
+
+```toml
+[[mgr.prepend_keymap]]
+on = ["g", "f"]
+run = "search.name"
+desc = "Find filenames recursively"
+
+[[mgr.prepend_keymap]]
+on = ["g", "s"]
+run = "search.content"
+desc = "Search file contents recursively"
+
+[[workspace.prepend_keymap]]
+on = ["<C-b>", "t"]
+run = "theme.toggle"
+desc = "Toggle theme"
+```
+
+Pressing a prefix such as `g` shows the remaining configured keys and
+descriptions in the bottom-right popup. See [examples/keymap.toml](examples/keymap.toml)
+for a copyable example. `on` accepts one key or an array of up to eight keys;
+`run` accepts one built-in action or an ordered array of actions. `desc` is
+optional. Normal typing and native editor/media controls are not remapped.
+
+Contexts are `[mgr]` for directory/file-set and diff browsers, and `[workspace]`
+for app actions. Each supports:
+
+- `prepend_keymap`: higher-priority overrides.
+- `keymap`: replace that context's defaults; `keymap = []` disables them.
+- `append_keymap`: lower-priority additions.
+
+First matching entries win, including prefix conflicts: a prepended sequence
+can take over a default single key. Use `run = "noop"` in a prepended entry to
+disable a particular binding. Browser bindings take precedence over workspace
+bindings in browser context. Browser defaults differ between filesystem and
+diff modes; the same custom `[mgr]` entries apply to both.
+Choose a workspace prefix that does not conflict with browser bindings when
+you want it available there too; the example uses Ctrl+B followed by `t`.
+
+Keys are case-sensitive: `s` and `S` differ. Named keys include `<Enter>`,
+`<Esc>`, `<Space>`, `<Tab>`, arrows, `<Home>`, `<End>`, `<PageUp>`, `<PageDown>`,
+and function keys. Modifiers use `<C-s>` (Ctrl), `<D-s>` (Command/Super),
+`<A-s>` (Alt/Option), `<S-Tab>` (Shift), or combinations such as `<C-S-s>`.
+Escape cancels a pending sequence; the popup has no timeout.
+Escape therefore cannot be used as a continuation key. While typing in editable
+controls, only Ctrl/Command bindings for `document.save`, `files.open`, or `noop`
+are considered; ordinary text and native editing keys remain untouched.
+
+Browser actions: `cursor.up`, `cursor.down`, `parent`, `enter`, `open`, `filter`,
+`search.name`, `search.content`, `view.toggle`, `ignored.toggle`,
+`directory.info`, `sort.reset`, and `sort.FIELD.DIRECTION` where FIELD is
+`name`, `extension`, `mtime`, or `size` and DIRECTION is `asc` or `desc`.
+Diff actions: `diff.previous`, `diff.next`, `diff.view.cycle`, `diff.view.split`,
+`diff.view.stack`, `diff.view.full`, `diff.view.image`, `diff.open`,
+`scroll.up`, and `scroll.down`. Actions unavailable in the current browser
+mode have no effect.
+
+Workspace actions: `help`, `quit`, `files.open`, `document.save`,
+`document.reload`, `path.copy`, `sidebar.toggle`, `git.toggle`, `toc.toggle`,
+`presentation.toggle`, `presentation.raw`, `presentation.rendered`,
+`theme.toggle`, `scroll.up`, `scroll.down`, `document.previous`, and
+`document.next`. `noop` is valid in either context.
+
+Invalid TOML, unknown fields/actions, invalid key notation, or files larger
+than 64 KiB produce a visible warning and retain built-in defaults atomically.
+`run` never executes shell commands or scripts. Reloading configuration requires
+restarting chilla.
 
 ## Architecture
 

@@ -10,7 +10,11 @@ import {
   onMount,
 } from "solid-js";
 import { Portal } from "solid-js/web";
-import { isEditableKeyboardTarget } from "../../lib/keyboard";
+import {
+  KeymapPopup,
+  useKeymapController,
+  type KeymapActions,
+} from "../keymap/KeymapProvider";
 import type {
   DirectoryEntry,
   DirectoryListSort,
@@ -275,60 +279,8 @@ function focusListButton(button: HTMLButtonElement): void {
 }
 
 export function FileBrowserPane(props: FileBrowserPaneProps) {
-  const [isSortPending, setSortPending] = createSignal(false);
-  const sortPopupId = createUniqueId();
-  let sequenceOrigin: EventTarget | null = null;
-  const sortChoices: readonly {
-    readonly key: string;
-    readonly label: string;
-    readonly sort: DirectoryListSort;
-  }[] = [
-    {
-      key: "a",
-      label: "Name ascending",
-      sort: { field: "name", direction: "asc" },
-    },
-    {
-      key: "A",
-      label: "Name descending",
-      sort: { field: "name", direction: "desc" },
-    },
-    {
-      key: "e",
-      label: "Extension ascending",
-      sort: { field: "extension", direction: "asc" },
-    },
-    {
-      key: "E",
-      label: "Extension descending",
-      sort: { field: "extension", direction: "desc" },
-    },
-    {
-      key: "m",
-      label: "Modified time ascending",
-      sort: { field: "mtime", direction: "asc" },
-    },
-    {
-      key: "M",
-      label: "Modified time descending",
-      sort: { field: "mtime", direction: "desc" },
-    },
-    {
-      key: "s",
-      label: "Size ascending",
-      sort: { field: "size", direction: "asc" },
-    },
-    {
-      key: "S",
-      label: "Size descending",
-      sort: { field: "size", direction: "desc" },
-    },
-    {
-      key: "0",
-      label: "Default (name ascending)",
-      sort: DEFAULT_FILE_TREE_SORT,
-    },
-  ];
+  const { controller: keymap, standalone: standaloneKeymap } =
+    useKeymapController();
   let entriesViewportEl: HTMLDivElement | undefined;
   let listEl: HTMLUListElement | undefined;
   let directoryInformationDialogEl: HTMLElement | undefined;
@@ -382,19 +334,6 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
     setViewMode(mode);
     props.onChangeViewMode?.(mode);
   };
-  createEffect(
-    on(
-      () =>
-        [
-          props.active,
-          props.directory?.current_directory_path,
-          props.listingKind,
-          props.viewMode ?? viewMode(),
-          searchKind(),
-        ] as const,
-      () => setSortPending(false),
-    ),
-  );
   const tree = createDirectoryTree({
     root: () => props.directory?.current_directory_path ?? null,
     enabled: () => isTree() && searchKind() === null,
@@ -588,19 +527,6 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
     );
   };
 
-  const applySort = (
-    event: KeyboardEvent,
-    nextSort: DirectoryListSort,
-  ): boolean => {
-    if (!isFileBrowserShortcutTarget(event.target)) {
-      return false;
-    }
-
-    event.preventDefault();
-    props.onChangeSort(nextSort);
-    return true;
-  };
-
   const requestMoreEntriesIfNeeded = (): void => {
     if (
       searchKind() !== null ||
@@ -742,301 +668,165 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
     ),
   );
 
-  onMount(() => {
-    const resetSequenceOnBlur = (): void => {
-      setSortPending(false);
-    };
-    const resetSequenceOnFocus = (event: FocusEvent): void => {
-      if (event.target !== sequenceOrigin) setSortPending(false);
-    };
-    const handleBrowserSequence = (event: KeyboardEvent): void => {
-      if (!props.active || isDirectoryInformationOpen()) {
-        setSortPending(false);
-        return;
-      }
-      if (
-        isEditableKeyboardTarget(event.target) ||
-        event.isComposing ||
-        event.repeat ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.altKey
-      ) {
-        setSortPending(false);
-        return;
-      }
-      if (isSortPending() && event.key === "Shift") return;
-      if (!isFileBrowserShortcutTarget(event.target)) {
-        setSortPending(false);
-        return;
-      }
-      const consume = (): void => {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      };
-      if (isSortPending()) {
-        consume();
-        setSortPending(false);
-        const choice = sortChoices.find((choice) => choice.key === event.key);
-        if (choice !== undefined) props.onChangeSort(choice.sort);
-        return;
-      }
-      if (event.key === "," && !event.shiftKey && searchKind() === null) {
-        consume();
-        sequenceOrigin = event.target;
-        setSortPending(true);
-        return;
-      }
-      if (event.key === "f" && !event.shiftKey) {
-        consume();
-        revealFilter();
-        return;
-      }
-      if (
-        ((event.key === "s" && !event.shiftKey) || event.key === "S") &&
-        props.listingKind === "directory"
-      ) {
-        const kind = event.key === "s" ? "name" : "content";
-        const trigger = paneBody?.querySelector<HTMLButtonElement>(
-          kind === "name"
-            ? '[aria-label="Find files"]'
-            : '[aria-label="Search file contents"]',
-        );
-        if (trigger !== null && trigger !== undefined && !trigger.disabled) {
-          consume();
-          openSearch(kind, trigger);
+  const selectedEntry = (): DirectoryEntry | undefined =>
+    filteredEntries().find((entry) => entry.path === props.selectedPath) ??
+    filteredEntries()[0];
+  const moveBrowserCursor = (delta: -1 | 1): void => {
+    const entries = filteredEntries();
+    const index = entries.findIndex(
+      (entry) => entry.path === props.selectedPath,
+    );
+    const nextIndex =
+      index < 0 ? 0 : Math.max(0, Math.min(entries.length - 1, index + delta));
+    const entry = entries[nextIndex];
+    if (entry !== undefined) {
+      props.onSelectEntry(entry);
+      if (!isTree() && nextIndex >= entries.length - 20) props.onLoadMore();
+    }
+  };
+  const openBrowserSelection = (enter: boolean, event: KeyboardEvent): void => {
+    const focusedPath =
+      event.target instanceof Element
+        ? event.target
+            .closest(".file-browser__button")
+            ?.getAttribute("data-path")
+        : null;
+    const entry =
+      filteredEntries().find((candidate) => candidate.path === focusedPath) ??
+      selectedEntry();
+    if (entry === undefined) return;
+    if (
+      enter &&
+      isTree() &&
+      entry.is_directory &&
+      tree.expanded().has(entry.path)
+    ) {
+      const child = tree.rows().find((row) => row.parent === entry.path);
+      if (child !== undefined) props.onSelectEntry(child.entry);
+    } else confirmEntry(entry, { immediatePreview: true, playVideo: true });
+  };
+  const actions: KeymapActions = {
+    "cursor.down": () => moveBrowserCursor(1),
+    "cursor.up": () => moveBrowserCursor(-1),
+    parent: () => {
+      if (isTree()) {
+        const row = treeRowsByPath().get(props.selectedPath ?? "");
+        if (row?.entry.is_directory && tree.expanded().has(row.entry.path))
+          tree.toggle(row.entry.path);
+        else {
+          const parent = treeRowsByPath().get(row?.parent ?? "");
+          if (parent !== undefined) props.onSelectEntry(parent.entry);
         }
-      }
-    };
-    window.addEventListener("keydown", handleBrowserSequence, true);
-    window.addEventListener("focusin", resetSequenceOnFocus);
-    window.addEventListener("blur", resetSequenceOnBlur);
-    onCleanup(() => {
-      window.removeEventListener("keydown", handleBrowserSequence, true);
-      window.removeEventListener("focusin", resetSequenceOnFocus);
-      window.removeEventListener("blur", resetSequenceOnBlur);
-    });
+      } else if (props.listingKind === "directory") props.onNavigateToParent();
+    },
+    enter: (event) => openBrowserSelection(true, event),
+    open: (event) => openBrowserSelection(false, event),
+    filter: revealFilter,
+    "view.toggle": () => {
+      if (props.listingKind === "directory")
+        changeViewMode(isTree() ? "list" : "tree");
+    },
+    "ignored.toggle": () => {
+      if (props.listingKind === "directory") props.onToggleGitIgnored();
+    },
+    "directory.info": () => {
+      if (currentDirectoryPath() !== null) openDirectoryInformation();
+    },
+    "search.name": () => {
+      const trigger = paneBody?.querySelector<HTMLButtonElement>(
+        '[aria-label="Find files"]',
+      );
+      if (trigger != null && !trigger.disabled) openSearch("name", trigger);
+    },
+    "search.content": () => {
+      const trigger = paneBody?.querySelector<HTMLButtonElement>(
+        '[aria-label="Search file contents"]',
+      );
+      if (trigger != null && !trigger.disabled) openSearch("content", trigger);
+    },
+    "sort.reset": () => props.onChangeSort(DEFAULT_FILE_TREE_SORT),
+  };
+  for (const field of ["name", "extension", "mtime", "size"] as const)
+    for (const direction of ["asc", "desc"] as const)
+      actions[`sort.${field}.${direction}`] = () =>
+        props.onChangeSort({ field, direction });
+  keymap.register({
+    context: "file",
+    enabled: () =>
+      props.active && !isDirectoryInformationOpen() && searchKind() === null,
+    identity: () =>
+      `${props.listingKind}:${props.directory?.current_directory_path ?? ""}:${props.viewMode ?? viewMode()}`,
+    accepts: (event, action) => {
+      if (
+        action === "open" &&
+        event.key === " " &&
+        !(
+          event.target instanceof Element &&
+          event.target.closest(".file-browser__button") !== null
+        )
+      )
+        return false;
+      if (
+        props.listingKind !== "directory" &&
+        [
+          "view.toggle",
+          "ignored.toggle",
+          "directory.info",
+          "search.name",
+          "search.content",
+        ].includes(action)
+      )
+        return false;
+      if (
+        (action.startsWith("sort.") ||
+          action.startsWith("search.") ||
+          action === "directory.info" ||
+          action === "ignored.toggle") &&
+        !isFileBrowserShortcutTarget(event.target)
+      )
+        return false;
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          ".file-browser__toolbar, .file-browser__status",
+        ) !== null &&
+        ["Enter", " ", "Tab"].includes(event.key)
+      )
+        return false;
+      return true;
+    },
+    actions,
+  });
+  const keyHint = (action: keyof KeymapActions): string =>
+    keymap
+      .keymap()
+      .file.filter((binding) => binding.actions.includes(action))
+      .map((binding) => binding.keys.join(" then "))
+      .join(" or ");
+  onMount(() => {
     const keepDirectoryInformationFocusInside = (event: FocusEvent): void => {
       const dialog = directoryInformationDialogEl;
       if (
-        !isDirectoryInformationOpen() ||
-        dialog === undefined ||
-        (event.target instanceof Node && dialog.contains(event.target))
-      ) {
-        return;
-      }
-
-      dialog.focus({ preventScroll: true });
+        isDirectoryInformationOpen() &&
+        dialog !== undefined &&
+        !(event.target instanceof Node && dialog.contains(event.target))
+      )
+        dialog.focus({ preventScroll: true });
     };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!props.active) {
-        return;
-      }
-
+    const closeDialog = (event: KeyboardEvent): void => {
       if (isDirectoryInformationOpen() && event.key === "Escape") {
         event.preventDefault();
         closeDirectoryInformation();
-        return;
-      }
-
-      if (isDirectoryInformationOpen()) {
-        return;
-      }
-
-      if (isEditableKeyboardTarget(event.target)) {
-        return;
-      }
-      if (
-        event.key === "/" &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        !event.repeat &&
-        !event.isComposing
-      ) {
-        event.preventDefault();
-        revealFilter();
-        return;
-      }
-      if (
-        event.key === "." &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        !event.repeat &&
-        !event.isComposing &&
-        props.listingKind === "directory" &&
-        isFileBrowserShortcutTarget(event.target)
-      ) {
-        event.preventDefault();
-        props.onToggleGitIgnored();
-        return;
-      }
-      if (
-        event.key === "t" &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        !event.repeat &&
-        !event.isComposing &&
-        props.listingKind === "directory"
-      ) {
-        event.preventDefault();
-        changeViewMode(isTree() ? "list" : "tree");
-        return;
-      }
-      if (
-        event.target instanceof HTMLElement &&
-        event.target.closest(
-          ".file-browser__toolbar, .file-browser__status",
-        ) !== null
-      )
-        return;
-
-      if (searchKind() !== null) return;
-
-      if (
-        event.key === "Tab" &&
-        currentDirectoryPath() !== null &&
-        isFileBrowserShortcutTarget(event.target)
-      ) {
-        event.preventDefault();
-        openDirectoryInformation();
-        return;
-      }
-
-      if (
-        event.key === "0" &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        !event.repeat &&
-        !event.isComposing
-      ) {
-        if (applySort(event, DEFAULT_FILE_TREE_SORT)) {
-          return;
-        }
-      }
-
-      const key = event.key.toLowerCase();
-
-      if (key === "h" || event.key === "ArrowLeft") {
-        event.preventDefault();
-
-        if (isTree()) {
-          const row = tree
-            .rows()
-            .find((row) => row.entry.path === props.selectedPath);
-          if (row?.entry.is_directory && tree.expanded().has(row.entry.path))
-            tree.toggle(row.entry.path);
-          else {
-            const parent = tree
-              .rows()
-              .find((candidate) => candidate.entry.path === row?.parent);
-            if (parent !== undefined) props.onSelectEntry(parent.entry);
-          }
-          return;
-        }
-
-        if (props.listingKind === "explicit_file_set") {
-          return;
-        }
-
-        props.onNavigateToParent();
-        return;
-      }
-
-      const entries = filteredEntries();
-
-      if (entries.length === 0) {
-        return;
-      }
-
-      const selectedIndex = entries.findIndex(
-        (entry) => entry.path === props.selectedPath,
-      );
-      const currentIndex = selectedIndex === -1 ? 0 : selectedIndex;
-      const selectedEntry = entries[currentIndex];
-
-      const moveSelection = (nextIndex: number) => {
-        const nextEntry = entries[nextIndex];
-
-        if (nextEntry !== undefined) {
-          event.preventDefault();
-          props.onSelectEntry(nextEntry);
-          if (!isTree() && nextIndex >= entries.length - 20) {
-            props.onLoadMore();
-          }
-        }
-      };
-
-      if (key === "j" || event.key === "ArrowDown") {
-        moveSelection(
-          selectedIndex === -1
-            ? 0
-            : Math.min(entries.length - 1, currentIndex + 1),
-        );
-        return;
-      }
-
-      if (key === "k" || event.key === "ArrowUp") {
-        moveSelection(selectedIndex === -1 ? 0 : Math.max(0, currentIndex - 1));
-        return;
-      }
-
-      if (event.key === " " || event.code === "Space") {
-        if (selectedEntry !== undefined && !selectedEntry.is_directory) {
-          event.preventDefault();
-          props.onConfirmEntry(selectedEntry, {
-            immediatePreview: true,
-            playVideo: true,
-          });
-        }
-        return;
-      }
-
-      if (
-        key === "l" ||
-        event.key === "ArrowRight" ||
-        event.key === "Enter" ||
-        isModifierM(event)
-      ) {
-        if (selectedEntry !== undefined) {
-          event.preventDefault();
-          if (
-            isTree() &&
-            selectedEntry.is_directory &&
-            tree.expanded().has(selectedEntry.path) &&
-            (event.key === "ArrowRight" || key === "l")
-          ) {
-            const child = tree
-              .rows()
-              .find((row) => row.parent === selectedEntry.path);
-            if (child !== undefined) props.onSelectEntry(child.entry);
-            return;
-          }
-          confirmEntry(selectedEntry, {
-            immediatePreview: true,
-            playVideo: true,
-          });
-        }
       }
     };
-
-    window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("focusin", keepDirectoryInformationFocusInside);
-
+    window.addEventListener("keydown", closeDialog);
     onCleanup(() => {
-      window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener(
         "focusin",
         keepDirectoryInformationFocusInside,
       );
+      window.removeEventListener("keydown", closeDialog);
     });
   });
 
@@ -1059,31 +849,8 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
         }}
       >
         <div class="file-browser__toolbar">
-          <Show when={isSortPending()}>
-            <section
-              id={sortPopupId}
-              class="file-browser__sequence-popup"
-              aria-label="Sort shortcuts"
-            >
-              <p class="file-browser__sequence-title" role="status">
-                Sort: choose the next key
-              </p>
-              <dl class="file-browser__sequence-options">
-                <For each={sortChoices}>
-                  {(choice) => (
-                    <div class="file-browser__sequence-option">
-                      <dt class="file-browser__sequence-key">
-                        <kbd>{choice.key}</kbd>
-                      </dt>
-                      <dd class="file-browser__sequence-action">
-                        {choice.label}
-                      </dd>
-                    </div>
-                  )}
-                </For>
-              </dl>
-              <p class="file-browser__sequence-hint">Escape cancels</p>
-            </section>
+          <Show when={standaloneKeymap}>
+            <KeymapPopup controller={keymap} />
           </Show>
           <Show when={props.listingKind === "directory"}>
             <div
@@ -1095,7 +862,11 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
                 type="button"
                 class="file-browser__view-option"
                 aria-label="List"
-                title="List view (t toggles)"
+                title={
+                  keyHint("view.toggle")
+                    ? `List view (${keyHint("view.toggle")} toggles)`
+                    : "List view"
+                }
                 aria-pressed={!isTree()}
                 onClick={() => changeViewMode("list")}
               >
@@ -1105,7 +876,11 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
                 type="button"
                 class="file-browser__view-option"
                 aria-label="Tree"
-                title="Tree view (t toggles)"
+                title={
+                  keyHint("view.toggle")
+                    ? `Tree view (${keyHint("view.toggle")} toggles)`
+                    : "Tree view"
+                }
                 aria-pressed={isTree()}
                 onClick={() => changeViewMode("tree")}
               >
@@ -1118,7 +893,11 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
               type="button"
               class="file-browser__filter-toggle file-browser__icon-button"
               aria-label="Show filter"
-              title="Show and focus filter (f or /)"
+              title={
+                keyHint("filter")
+                  ? `Show and focus filter (${keyHint("filter")})`
+                  : "Show and focus filter"
+              }
               aria-expanded={showFilter() && searchKind() === null}
               aria-controls={
                 showFilter() && searchKind() === null
@@ -1138,7 +917,11 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
                 class="file-browser__icon-button"
                 aria-label="Search file contents"
                 disabled={props.directory === null}
-                title="Search file contents in this directory and subdirectories (S)"
+                title={
+                  keyHint("search.content")
+                    ? `Search file contents (${keyHint("search.content")})`
+                    : "Search file contents"
+                }
                 aria-pressed={searchKind() === "content"}
                 onClick={(event) => openSearch("content", event.currentTarget)}
               >
@@ -1149,7 +932,11 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
                 class="file-browser__icon-button"
                 aria-label="Find files"
                 disabled={props.directory === null}
-                title="Find filenames in this directory and subdirectories (s)"
+                title={
+                  keyHint("search.name")
+                    ? `Find files (${keyHint("search.name")})`
+                    : "Find files"
+                }
                 aria-pressed={searchKind() === "name"}
                 onClick={(event) => openSearch("name", event.currentTarget)}
               >
@@ -1158,17 +945,9 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
               <button
                 type="button"
                 class={`file-browser__icon-button file-browser__git-ignored-toggle${props.hideGitIgnored ? " file-browser__git-ignored-toggle--active" : ""}`}
-                aria-label={
-                  props.hideGitIgnored
-                    ? "Git-ignored entries are hidden. Show Git-ignored entries (.)"
-                    : "Git-ignored entries are visible. Hide Git-ignored entries (.)"
-                }
+                aria-label={`${props.hideGitIgnored ? "Git-ignored entries are hidden. Show Git-ignored entries" : "Git-ignored entries are visible. Hide Git-ignored entries"}${keyHint("ignored.toggle") ? ` (${keyHint("ignored.toggle")})` : ""}`}
                 aria-pressed={props.hideGitIgnored}
-                title={
-                  props.hideGitIgnored
-                    ? "Git-ignored entries are hidden. Show them (.)"
-                    : "Git-ignored entries are visible. Hide them (.)"
-                }
+                title={`${props.hideGitIgnored ? "Git-ignored entries are hidden. Show them" : "Git-ignored entries are visible. Hide them"}${keyHint("ignored.toggle") ? ` (${keyHint("ignored.toggle")})` : ""}`}
                 onClick={props.onToggleGitIgnored}
               >
                 <GitIgnoredVisibilityGlyph />
@@ -1228,7 +1007,7 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
               aria-label="Filter files"
               inputMode="search"
               placeholder={filterPlaceholder()}
-              title="Show filter: f or /   First row: Enter or Ctrl+M   Clear filter & first row: Esc   Sort: comma then a/A, e/E, m/M or s/S"
+              title="Enter or Ctrl+M selects the first row; Escape clears and closes filtering"
               autocomplete="off"
               spellcheck={false}
               value={props.query}
@@ -1408,19 +1187,8 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
                             confirmEntry(entry);
                           }}
                           onKeyDown={(event) => {
-                            if (
-                              event.key === " " ||
-                              event.code === "Space" ||
-                              event.key === "Enter" ||
-                              isModifierM(event)
-                            ) {
+                            if (event.key === "Enter" || event.key === " ")
                               event.preventDefault();
-                              event.stopPropagation();
-                              confirmEntry(entry, {
-                                immediatePreview: true,
-                                playVideo: true,
-                              });
-                            }
                           }}
                         >
                           <Show when={isTree()}>

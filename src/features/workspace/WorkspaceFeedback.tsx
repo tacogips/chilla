@@ -1,4 +1,4 @@
-import { Show } from "solid-js";
+import { createEffect, createSignal, onCleanup, Show, untrack } from "solid-js";
 import type {
   DocumentSnapshot,
   StartupContext,
@@ -9,9 +9,83 @@ interface WorkspaceErrorBannerProps {
 }
 
 export function WorkspaceErrorBanner(props: WorkspaceErrorBannerProps) {
+  const [visible, setVisible] = createSignal(false);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let remaining = 8_000;
+  let started = 0;
+  let hovered = false;
+  let focused = false;
+  const clearTimer = (): void => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
+  const resume = (): void => {
+    if (hovered || focused || !visible() || timer !== undefined) return;
+    started = Date.now();
+    timer = setTimeout(() => {
+      timer = undefined;
+      setVisible(false);
+    }, remaining);
+  };
+  const pause = (): void => {
+    if (timer !== undefined)
+      remaining = Math.max(0, remaining - (Date.now() - started));
+    clearTimer();
+  };
+  createEffect(() => {
+    const message = props.message;
+    clearTimer();
+    remaining = 8_000;
+    setVisible(message !== null);
+    if (message === null) {
+      hovered = false;
+      focused = false;
+    }
+    untrack(resume);
+  });
+  onCleanup(clearTimer);
   return (
-    <Show when={props.message !== null}>
-      <div class="banner banner--error">{props.message}</div>
+    <Show when={visible()}>
+      <div
+        class="workspace-notification"
+        role="alert"
+        onMouseEnter={() => {
+          hovered = true;
+          pause();
+        }}
+        onMouseLeave={() => {
+          hovered = false;
+          resume();
+        }}
+        onFocusIn={() => {
+          focused = true;
+          pause();
+        }}
+        onFocusOut={(event) => {
+          if (
+            event.relatedTarget instanceof Node &&
+            event.currentTarget.contains(event.relatedTarget)
+          )
+            return;
+          focused = false;
+          resume();
+        }}
+      >
+        <span>{props.message}</span>
+        <button
+          type="button"
+          class="workspace-notification__close"
+          aria-label="Close notification"
+          onClick={() => {
+            clearTimer();
+            hovered = false;
+            focused = false;
+            setVisible(false);
+          }}
+        >
+          Close
+        </button>
+      </div>
     </Show>
   );
 }

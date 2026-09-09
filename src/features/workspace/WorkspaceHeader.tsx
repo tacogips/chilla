@@ -1,4 +1,6 @@
-import { Show } from "solid-js";
+import { Show, useContext } from "solid-js";
+import { KeymapContextProvider } from "../keymap/KeymapProvider";
+import type { KeymapAction } from "../keymap/keymap";
 import type {
   DocumentPresentationMode,
   FilePreview,
@@ -49,6 +51,50 @@ interface WorkspaceHeaderProps {
 }
 
 export function WorkspaceHeader(props: WorkspaceHeaderProps) {
+  const keymap = useContext(KeymapContextProvider);
+  const label = (action: KeymapAction, fallback: string): string => {
+    if (keymap === undefined) return fallback;
+    const display = (key: string) =>
+      /^[A-Z]$/.test(key)
+        ? `Shift+${key}`
+        : key
+            .replace(/^<C-/, "Ctrl+")
+            .replace(/^<D-/, "Cmd+")
+            .replace(/^<S-/, "Shift+")
+            .replace(/>$/, "")
+            .replace(
+              /\+([a-z])$/,
+              (_, letter: string) => `+${letter.toUpperCase()}`,
+            );
+    return keymap
+      .keymap()
+      .workspace.filter((binding) => binding.actions.includes(action))
+      .map((binding) => binding.keys.map(display).join(" then "))
+      .join(" / ");
+  };
+  const title = (
+    base: string,
+    action: KeymapAction,
+    fallback: string,
+  ): string => {
+    const keys = label(action, fallback);
+    return keys === "" ? base : `${base} (${keys})`;
+  };
+  const presentationTitle = (
+    base: string,
+    action: "presentation.raw" | "presentation.rendered",
+    fallback: string,
+  ): string => {
+    const primary = label(action, fallback);
+    const toggle = label(
+      "presentation.toggle",
+      SHORTCUT_LABELS.toggleMarkdownPane,
+    );
+    const keys = [primary, toggle === "" ? "" : `${toggle} toggles`]
+      .filter(Boolean)
+      .join("; ");
+    return keys === "" ? base : `${base} (${keys})`;
+  };
   return (
     <header class="workspace__header" data-tauri-drag-region="">
       <div class="workspace__actions" data-tauri-drag-region="false">
@@ -64,7 +110,11 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
               }`}
               type="button"
               aria-label="Raw Markdown source"
-              title={`Raw source (${SHORTCUT_LABELS.rawView}; ${SHORTCUT_LABELS.toggleMarkdownPane} toggles)`}
+              title={presentationTitle(
+                "Raw source",
+                "presentation.raw",
+                SHORTCUT_LABELS.rawView,
+              )}
               onClick={() => props.onSelectMarkdownPane("raw")}
             >
               <RawSourceGlyph />
@@ -77,7 +127,11 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
               }`}
               type="button"
               aria-label="Markdown preview"
-              title={`Preview (${SHORTCUT_LABELS.secondaryView}; ${SHORTCUT_LABELS.toggleMarkdownPane} toggles)`}
+              title={presentationTitle(
+                "Preview",
+                "presentation.rendered",
+                SHORTCUT_LABELS.secondaryView,
+              )}
               onClick={() => props.onSelectMarkdownPane("preview")}
             >
               <PreviewGlyph />
@@ -102,7 +156,11 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
                   }`}
                   type="button"
                   aria-label="Raw CSV source"
-                  title={`Raw (${SHORTCUT_LABELS.rawView}; ${SHORTCUT_LABELS.toggleMarkdownPane} toggles)`}
+                  title={presentationTitle(
+                    "Raw",
+                    "presentation.raw",
+                    SHORTCUT_LABELS.rawView,
+                  )}
                   onClick={() => props.onSelectCsvPaneMode("raw")}
                 >
                   <RawSourceGlyph />
@@ -116,7 +174,11 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
                   type="button"
                   disabled={!csvRow.formatted_available}
                   aria-label="Formatted CSV table"
-                  title={`Formatted (${SHORTCUT_LABELS.secondaryView}; ${SHORTCUT_LABELS.toggleMarkdownPane} toggles)`}
+                  title={presentationTitle(
+                    "Formatted",
+                    "presentation.rendered",
+                    SHORTCUT_LABELS.secondaryView,
+                  )}
                   onClick={() => props.onSelectCsvPaneMode("formatted")}
                 >
                   <PreviewGlyph />
@@ -157,7 +219,7 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
           class="button"
           type="button"
           aria-label="Open one or more files"
-          title={`Open files (${SHORTCUT_LABELS.openFiles})`}
+          title={title("Open files", "files.open", SHORTCUT_LABELS.openFiles)}
           onClick={props.onOpenFiles}
         >
           Open files
@@ -170,7 +232,7 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
             }`}
             type="button"
             aria-label="Toggle table of contents"
-            title={`Toggle TOC (${SHORTCUT_LABELS.toggleToc})`}
+            title={title("Toggle TOC", "toc.toggle", SHORTCUT_LABELS.toggleToc)}
             onClick={props.onToggleToc}
           >
             <TocGlyph />
@@ -182,7 +244,11 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
           type="button"
           disabled={!props.canReloadCurrent}
           aria-label="Refresh workspace"
-          title={`Refresh workspace (${SHORTCUT_LABELS.reload})`}
+          title={title(
+            "Refresh workspace",
+            "document.reload",
+            SHORTCUT_LABELS.reload,
+          )}
           onClick={props.onReloadCurrent}
         >
           <ReloadGlyph />
@@ -198,8 +264,12 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
           }
           title={
             props.colorScheme === "dark"
-              ? `Light theme (${SHORTCUT_LABELS.toggleTheme})`
-              : `Dark theme (${SHORTCUT_LABELS.toggleTheme})`
+              ? title(
+                  "Light theme",
+                  "theme.toggle",
+                  SHORTCUT_LABELS.toggleTheme,
+                )
+              : title("Dark theme", "theme.toggle", SHORTCUT_LABELS.toggleTheme)
           }
           onClick={props.onCycleColorScheme}
         >

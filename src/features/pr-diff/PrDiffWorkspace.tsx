@@ -7,9 +7,12 @@ import {
   createUniqueId,
   onCleanup,
   onMount,
+  batch,
 } from "solid-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { isEditableKeyboardTarget } from "../../lib/keyboard";
+import { Portal } from "solid-js/web";
+import { WorkspaceErrorBanner } from "../workspace/WorkspaceFeedback";
+import { KeymapPopup, useKeymapController } from "../keymap/KeymapProvider";
 import { PaneResizeHandle } from "../file-view/PaneResizeHandle";
 import {
   BrowserListGlyph,
@@ -56,6 +59,7 @@ export { buildDirectoryEntries } from "./prDiffBrowserEntries";
 type DiffViewMode = "left_right" | "full_file" | "stack" | "image";
 interface PrDiffWorkspaceProps {
   readonly target: DiffWorkspaceTarget;
+  readonly onReloadReady?: (reload: (() => Promise<void>) | null) => void;
 }
 
 interface LazyFileTextState {
@@ -88,18 +92,6 @@ type FullFileRow =
       readonly position: number;
       readonly deletedCount: number;
     };
-
-function matchesCtrlShortcut(event: KeyboardEvent, key: "d" | "u"): boolean {
-  const shortcutCode = `Key${key.toUpperCase()}`;
-
-  return (
-    (event.key.toLowerCase() === key || event.code === shortcutCode) &&
-    event.ctrlKey &&
-    !event.metaKey &&
-    !event.altKey &&
-    !event.shiftKey
-  );
-}
 
 function scrollDiffPane(
   body: HTMLElement | undefined,
@@ -913,6 +905,15 @@ function LeftRightDiffHunk(props: {
 }
 
 export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
+  const [notificationMount, setNotificationMount] =
+    createSignal<HTMLElement | null>(null);
+  onMount(() =>
+    setNotificationMount(
+      document.getElementById("workspace-notifications") ?? document.body,
+    ),
+  );
+  const { controller: keymap, standalone: standaloneKeymap } =
+    useKeymapController();
   let browserPane: HTMLElement | undefined;
   let focusedBrowserRow: HTMLButtonElement | undefined;
   let filterInput: HTMLInputElement | undefined;
@@ -921,7 +922,9 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
   let diffFileView: HTMLDivElement | undefined;
   const [snapshot, setSnapshot] = createSignal<PrDiffSnapshot | null>(null);
   const [isLoading, setLoading] = createSignal(true);
-  const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
+  const [errorMessage, setErrorMessage] = createSignal<string | null>(null, {
+    equals: false,
+  });
   const [currentDir, setCurrentDir] = createSignal("");
   const [browserView, setBrowserView] = createSignal<"list" | "tree">("tree");
   const [expandedPaths, setExpandedPaths] = createSignal<ReadonlySet<string>>(
@@ -1024,31 +1027,59 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
     }`;
   });
 
-  const load = async () => {
+  let loadGeneration = 0;
+  let disposed = false;
+  const load = async (force = false): Promise<void> => {
+    const generation = ++loadGeneration;
     setLoading(true);
     setErrorMessage(null);
     try {
       const nextSnapshot =
         props.target.kind === "github"
-          ? await loadPrDiff(props.target.target)
+          ? await loadPrDiff(
+              force
+                ? { ...props.target.target, use_cache: false }
+                : props.target.target,
+            )
           : await loadGitDiff(props.target.target);
-      setSnapshot(nextSnapshot);
+      if (disposed || generation !== loadGeneration) return;
       const nextFiles = [...nextSnapshot.files].sort((left, right) =>
         left.path.localeCompare(right.path),
       );
-      const initialEntries = buildDirectoryEntries(nextFiles, "", "");
-      setCurrentDir("");
-      setExpandedPaths(new Set<string>());
-      setQuery("");
-      setCursorPath(initialEntries[0]?.path ?? null);
-      setSelectedPath(null);
-      setLazyFileText({});
+      const directories = new Set<string>([""]);
+      for (const file of nextFiles) {
+        let slash = file.path.indexOf("/");
+        while (slash !== -1) {
+          directories.add(file.path.slice(0, slash));
+          slash = file.path.indexOf("/", slash + 1);
+        }
+      }
+      batch(() => {
+        const nextDir = directories.has(currentDir()) ? currentDir() : "";
+        setCurrentDir(nextDir);
+        setExpandedPaths(
+          (previous) =>
+            new Set([...previous].filter((path) => directories.has(path))),
+        );
+        if (!nextFiles.some((file) => file.path === selectedPath()))
+          setSelectedPath(null);
+        const nextEntries = buildDirectoryEntries(nextFiles, nextDir, query());
+        if (
+          !nextFiles.some((file) => file.path === cursorPath()) &&
+          !directories.has(cursorPath() ?? "!")
+        )
+          setCursorPath(nextEntries[0]?.path ?? null);
+        setLazyFileText({});
+        setSnapshot(nextSnapshot);
+      });
     } catch (error: unknown) {
+      if (disposed || generation !== loadGeneration) return;
+      setLazyFileText({});
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to load diff",
       );
     } finally {
-      setLoading(false);
+      if (!disposed && generation === loadGeneration) setLoading(false);
     }
   };
 
@@ -1079,6 +1110,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
     }
 
     const request = fetchFullFileText(file);
+    const generation = loadGeneration;
     if (request === null) {
       return;
     }
@@ -1094,6 +1126,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
 
     void request
       .then((text) => {
+        if (disposed || generation !== loadGeneration) return;
         setLazyFileText((state) => ({
           ...state,
           [file.path]: {
@@ -1104,6 +1137,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
         }));
       })
       .catch((error: unknown) => {
+        if (disposed || generation !== loadGeneration) return;
         setLazyFileText((state) => ({
           ...state,
           [file.path]: {
@@ -1120,7 +1154,11 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
 
   createEffect(() => {
     const file = selectedFile();
-    if ((mode() === "full_file" || mode() === "image") && file !== null) {
+    if (
+      !isLoading() &&
+      (mode() === "full_file" || mode() === "image") &&
+      file !== null
+    ) {
       ensureFullFileText(file);
     }
   });
@@ -1320,177 +1358,95 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
     });
   });
 
-  onMount(() => {
-    void load();
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (isEditableKeyboardTarget(event.target)) {
-        return;
-      }
-      if (
-        (event.key === "/" || event.key === "f") &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        !event.repeat &&
-        !event.isComposing
-      ) {
-        event.preventDefault();
-        revealFilter();
-        return;
-      }
-      if (
-        event.key === "t" &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        !event.repeat &&
-        !event.isComposing
-      ) {
-        event.preventDefault();
-        changeBrowserView(browserView() === "tree" ? "list" : "tree");
-        return;
-      }
-      if (
+  const activateBrowserEntry = (enter: boolean): void => {
+    const entry =
+      entries().find((candidate) => candidate.path === cursorPath()) ??
+      entries()[0];
+    if (entry === undefined) return;
+    if (
+      enter &&
+      browserView() === "tree" &&
+      entry.kind === "directory" &&
+      isExpanded(entry.path)
+    ) {
+      const index = entries().findIndex(
+        (candidate) => candidate.path === entry.path,
+      );
+      const child = entries()[index + 1];
+      if (child !== undefined && child.depth > entry.depth) focusEntry(child);
+    } else selectEntry(entry);
+  };
+  keymap.register({
+    context: "diff",
+    enabled: () => true,
+    identity: () => `${currentDir()}:${browserView()}`,
+    accepts: (event) =>
+      !(
         event.target instanceof Element &&
-        event.target.closest(".file-browser__toolbar") !== null
-      )
-        return;
-
-      const key = event.key.toLowerCase();
-      if (matchesCtrlShortcut(event, "d")) {
-        event.preventDefault();
-        scrollDiffPane(diffFileView, 1);
-        return;
-      }
-
-      if (matchesCtrlShortcut(event, "u")) {
-        event.preventDefault();
-        scrollDiffPane(diffFileView, -1);
-        return;
-      }
-
-      if (event.key === "<") {
-        event.preventDefault();
-        navigateFileByPathOrder(-1);
-        return;
-      }
-
-      if (event.key === ">") {
-        event.preventDefault();
-        navigateFileByPathOrder(1);
-        return;
-      }
-
-      if (key === "j" || event.key === "ArrowDown" || event.key === "Down") {
-        event.preventDefault();
-        moveCursor(1);
-        return;
-      }
-
-      if (key === "k" || event.key === "ArrowUp" || event.key === "Up") {
-        event.preventDefault();
-        moveCursor(-1);
-        return;
-      }
-
-      if (key === "h" || event.key === "ArrowLeft" || event.key === "Left") {
-        event.preventDefault();
+        event.target.closest(".file-browser__toolbar") !== null &&
+        ["Enter", " ", "Tab"].includes(event.key)
+      ),
+    actions: {
+      "cursor.up": () => moveCursor(-1),
+      "cursor.down": () => moveCursor(1),
+      parent: () => {
         if (browserView() === "tree") moveTreeLeft();
         else navigateParent();
-        return;
-      }
-
-      if (
-        key === "l" ||
-        event.key === "ArrowRight" ||
-        event.key === "Right" ||
-        event.key === "Enter" ||
-        event.key === "Return"
-      ) {
-        const entry =
-          entries().find((candidate) => candidate.path === cursorPath()) ??
-          entries()[0];
-        if (entry !== undefined) {
-          event.preventDefault();
-          if (
-            browserView() === "tree" &&
-            entry.kind === "directory" &&
-            (key === "l" ||
-              event.key === "ArrowRight" ||
-              event.key === "Right") &&
-            isExpanded(entry.path)
-          ) {
-            const index = entries().findIndex(
-              (candidate) => candidate.path === entry.path,
-            );
-            const child = entries()[index + 1];
-            if (child !== undefined && child.depth > entry.depth)
-              focusEntry(child);
-          } else selectEntry(entry);
-        }
-        return;
-      }
-
-      if (event.key === "Tab") {
-        event.preventDefault();
-        const availableModes: readonly DiffViewMode[] =
+      },
+      enter: () => activateBrowserEntry(true),
+      open: () => activateBrowserEntry(false),
+      filter: revealFilter,
+      "view.toggle": () =>
+        changeBrowserView(browserView() === "tree" ? "list" : "tree"),
+      "scroll.up": () => scrollDiffPane(diffFileView, -1),
+      "scroll.down": () => scrollDiffPane(diffFileView, 1),
+      "diff.previous": () => navigateFileByPathOrder(-1),
+      "diff.next": () => navigateFileByPathOrder(1),
+      "diff.view.split": () => setMode("left_right"),
+      "diff.view.stack": () => setMode("stack"),
+      "diff.view.full": () => setMode("full_file"),
+      "diff.view.image": () => {
+        if (selectedFile() !== null && isSvgPath(selectedFile()?.path ?? ""))
+          setMode("image");
+      },
+      "diff.view.cycle": () => {
+        const available: readonly DiffViewMode[] =
           selectedFile() !== null && isSvgPath(selectedFile()?.path ?? "")
             ? ["left_right", "stack", "full_file", "image"]
             : ["left_right", "stack", "full_file"];
-        setMode((value) => {
-          const currentIndex = availableModes.indexOf(value);
-          return (
-            availableModes[(currentIndex + 1) % availableModes.length] ??
-            "left_right"
-          );
-        });
-        return;
-      }
-
-      if (event.key === "1") {
-        event.preventDefault();
-        setMode("left_right");
-        return;
-      }
-
-      if (event.key === "2") {
-        event.preventDefault();
-        setMode("stack");
-        return;
-      }
-
-      if (event.key === "3") {
-        event.preventDefault();
-        setMode("full_file");
-        return;
-      }
-
-      if (event.key === "4") {
-        if (selectedFile() !== null && isSvgPath(selectedFile()?.path ?? "")) {
-          event.preventDefault();
-          setMode("image");
-        }
-        return;
-      }
-
-      if (key === "o") {
-        if (props.target.kind !== "github") {
-          return;
-        }
-        event.preventDefault();
-        void openUrl(snapshot()?.identity.url ?? props.target.target.url);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
+        setMode(
+          (value) =>
+            available[(available.indexOf(value) + 1) % available.length] ??
+            "left_right",
+        );
+      },
+      "diff.open": () => {
+        if (props.target.kind === "github")
+          void openUrl(snapshot()?.identity.url ?? props.target.target.url);
+      },
+    },
+  });
+  const keyHint = (action: import("../keymap/keymap").KeymapAction): string =>
+    keymap
+      .keymap()
+      .diff.filter((binding) => binding.actions.includes(action))
+      .map((binding) => binding.keys.join(" then "))
+      .join(" or ");
+  onMount(() => {
+    props.onReloadReady?.(() => load(true));
+    void load();
+  });
+  onCleanup(() => {
+    disposed = true;
+    loadGeneration += 1;
+    props.onReloadReady?.(null);
   });
 
   return (
     <div class="pr-workspace" style={prWorkspaceStyle()}>
+      <Show when={standaloneKeymap}>
+        <KeymapPopup controller={keymap} />
+      </Show>
       <aside class="pane pr-browser" ref={browserPane}>
         <header class="pane__header">
           <span class="pane__title">Changed Files</span>
@@ -1506,7 +1462,11 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
               <button
                 type="button"
                 class="file-browser__view-option"
-                title="List view (t toggles)"
+                title={
+                  keyHint("view.toggle")
+                    ? `List view (${keyHint("view.toggle")} toggles)`
+                    : "List view"
+                }
                 aria-label="List"
                 aria-pressed={browserView() === "list"}
                 onClick={() => changeBrowserView("list")}
@@ -1516,7 +1476,11 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
               <button
                 type="button"
                 class="file-browser__view-option"
-                title="Tree view (t toggles)"
+                title={
+                  keyHint("view.toggle")
+                    ? `Tree view (${keyHint("view.toggle")} toggles)`
+                    : "Tree view"
+                }
                 aria-label="Tree"
                 aria-pressed={browserView() === "tree"}
                 onClick={() => changeBrowserView("tree")}
@@ -1529,7 +1493,11 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
                 ref={filterButton}
                 type="button"
                 class="file-browser__filter-toggle file-browser__icon-button"
-                title="Show and focus filter (f or /)"
+                title={
+                  keyHint("filter")
+                    ? `Show and focus filter (${keyHint("filter")})`
+                    : "Show and focus filter"
+                }
                 aria-label="Show filter"
                 aria-expanded={filterVisible()}
                 aria-controls={filterId}
@@ -1570,7 +1538,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
             when={entries().length > 0}
             fallback={
               <Show
-                when={!isLoading()}
+                when={!isLoading() || snapshot() !== null}
                 fallback={<PrDiffLoading compact={true} />}
               >
                 <div class="empty">No changed files here.</div>
@@ -1645,6 +1613,10 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
                       }
                       style={{ "--tree-depth": entry.depth }}
                       onClick={() => selectEntry(entry)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ")
+                          event.preventDefault();
+                      }}
                     >
                       <Show when={browserView() === "tree"}>
                         <span
@@ -1752,7 +1724,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
             <button
               type="button"
               class="workspace__mode"
-              title="Previous file (<)"
+              title={`Previous file${keyHint("diff.previous") ? ` (${keyHint("diff.previous")})` : ""}`}
               aria-label="Previous file"
               disabled={!hasPreviousFile()}
               onClick={() => navigateFileByPathOrder(-1)}
@@ -1762,7 +1734,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
             <button
               type="button"
               class="workspace__mode"
-              title="Next file (>)"
+              title={`Next file${keyHint("diff.next") ? ` (${keyHint("diff.next")})` : ""}`}
               aria-label="Next file"
               disabled={!hasNextFile()}
               onClick={() => navigateFileByPathOrder(1)}
@@ -1828,25 +1800,42 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
             </Show>
           </div>
         </header>
-        <Show when={errorMessage() !== null}>
-          <div class="banner banner--error pr-diff-error">
-            <span>{errorMessage()}</span>
-            <button
-              type="button"
-              class="workspace__text-button"
-              onClick={() => {
-                void load();
-              }}
-            >
-              Retry
-            </button>
-          </div>
+        <Show when={notificationMount()}>
+          {(mount) => (
+            <Portal mount={mount()}>
+              <div
+                class={
+                  mount() !== document.body
+                    ? "workspace-notifications__slot"
+                    : "workspace-notifications"
+                }
+              >
+                <WorkspaceErrorBanner message={errorMessage()} />
+              </div>
+            </Portal>
+          )}
         </Show>
         <Show when={snapshot()?.warnings.length}>
           <div class="banner">{snapshot()?.warnings.join(" | ")}</div>
         </Show>
         <div class="pane__body pr-diff-pane__body">
-          <Show when={!isLoading()} fallback={<PrDiffLoading />}>
+          <Show when={errorMessage() !== null}>
+            <div class="pr-diff-retry">
+              <button
+                type="button"
+                class="workspace__text-button"
+                onClick={() => {
+                  void load(true);
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          </Show>
+          <Show
+            when={!isLoading() || snapshot() !== null}
+            fallback={<PrDiffLoading />}
+          >
             <Show
               when={selectedFile()}
               fallback={<div class="empty">No file selected.</div>}

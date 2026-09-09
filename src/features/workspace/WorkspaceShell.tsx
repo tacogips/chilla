@@ -23,7 +23,6 @@ import {
   type ColorScheme,
 } from "../../lib/theme";
 import { writeTextToClipboard } from "../../lib/clipboard";
-import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import {
   getStartupContext,
   detectGitRepository,
@@ -73,7 +72,11 @@ import {
   seekActiveDocumentMediaElement,
   stepActiveEpubPage,
 } from "./activeDocumentNavigation";
-import { matchesShortcut } from "./workspaceKeyboard";
+import {
+  createKeymapController,
+  KeymapContextProvider,
+  KeymapPopup,
+} from "../keymap/KeymapProvider";
 import {
   type LoadedDirectoryState,
   resolveSelectedPath,
@@ -92,6 +95,7 @@ import { resolveCurrentWindow } from "./workspaceWindow";
 
 type MarkdownPane = "raw" | "preview";
 export function WorkspaceShell() {
+  const keymap = createKeymapController();
   const appWindow = resolveCurrentWindow();
   let directoryRequestId = 0;
   let previewRequestId = 0;
@@ -140,7 +144,9 @@ export function WorkspaceShell() {
     anchorId: null,
     lineStart: null,
   });
-  const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
+  const [errorMessage, setErrorMessage] = createSignal<string | null>(null, {
+    equals: false,
+  });
   const [isLoading, setLoading] = createSignal(true);
   const [colorScheme, setColorScheme] = createSignal<ColorScheme>(
     getColorScheme(),
@@ -714,6 +720,10 @@ export function WorkspaceShell() {
   };
 
   const handleReloadCurrent = async (): Promise<void> => {
+    if (diffTarget() !== null) {
+      await reloadDiff()?.();
+      return;
+    }
     const errors: string[] = [];
     const currentDirectory = directoryState();
     const requestedSelectedPath = selectedBrowserPath();
@@ -1086,7 +1096,13 @@ export function WorkspaceShell() {
     return null;
   });
   const hasOpenDocument = () => md() !== null || fp() !== null;
-  const canReloadCurrent = () => directoryState() !== null || hasOpenDocument();
+  const [reloadDiff, setReloadDiff] = createSignal<
+    (() => Promise<void>) | null
+  >(null);
+  const canReloadCurrent = () =>
+    diffTarget() !== null
+      ? reloadDiff() !== null
+      : directoryState() !== null || hasOpenDocument();
   const hasTocDocument = createMemo(
     () => md() !== null || fp()?.kind === "epub",
   );
@@ -1242,40 +1258,72 @@ export function WorkspaceShell() {
     return className;
   });
 
-  const handleNumericPresentationShortcut = (event: KeyboardEvent): boolean => {
-    if (matchesShortcut(event, "1")) {
-      if (markdownDoc() !== null) {
-        event.preventDefault();
-        setMarkdownPane("raw");
-        return true;
-      }
-
-      if (csvPreview() !== null) {
-        event.preventDefault();
-        setCsvPaneMode("raw");
-        return true;
-      }
-
-      return false;
-    }
-
-    if (matchesShortcut(event, "2")) {
-      if (markdownDoc() !== null) {
-        event.preventDefault();
-        setMarkdownPane("preview");
-        return true;
-      }
-
+  const changePresentation = (rendered: boolean): void => {
+    if (markdownDoc() !== null) setMarkdownPane(rendered ? "preview" : "raw");
+    else {
       const preview = csvPreview();
-      if (preview?.formatted_available === true) {
-        event.preventDefault();
-        setCsvPaneMode("formatted");
-        return true;
-      }
+      if (preview !== null && (!rendered || preview.formatted_available))
+        setCsvPaneMode(rendered ? "formatted" : "raw");
     }
-
-    return false;
   };
+  const scrollDocument = (direction: -1 | 1): void => {
+    if (hasActiveEpubPreview(fp())) stepActiveEpubPage(direction);
+    else if (!hasActiveDocumentMediaElement())
+      scrollActiveDocumentPane(direction);
+  };
+  const stepDocument = (direction: -1 | 1, event: KeyboardEvent): void => {
+    if (isFileTreeOpen()) return;
+    if (hasActiveDocumentMediaElement()) {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp")
+        seekActiveDocumentMediaElement(direction);
+    } else if (hasActiveEpubPreview(fp())) stepActiveEpubPage(direction);
+    else nudgeActiveDocumentPane(direction);
+  };
+  keymap.register({
+    context: "workspace",
+    enabled: () => !isShortcutsHelpOpen(),
+    identity: () =>
+      `${diffTarget()?.kind ?? "workspace"}:${directoryState()?.current_directory_path ?? ""}:${isFileTreeOpen()}:${currentOpenPath() ?? ""}`,
+    accepts: () => true,
+    actions: {
+      help: () => setShortcutsHelpOpen(true),
+      quit: () => {
+        void appWindow?.close().catch(() => {});
+      },
+      "files.open": handleOpenFiles,
+      "document.save": handleSaveMarkdown,
+      "document.reload": () => {
+        if (canReloadCurrent()) return handleReloadCurrent();
+        return undefined;
+      },
+      "path.copy": () => {
+        if (currentSelectedPath() !== null) return handleCopyCurrentPath();
+        return undefined;
+      },
+      "sidebar.toggle": () => setFileTreeOpen((value) => !value),
+      "git.toggle": () => {
+        if (activeGitDiffTarget() !== null) handleCloseGitDiff();
+        else if (diffTarget() === null) return handleOpenGitDiff();
+        return undefined;
+      },
+      "toc.toggle": () => {
+        if (hasTocDocument()) setTocOpen((value) => !value);
+      },
+      "presentation.raw": () => changePresentation(false),
+      "presentation.rendered": () => changePresentation(true),
+      "presentation.toggle": () => {
+        if (markdownDoc() !== null)
+          setMarkdownPane((value) => (value === "raw" ? "preview" : "raw"));
+        else if (csvPreview()?.formatted_available)
+          setCsvPaneMode((value) => (value === "raw" ? "formatted" : "raw"));
+      },
+      "theme.toggle": cycleColorScheme,
+      "scroll.up": () => scrollDocument(-1),
+      "scroll.down": () => scrollDocument(1),
+      "document.previous": (event) => stepDocument(-1, event),
+      "document.next": (event) => stepDocument(1, event),
+    },
+  });
 
   onMount(() => {
     let isDisposed = false;
@@ -1319,205 +1367,10 @@ export function WorkspaceShell() {
         );
       });
 
-    const handleGlobalKeyDown = (event: KeyboardEvent) => {
-      if (isShortcutsHelpOpen()) {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          setShortcutsHelpOpen(false);
-        }
-        return;
-      }
-
-      const saveShortcut =
-        event.key.toLowerCase() === "s" &&
-        !event.shiftKey &&
-        !event.altKey &&
-        (event.ctrlKey || event.metaKey);
-
-      if (saveShortcut && markdownDoc() !== null) {
+    const handleGlobalKeyDown = (event: KeyboardEvent): void => {
+      if (isShortcutsHelpOpen() && event.key === "Escape") {
         event.preventDefault();
-        void handleSaveMarkdown();
-        return;
-      }
-
-      const openShortcut =
-        event.key.toLowerCase() === "o" &&
-        !event.shiftKey &&
-        !event.altKey &&
-        (event.ctrlKey || event.metaKey);
-
-      if (openShortcut) {
-        event.preventDefault();
-        void handleOpenFiles();
-        return;
-      }
-
-      if (isEditableKeyboardTarget(event.target)) {
-        return;
-      }
-
-      if (handleNumericPresentationShortcut(event)) {
-        return;
-      }
-
-      if (matchesShortcut(event, "?", { shift: true })) {
-        event.preventDefault();
-        setShortcutsHelpOpen(true);
-        return;
-      }
-
-      if (matchesShortcut(event, "q")) {
-        event.preventDefault();
-        void appWindow?.close().catch(() => {
-          // Vite dev without Tauri
-        });
-        return;
-      }
-
-      if (matchesShortcut(event, "d", { ctrl: true })) {
-        event.preventDefault();
-        if (hasActiveEpubPreview(fp())) {
-          stepActiveEpubPage(1);
-        } else if (!hasActiveDocumentMediaElement()) {
-          scrollActiveDocumentPane(1);
-        }
-        return;
-      }
-
-      if (matchesShortcut(event, "u", { ctrl: true })) {
-        event.preventDefault();
-        if (hasActiveEpubPreview(fp())) {
-          stepActiveEpubPage(-1);
-        } else if (!hasActiveDocumentMediaElement()) {
-          scrollActiveDocumentPane(-1);
-        }
-        return;
-      }
-
-      if (matchesShortcut(event, "l", { shift: true })) {
-        event.preventDefault();
-        setFileTreeOpen((value) => !value);
-        return;
-      }
-
-      if (matchesShortcut(event, "g")) {
-        const gitTarget = activeGitDiffTarget();
-        if (gitTarget !== null) {
-          event.preventDefault();
-          handleCloseGitDiff();
-          return;
-        }
-
-        if (diffTarget() === null) {
-          event.preventDefault();
-          void handleOpenGitDiff();
-          return;
-        }
-      }
-
-      if (!isFileTreeOpen()) {
-        const hasActiveMedia = hasActiveDocumentMediaElement();
-
-        if (matchesShortcut(event, "j")) {
-          event.preventDefault();
-          if (hasActiveMedia) {
-            seekActiveDocumentMediaElement(1);
-          } else if (hasActiveEpubPreview(fp())) {
-            stepActiveEpubPage(1);
-          } else {
-            nudgeActiveDocumentPane(1);
-          }
-          return;
-        }
-
-        if (matchesShortcut(event, "k")) {
-          event.preventDefault();
-          if (hasActiveMedia) {
-            seekActiveDocumentMediaElement(-1);
-          } else if (hasActiveEpubPreview(fp())) {
-            stepActiveEpubPage(-1);
-          } else {
-            nudgeActiveDocumentPane(-1);
-          }
-          return;
-        }
-
-        if (!hasActiveMedia && event.key === "ArrowDown") {
-          event.preventDefault();
-          if (hasActiveEpubPreview(fp())) {
-            stepActiveEpubPage(1);
-          } else {
-            nudgeActiveDocumentPane(1);
-          }
-          return;
-        }
-
-        if (!hasActiveMedia && event.key === "ArrowUp") {
-          event.preventDefault();
-          if (hasActiveEpubPreview(fp())) {
-            stepActiveEpubPage(-1);
-          } else {
-            nudgeActiveDocumentPane(-1);
-          }
-          return;
-        }
-      }
-
-      if (matchesShortcut(event, "r")) {
-        if (!canReloadCurrent()) {
-          return;
-        }
-        event.preventDefault();
-        void handleReloadCurrent();
-        return;
-      }
-
-      if (matchesShortcut(event, "y")) {
-        if (currentSelectedPath() === null) {
-          return;
-        }
-        event.preventDefault();
-        void handleCopyCurrentPath();
-        return;
-      }
-
-      if (matchesShortcut(event, "t", { shift: true }) && hasTocDocument()) {
-        event.preventDefault();
-        setTocOpen((value) => !value);
-        return;
-      }
-
-      if (matchesShortcut(event, "p", { shift: true })) {
-        const doc = markdownDoc();
-        if (doc !== null) {
-          event.preventDefault();
-          setMarkdownPane((pane) => (pane === "preview" ? "raw" : "preview"));
-          return;
-        }
-
-        const preview = fp();
-        if (preview?.kind === "csv" && preview.formatted_available) {
-          event.preventDefault();
-          setCsvPaneMode((mode) =>
-            mode === "formatted" ? "raw" : "formatted",
-          );
-          return;
-        }
-
-        return;
-      }
-
-      if (matchesShortcut(event, "s", { shift: true })) {
-        if (
-          event.isComposing ||
-          event.repeat ||
-          (event.target instanceof HTMLElement &&
-            event.target.closest(".file-browser") !== null)
-        )
-          return;
-        event.preventDefault();
-        void cycleColorScheme();
-        return;
+        setShortcutsHelpOpen(false);
       }
     };
 
@@ -1532,188 +1385,206 @@ export function WorkspaceShell() {
   });
 
   return (
-    <main class="workspace">
-      <Portal>
-        <ShortcutsHelpDialog open={isShortcutsHelpOpen()} />
-      </Portal>
-      <div class="workspace__frame">
-        <WorkspaceHeader
-          activeGitDiff={activeGitDiffTarget() !== null}
-          appWindow={appWindow}
-          canOpenGitDiff={
-            diffTarget() === null &&
-            directoryState()?.listingKind === "directory"
-          }
-          colorScheme={colorScheme()}
-          csvPaneMode={csvPaneMode()}
-          csvPreview={csvPreview()}
-          canReloadCurrent={canReloadCurrent()}
-          hasTocDocument={hasTocDocument()}
-          isTocOpen={isTocOpen()}
-          markdownOpen={md() !== null}
-          markdownPane={markdownPane()}
-          onCloseGitDiff={handleCloseGitDiff}
-          onCycleColorScheme={() => {
-            void cycleColorScheme();
-          }}
-          onOpenFiles={() => {
-            void handleOpenFiles();
-          }}
-          onOpenGitDiff={() => {
-            void handleOpenGitDiff();
-          }}
-          onReloadCurrent={() => {
-            void handleReloadCurrent();
-          }}
-          onSelectCsvPaneMode={setCsvPaneMode}
-          onSelectMarkdownPane={setMarkdownPane}
-          onToggleToc={() => setTocOpen((value) => !value)}
-        />
+    <KeymapContextProvider.Provider value={keymap}>
+      <main class="workspace">
+        <Portal>
+          <ShortcutsHelpDialog
+            open={isShortcutsHelpOpen()}
+            keymap={keymap.keymap()}
+          />
+          <KeymapPopup controller={keymap} />
+        </Portal>
+        <div class="workspace__frame">
+          <WorkspaceHeader
+            activeGitDiff={activeGitDiffTarget() !== null}
+            appWindow={appWindow}
+            canOpenGitDiff={
+              diffTarget() === null &&
+              directoryState()?.listingKind === "directory"
+            }
+            colorScheme={colorScheme()}
+            csvPaneMode={csvPaneMode()}
+            csvPreview={csvPreview()}
+            canReloadCurrent={canReloadCurrent()}
+            hasTocDocument={hasTocDocument()}
+            isTocOpen={isTocOpen()}
+            markdownOpen={md() !== null}
+            markdownPane={markdownPane()}
+            onCloseGitDiff={handleCloseGitDiff}
+            onCycleColorScheme={() => {
+              void cycleColorScheme();
+            }}
+            onOpenFiles={() => {
+              void handleOpenFiles();
+            }}
+            onOpenGitDiff={() => {
+              void handleOpenGitDiff();
+            }}
+            onReloadCurrent={() => {
+              void handleReloadCurrent();
+            }}
+            onSelectCsvPaneMode={setCsvPaneMode}
+            onSelectMarkdownPane={setMarkdownPane}
+            onToggleToc={() => setTocOpen((value) => !value)}
+          />
 
-        <WorkspaceErrorBanner message={errorMessage()} />
+          <div id="workspace-notifications" class="workspace-notifications">
+            <WorkspaceErrorBanner message={errorMessage()} />
+            <WorkspaceErrorBanner message={keymap.warning()} />
+          </div>
 
-        <MarkdownConflictBanner
-          snapshot={markdownExternalConflict()}
-          onKeepEditing={() => setMarkdownExternalConflict(null)}
-          onReloadFromDisk={applyMarkdownSnapshot}
-        />
+          <MarkdownConflictBanner
+            snapshot={markdownExternalConflict()}
+            onKeepEditing={() => setMarkdownExternalConflict(null)}
+            onReloadFromDisk={applyMarkdownSnapshot}
+          />
 
-        <div class={viewerGridClassName()} style={viewerGridStyle()}>
-          <Show when={diffTarget()}>
-            {(target) => <PrDiffWorkspace target={target()} />}
-          </Show>
-          <Show when={diffTarget() === null}>
-            <>
-              <Show when={isFileTreeOpen()}>
-                <FileBrowserPane
-                  active={true}
-                  viewMode={directoryViewMode()}
-                  onChangeViewMode={(mode) => {
-                    setDirectoryViewMode(mode);
-                    const state = directoryState();
-                    if (mode === "list" && state?.listingKind === "directory") {
+          <div class={viewerGridClassName()} style={viewerGridStyle()}>
+            <Show when={diffTarget()} keyed>
+              {(target) => (
+                <PrDiffWorkspace
+                  target={target}
+                  onReloadReady={(reload) => setReloadDiff(() => reload)}
+                />
+              )}
+            </Show>
+            <Show when={diffTarget() === null}>
+              <>
+                <Show when={isFileTreeOpen()}>
+                  <FileBrowserPane
+                    active={true}
+                    viewMode={directoryViewMode()}
+                    onChangeViewMode={(mode) => {
+                      setDirectoryViewMode(mode);
+                      const state = directoryState();
                       if (
-                        state.sort.field === directorySort().field &&
-                        state.sort.direction === directorySort().direction &&
-                        state.query === directoryQuery() &&
-                        state.hideGitIgnored === hideGitIgnored()
+                        mode === "list" &&
+                        state?.listingKind === "directory"
                       ) {
-                        setSelectedBrowserPath(
-                          resolveSelectedPath(
-                            state.listingKind,
-                            state.current_directory_path,
-                            state.entries,
-                            selectedBrowserPath(),
+                        if (
+                          state.sort.field === directorySort().field &&
+                          state.sort.direction === directorySort().direction &&
+                          state.query === directoryQuery() &&
+                          state.hideGitIgnored === hideGitIgnored()
+                        ) {
+                          setSelectedBrowserPath(
+                            resolveSelectedPath(
+                              state.listingKind,
+                              state.current_directory_path,
+                              state.entries,
+                              selectedBrowserPath(),
+                            ),
+                          );
+                          return;
+                        }
+                        void loadDirectoryState(
+                          state.current_directory_path,
+                          selectedBrowserPath(),
+                        ).catch((error: unknown) =>
+                          setErrorMessage(
+                            error instanceof Error
+                              ? error.message
+                              : "Failed to load directory",
                           ),
                         );
-                        return;
                       }
-                      void loadDirectoryState(
-                        state.current_directory_path,
-                        selectedBrowserPath(),
-                      ).catch((error: unknown) =>
-                        setErrorMessage(
-                          error instanceof Error
-                            ? error.message
-                            : "Failed to load directory",
-                        ),
-                      );
+                    }}
+                    listingKind={directoryState()?.listingKind ?? "directory"}
+                    directory={directoryState()}
+                    treeRefreshToken={directoryState()?.refreshToken ?? 0}
+                    treeRootSeed={(() => {
+                      const state = directoryState();
+                      return state?.listingKind === "directory" &&
+                        state.hideGitIgnored !== undefined
+                        ? {
+                            root: state.current_directory_path,
+                            entries: state.entries,
+                            nextOffset: state.next_offset,
+                            hasMore:
+                              state.next_offset < state.total_entry_count,
+                            sort: state.sort,
+                            query: state.query,
+                            hideGitIgnored: state.hideGitIgnored,
+                          }
+                        : null;
+                    })()}
+                    sort={directorySort()}
+                    query={directoryQuery()}
+                    hideGitIgnored={hideGitIgnored()}
+                    selectedPath={selectedBrowserPath()}
+                    canLoadMore={canLoadMoreDirectoryEntries()}
+                    isLoadingMore={isLoadingMoreDirectoryEntries()}
+                    onConfirmEntry={(entry, options) =>
+                      void handleConfirmEntry(entry, options)
                     }
-                  }}
-                  listingKind={directoryState()?.listingKind ?? "directory"}
-                  directory={directoryState()}
-                  treeRefreshToken={directoryState()?.refreshToken ?? 0}
-                  treeRootSeed={(() => {
-                    const state = directoryState();
-                    return state?.listingKind === "directory" &&
-                      state.hideGitIgnored !== undefined
-                      ? {
-                          root: state.current_directory_path,
-                          entries: state.entries,
-                          nextOffset: state.next_offset,
-                          hasMore: state.next_offset < state.total_entry_count,
-                          sort: state.sort,
-                          query: state.query,
-                          hideGitIgnored: state.hideGitIgnored,
-                        }
-                      : null;
-                  })()}
-                  sort={directorySort()}
-                  query={directoryQuery()}
-                  hideGitIgnored={hideGitIgnored()}
-                  selectedPath={selectedBrowserPath()}
-                  canLoadMore={canLoadMoreDirectoryEntries()}
-                  isLoadingMore={isLoadingMoreDirectoryEntries()}
-                  onConfirmEntry={(entry, options) =>
-                    void handleConfirmEntry(entry, options)
-                  }
-                  onChangeSort={(nextSort) => {
-                    void handleChangeDirectorySort(nextSort);
-                  }}
-                  onChangeQuery={(nextQuery) => {
-                    void handleChangeDirectoryQuery(nextQuery);
-                  }}
-                  onLoadMore={() => {
-                    const state = directoryState();
-                    if (state?.listingKind === "explicit_file_set") {
-                      void loadMoreExplicitFileSetEntries();
-                    } else {
-                      void loadMoreDirectoryEntries();
-                    }
-                  }}
-                  onToggleGitIgnored={() => void handleToggleGitIgnored()}
-                  onNavigateToParent={() => void handleNavigateToParent()}
-                  onSelectEntry={handleSelectEntry}
-                  resizeHandle={{
-                    getBounds: () => fileTreeWidthBounds(window.innerWidth),
-                    onResize: handleFileTreeResize,
-                    onResizeEnd: handleFileTreeResizeEnd,
-                    label: "Resize file tree pane",
+                    onChangeSort={(nextSort) => {
+                      void handleChangeDirectorySort(nextSort);
+                    }}
+                    onChangeQuery={(nextQuery) => {
+                      void handleChangeDirectoryQuery(nextQuery);
+                    }}
+                    onLoadMore={() => {
+                      const state = directoryState();
+                      if (state?.listingKind === "explicit_file_set") {
+                        void loadMoreExplicitFileSetEntries();
+                      } else {
+                        void loadMoreDirectoryEntries();
+                      }
+                    }}
+                    onToggleGitIgnored={() => void handleToggleGitIgnored()}
+                    onNavigateToParent={() => void handleNavigateToParent()}
+                    onSelectEntry={handleSelectEntry}
+                    resizeHandle={{
+                      getBounds: () => fileTreeWidthBounds(window.innerWidth),
+                      onResize: handleFileTreeResize,
+                      onResizeEnd: handleFileTreeResizeEnd,
+                      label: "Resize file tree pane",
+                    }}
+                  />
+                </Show>
+
+                <Show when={isTocOpen() && hasTocDocument()}>
+                  <TocPane
+                    activeAnchorId={selection().anchorId}
+                    emptyLabel={tocEmptyLabel()}
+                    items={tocItems()}
+                    summaryLabel={tocSummaryLabel()}
+                    visible={true}
+                    onSelectItem={handleTocItemSelect}
+                  />
+                </Show>
+
+                <WorkspaceDocumentColumn
+                  colorScheme={colorScheme()}
+                  csvPaneMode={csvPaneMode()}
+                  csvPreview={csvPreview()}
+                  epubToc={epubPreview()?.toc ?? []}
+                  filePreview={fp()}
+                  hasOpenDocument={hasOpenDocument()}
+                  markdownDoc={md()}
+                  markdownEditorBuffer={markdownEditorBuffer()}
+                  markdownIsDirty={markdownIsDirty()}
+                  markdownPane={markdownPane()}
+                  selection={selection()}
+                  videoAutoplayRequestId={videoAutoplayRequestId()}
+                  onMarkdownEditorInput={setMarkdownEditorBuffer}
+                  onRelocateEpub={(anchorId) => {
+                    setSelection({
+                      anchorId,
+                      lineStart: null,
+                    });
                   }}
                 />
-              </Show>
+              </>
+            </Show>
+          </div>
 
-              <Show when={isTocOpen() && hasTocDocument()}>
-                <TocPane
-                  activeAnchorId={selection().anchorId}
-                  emptyLabel={tocEmptyLabel()}
-                  items={tocItems()}
-                  summaryLabel={tocSummaryLabel()}
-                  visible={true}
-                  onSelectItem={handleTocItemSelect}
-                />
-              </Show>
-
-              <WorkspaceDocumentColumn
-                colorScheme={colorScheme()}
-                csvPaneMode={csvPaneMode()}
-                csvPreview={csvPreview()}
-                epubToc={epubPreview()?.toc ?? []}
-                filePreview={fp()}
-                hasOpenDocument={hasOpenDocument()}
-                markdownDoc={md()}
-                markdownEditorBuffer={markdownEditorBuffer()}
-                markdownIsDirty={markdownIsDirty()}
-                markdownPane={markdownPane()}
-                selection={selection()}
-                videoAutoplayRequestId={videoAutoplayRequestId()}
-                onMarkdownEditorInput={setMarkdownEditorBuffer}
-                onRelocateEpub={(anchorId) => {
-                  setSelection({
-                    anchorId,
-                    lineStart: null,
-                  });
-                }}
-              />
-            </>
-          </Show>
+          <WorkspaceLoadingOverlay
+            loading={isLoading()}
+            startupContext={startupContext()}
+          />
         </div>
-
-        <WorkspaceLoadingOverlay
-          loading={isLoading()}
-          startupContext={startupContext()}
-        />
-      </div>
-    </main>
+      </main>
+    </KeymapContextProvider.Provider>
   );
 }

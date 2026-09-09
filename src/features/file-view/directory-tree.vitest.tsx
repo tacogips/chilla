@@ -585,7 +585,14 @@ describe("directory Tree view", () => {
     button("Tree").click();
     await vi.waitFor(() => expect(listDirectory).toHaveBeenCalledTimes(1));
     state.setPath("/new");
-    await vi.waitFor(() => expect(button("new.md")).toBeDefined());
+    await vi.waitFor(() =>
+      expect(
+        vi.mocked(listDirectory).mock.calls.map((call) => call[0]),
+      ).toEqual(["/workspace", "/new"]),
+    );
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain("new.md"),
+    );
     resolveOld?.(page("/workspace", [entry("/workspace/old.md")]));
     await Promise.resolve();
     expect(

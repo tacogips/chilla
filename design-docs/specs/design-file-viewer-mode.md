@@ -369,6 +369,95 @@ must not initiate or accidentally complete sequences. Invalid continuations
 are consumed rather than executing another action unexpectedly.
 See the Yazi quick-start entry in the design references index.
 
+## Configurable Keybindings
+
+Load keybindings once at startup from `~/.config/chilla/keymap.toml`, including
+on macOS. An absolute `XDG_CONFIG_HOME` overrides `.config`; a relative or empty
+value falls back to the home-directory location. Missing files use defaults.
+Do not automatically create or overwrite the user's configuration. Restart
+the app after edits; live watching is outside this change.
+
+The TOML format follows Yazi's context/priority model for `[mgr]` (file browser
+and diff browser) and `[workspace]` (top-level app actions). Each context accepts
+`prepend_keymap`, optional `keymap` replacing built-ins (even an empty array),
+and `append_keymap`. Entries have `on` as one key string or a sequence array,
+`run` as one built-in action string or an ordered array, and optional `desc`.
+Merge order is prepend, replacement-or-default, append; first matching entry
+has priority. `noop` consumes a binding without an action. No shell execution,
+arbitrary scripts, or unsupported Yazi actions are allowed.
+
+Support literal case-sensitive keys and Yazi notation such as `<Enter>`,
+`<Esc>`, `<Space>`, `<Up>`, `<C-s>`, `<D-s>`, `<S-Tab>`, and `<C-S-s>`.
+Sequences accept 1–8 keys. Prefix matching uses the effective ordered bindings;
+first exact match executes, otherwise a higher-priority longer sequence waits.
+Display remaining choices and their descriptions in the existing bottom-right
+popup for every prefix, not only comma. Escape, invalid continuation, focus or
+context changes and app blur cancel pending state; there is no timeout.
+Escape is reserved for cancellation after a prefix and is rejected as a
+configured continuation. Single Escape bindings remain possible outside modals.
+Normal text input and native editor shortcuts remain protected, with explicitly
+supported Ctrl/Command workspace save/open/noop shortcuts available while editing.
+
+The declarative registry owns supported browser/workspace key dispatch; replacing
+a context must not leave hardcoded shortcuts active behind it. Preserve default
+behavior and contextual precedence. Help lists effective configured bindings.
+Specialized media/embedded-editor gestures and native input editing are outside
+this configuration scope and must remain documented separately.
+
+Rust owns bounded TOML loading and structural validation. Frontend validates
+key notation, built-in action names and context compatibility. Malformed,
+unsupported or oversized configuration falls back atomically to defaults with
+a visible diagnostic; do not echo raw configuration contents in errors.
+Read only a regular file, bounded to 64 KiB, off the UI thread. Structural
+unknown fields are errors rather than silent typos.
+
+IPC: `get_keymap_config` takes no arguments and returns `{ path, config, error }`.
+`path` and `error` are nullable strings; `config` has optional `mgr` and
+`workspace` context objects with the fields described above. Preserve strings
+and arrays in the response; omitted context/list fields must stay omitted so
+empty replacement arrays remain distinguishable from missing fields.
+
+Action names are chilla-owned (not a Yazi command interpreter). Browser actions
+include cursor.up/down, parent, enter, open, filter, search.name/content,
+view.toggle, ignored.toggle, directory.info, sort.reset and
+sort.{name,extension,mtime,size}.{asc,desc}. Diff actions include
+diff.previous/next, diff.view.{cycle,split,stack,full,image}, diff.open and
+scroll.up/down. Workspace actions include help, quit, files.open,
+document.save/reload/previous/next, path.copy, sidebar.toggle, git.toggle,
+toc.toggle, presentation.toggle/raw/rendered, theme.toggle and scroll.up/down.
+noop is supported in both contexts. The example and action catalog live in
+examples/keymap.toml and the README Custom Keybindings section.
+
+## Transient Error Overlays
+
+Workspace operation failures (including opening Git diff outside a repository)
+and keymap warnings appear in a top-right overlay outside pane layout flow.
+Diff-loading errors use the same dismissible presentation while keeping Retry
+available in the diff workspace after the notification disappears.
+Each message has an accessible Close control and expires after 8 seconds.
+Hover or keyboard focus pauses expiration for reading; a new occurrence resets
+the lifetime, including repeated identical errors. Timers are cleaned up on
+replacement and disposal. Long text wraps inside a viewport-bounded card;
+the surrounding overlay does not intercept pane input or steal focus.
+Actionable conflict-resolution prompts remain persistent and are not converted
+into transient notifications.
+
+## GitHub Diff Startup and Reload
+
+GitHub PR, commit and compare URLs load remote read-only diffs into the existing
+changed-file Tree browser. Standard .diff URL forms normalize to the equivalent
+GitHub target. `chilla github:owner/repo PR_ID` is a shorter PR startup spelling;
+owner/repository and positive numeric PR ID must be validated, with no shell
+execution. Existing verbose and cache-disabling flags remain compatible.
+
+The workspace reload button and configurable document.reload action (default r)
+reload the active remote or local diff, not an underlying inactive file browser.
+Explicit remote reload bypasses snapshot cache reuse. Preserve surviving selected
+file, current directory, filter and expansion context where valid; clear stale
+full-file lazy content and prevent obsolete requests from winning after reload
+or target changes. Keep the last successful snapshot on failure and report the
+failure through the dismissible error overlay with retry available.
+
 ## References
 
 See `design-docs/references/README.md` for external references.

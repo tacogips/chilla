@@ -9,6 +9,9 @@ import type {
 
 const documentMocks = vi.hoisted(() => ({
   getStartupContext: vi.fn(),
+  getKeymapConfig: vi.fn(),
+  loadGitDiff: vi.fn(),
+  loadPrDiff: vi.fn(),
   listDirectory: vi.fn(),
   listExplicitFileSet: vi.fn(),
   openDocument: vi.fn(),
@@ -26,6 +29,9 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc(path: string) {
     return `asset://${path}`;
   },
+}));
+vi.mock("../../lib/tauri/keymap", () => ({
+  getKeymapConfig: documentMocks.getKeymapConfig,
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -76,6 +82,8 @@ vi.mock("../../lib/tauri/document", async (importOriginal) => {
   return {
     ...actual,
     getStartupContext: documentMocks.getStartupContext,
+    loadGitDiff: documentMocks.loadGitDiff,
+    loadPrDiff: documentMocks.loadPrDiff,
     listDirectory: documentMocks.listDirectory,
     listExplicitFileSet: documentMocks.listExplicitFileSet,
     openDocument: documentMocks.openDocument,
@@ -280,6 +288,11 @@ describe("WorkspaceShell numeric view shortcuts", () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>';
     documentMocks.getStartupContext.mockReset();
+    documentMocks.getKeymapConfig.mockResolvedValue({
+      path: null,
+      config: {},
+      error: null,
+    });
     documentMocks.listDirectory.mockReset();
     documentMocks.listExplicitFileSet.mockReset();
     documentMocks.openDocument.mockReset();
@@ -296,6 +309,121 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     dispose = undefined;
     document.body.innerHTML = "";
   });
+
+  it("stacks workspace errors and keymap warnings outside panes with native dismiss controls", async () => {
+    documentMocks.getStartupContext.mockRejectedValue(
+      new Error("This directory is not inside a Git repository."),
+    );
+    documentMocks.getKeymapConfig.mockResolvedValue({
+      path: null,
+      config: {},
+      error: "Invalid keymap configuration",
+    });
+    dispose = renderWorkspace();
+    await waitFor(() =>
+      expect(
+        document.querySelectorAll(
+          "#workspace-notifications .workspace-notification",
+        ),
+      ).toHaveLength(2),
+    );
+    expect(document.querySelector(".pane .workspace-notification")).toBeNull();
+    const close = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Close notification"]',
+    );
+    close?.focus();
+    const enter = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+    close?.dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(false);
+    close?.click();
+    expect(document.querySelectorAll(".workspace-notification")).toHaveLength(
+      1,
+    );
+    document
+      .querySelector<HTMLButtonElement>('[aria-label="Close notification"]')
+      ?.click();
+    expect(document.querySelectorAll(".workspace-notification")).toHaveLength(
+      0,
+    );
+  });
+
+  it("mounts diff failures into the same workspace stack as keymap warnings", async () => {
+    documentMocks.getStartupContext.mockResolvedValue({
+      initial_mode: "file_view",
+      browser_root: {
+        kind: "git_diff",
+        target: { repo_path: "/workspace", source: { kind: "worktree" } },
+      },
+    });
+    documentMocks.loadGitDiff.mockRejectedValue(
+      new Error("Diff could not load"),
+    );
+    documentMocks.getKeymapConfig.mockResolvedValue({
+      path: null,
+      config: {},
+      error: "Invalid keymap configuration",
+    });
+    dispose = renderWorkspace();
+    await waitFor(() =>
+      expect(
+        document.querySelectorAll(
+          "#workspace-notifications .workspace-notification",
+        ),
+      ).toHaveLength(2),
+    );
+    expect(document.querySelectorAll(".workspace-notifications")).toHaveLength(
+      1,
+    );
+    expect(
+      document.querySelector("#workspace-notifications")?.textContent,
+    ).toContain("Diff could not load");
+    expect(document.querySelector(".pr-diff-retry button")).not.toBeNull();
+  });
+
+  it.each(["git_diff", "github_pr"] as const)(
+    "routes header and r refresh to %s even after failure",
+    async (kind) => {
+      const target =
+        kind === "git_diff"
+          ? { repo_path: "/workspace", source: { kind: "worktree" } }
+          : {
+              owner: "example",
+              repo: "project",
+              source: { kind: "pull_request", number: 1 },
+              url: "https://github.com/example/project/pull/1",
+              use_cache: true,
+            };
+      const loader =
+        kind === "git_diff"
+          ? documentMocks.loadGitDiff
+          : documentMocks.loadPrDiff;
+      loader.mockReset();
+      loader.mockRejectedValue(new Error("Try reloading"));
+      documentMocks.getStartupContext.mockResolvedValue({
+        initial_mode: "file_view",
+        browser_root: { kind, target },
+      });
+      dispose = renderWorkspace();
+      const button = await waitForElement<HTMLButtonElement>(
+        '[aria-label="Refresh workspace"]',
+      );
+      await waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
+      expect(button.disabled).toBe(false);
+      button.click();
+      await waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "r", bubbles: true }),
+      );
+      await waitFor(() => expect(loader).toHaveBeenCalledTimes(3));
+      expect(loader).toHaveBeenLastCalledWith(
+        kind === "github_pr" ? { ...target, use_cache: false } : target,
+      );
+    },
+  );
 
   it("restores the default Tree sort after another sort without stale listing state", async () => {
     documentMocks.getStartupContext.mockResolvedValue(
@@ -337,6 +465,149 @@ describe("WorkspaceShell numeric view shortcuts", () => {
         expect(document.querySelector('[role="treeitem"]')).not.toBeNull();
       });
     }
+  });
+
+  it("runs custom manager/workspace sequences and shows only effective configured help and tooltips", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/note.md"),
+    );
+    documentMocks.getKeymapConfig.mockResolvedValue({
+      path: "/config/keymap.toml",
+      error: null,
+      config: {
+        mgr: {
+          prepend_keymap: [
+            { on: ["g", "f"], run: "search.name", desc: "Find project files" },
+            { on: "f", run: "noop", desc: "Disabled filter alias" },
+          ],
+        },
+        workspace: {
+          keymap: [
+            { on: ["x", "h"], run: "help", desc: "My custom help" },
+            {
+              on: ["<C-b>", "t"],
+              run: "theme.toggle",
+              desc: "My custom theme",
+            },
+          ],
+        },
+      },
+    });
+    dispose = renderWorkspace();
+    const row = await waitForElement<HTMLButtonElement>(
+      ".file-browser__button",
+    );
+    await waitFor(() =>
+      expect(
+        document.querySelector<HTMLButtonElement>('[aria-label="Find files"]')
+          ?.title,
+      ).toContain("g then f"),
+    );
+    expect(
+      document.querySelector<HTMLButtonElement>('[aria-label="Show filter"]')
+        ?.title,
+    ).toBe("Show and focus filter (/)");
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "f", bubbles: true }),
+    );
+    expect(document.querySelector('[role="searchbox"]')).toBeNull();
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "g", bubbles: true }),
+    );
+    expect(document.querySelector(".keymap-popup")?.textContent).toContain(
+      "Find project files",
+    );
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "f", bubbles: true }),
+    );
+    expect(
+      document.querySelector('[aria-label="Find files query"]'),
+    ).not.toBeNull();
+    document
+      .querySelector<HTMLButtonElement>('[aria-label="Close directory search"]')
+      ?.click();
+    const theme = document
+      .querySelector(".workspace__theme-toggle")
+      ?.getAttribute("aria-label");
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "b", ctrlKey: true, bubbles: true }),
+    );
+    expect(document.querySelector(".keymap-popup")?.textContent).toContain(
+      "My custom theme",
+    );
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "t", bubbles: true }),
+    );
+    await waitFor(() =>
+      expect(
+        document
+          .querySelector(".workspace__theme-toggle")
+          ?.getAttribute("aria-label"),
+      ).not.toBe(theme),
+    );
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "x", bubbles: true }),
+    );
+    expect(document.querySelector(".keymap-popup")?.textContent).toContain(
+      "My custom help",
+    );
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "h", bubbles: true }),
+    );
+    expect(document.querySelector(".shortcuts-help")?.textContent).toContain(
+      "My custom help",
+    );
+    expect(
+      document.querySelector(".shortcuts-help")?.textContent,
+    ).not.toContain("Quit application");
+  });
+
+  it("disables legacy manager/workspace keys with empty replacement maps", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/note.md"),
+    );
+    documentMocks.getKeymapConfig.mockResolvedValue({
+      path: "/config/keymap.toml",
+      error: null,
+      config: { mgr: { keymap: [] }, workspace: { keymap: [] } },
+    });
+    dispose = renderWorkspace();
+    const row = await waitForElement<HTMLButtonElement>(
+      ".file-browser__button",
+    );
+    await waitFor(() =>
+      expect(
+        document.querySelector<HTMLButtonElement>('[aria-label="Tree"]')?.title,
+      ).toBe("Tree view"),
+    );
+    const theme = document
+      .querySelector(".workspace__theme-toggle")
+      ?.getAttribute("aria-label");
+    for (const key of ["t", "f", "/", "s", "S", ",", "m", "0", "?", "L"])
+      row.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key,
+          shiftKey: /^[A-Z?]$/.test(key),
+          bubbles: true,
+        }),
+      );
+    expect(document.querySelector('[role="tree"]')).toBeNull();
+    expect(document.querySelector('[role="searchbox"]')).toBeNull();
+    expect(document.querySelector(".directory-search")).toBeNull();
+    expect(document.querySelector(".keymap-popup")).toBeNull();
+    expect(document.querySelector(".shortcuts-help")).toBeNull();
+    expect(
+      document
+        .querySelector(".workspace__theme-toggle")
+        ?.getAttribute("aria-label"),
+    ).toBe(theme);
+    expect(documentMocks.listDirectory).toHaveBeenCalledTimes(1);
   });
 
   it("owns browser S and comma continuations without changing theme or preview, while preserving save", async () => {
@@ -710,7 +981,7 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       expect(dialog?.getAttribute("aria-labelledby")).toBe(
         "shortcuts-help-title",
       );
-      expect(sections).toHaveLength(3);
+      expect(sections).toHaveLength(4);
       expect(sectionLayout?.querySelector(".shortcuts-help__title")).toBeNull();
       expect(
         sectionLayout?.querySelector(".shortcuts-help__footer"),
@@ -897,6 +1168,11 @@ describe("WorkspaceShell Git-ignored visibility", () => {
     document.body.innerHTML = '<div id="root"></div>';
     documentMocks.getStartupContext.mockReset();
     documentMocks.listDirectory.mockReset();
+    documentMocks.getKeymapConfig.mockResolvedValue({
+      path: null,
+      config: {},
+      error: null,
+    });
     documentMocks.listExplicitFileSet.mockReset();
     documentMocks.openDocument.mockReset();
     documentMocks.openFilePreview.mockReset();

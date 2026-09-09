@@ -6,7 +6,9 @@ This directory contains reference materials for system design and implementation
 
 | Name | URL | Description |
 |------|-----|-------------|
+| GitHub Pull Request REST API | https://docs.github.com/en/rest/pulls/pulls | Canonical PR URLs, diff_url/patch_url forms, and changed-file responses |
 | Yazi Quick Start | https://yazi-rs.github.io/docs/quick-start/ | Browser navigation, comma-prefixed sorting, filter and recursive search key bindings |
+| Yazi Keymap Configuration | https://yazi-rs.github.io/docs/configuration/keymap/ | Contexts, prepend/append/replacement precedence, key notation, sequences and descriptions |
 | The Rust Book | https://doc.rust-lang.org/book/ | Official Rust programming language book |
 | Rust API Guidelines | https://rust-lang.github.io/api-guidelines/ | Rust API design best practices |
 | Rust Design Patterns | https://rust-unofficial.github.io/patterns/ | Common Rust design patterns |
@@ -33,6 +35,7 @@ This directory contains reference materials for system design and implementation
 | qraftbox side-by-side diff image | sibling qraftbox checkout: `usage/resource/diff_side_by_side.png` | Visual reference for side-by-side diff mode |
 | qraftbox current diff image | sibling qraftbox checkout: `usage/resource/diff_current.png` | Visual reference for current-state diff mode |
 | qraftbox stack diff image | sibling qraftbox checkout: `usage/resource/diff_stack.png` | Visual reference for stack/inline diff mode |
+| Konjac product page | sibling Konjac checkout: `../konjac/pubpage/` | Local reference for bilingual Vite pages, deterministic validation, responsive product captures, and Cloudflare Worker Static Assets deployment |
 
 ## Reference Documents
 

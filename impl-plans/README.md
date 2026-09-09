@@ -46,6 +46,9 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| `github-diff-shortcut-reload.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#github-diff-startup-and-reload` |
+| `dismissible-error-overlay.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#transient-error-overlays` |
+| `configurable-keybindings.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#configurable-keybindings` |
 | `prefix-popup-window-position.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#yazi-style-browser-shortcuts` |
 | `yazi-browser-shortcuts.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#yazi-style-browser-shortcuts` |
 | `recursive-directory-search.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#recursive-directory-search` |

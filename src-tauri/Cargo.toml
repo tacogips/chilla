@@ -31,5 +31,6 @@ tauri = { version = "2", features = ["custom-protocol", "protocol-asset"] }
 tauri-plugin-dialog = "2.7.0"
 tauri-plugin-opener = "2.5.3"
 thiserror = "2"
+toml = { version = "=0.9.12", default-features = false, features = ["serde", "parse"] }
 tree_magic_mini = "3.2.2"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }

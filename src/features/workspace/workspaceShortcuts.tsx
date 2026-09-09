@@ -1,4 +1,5 @@
 import { For, Show } from "solid-js";
+import type { EffectiveKeymap } from "../keymap/keymap";
 
 export type ShortcutDefinition = {
   readonly keys: readonly string[];
@@ -224,10 +225,40 @@ export function renderShortcutKeys(keys: readonly string[]) {
   );
 }
 
-export function ShortcutSectionList() {
+export function ShortcutSectionList(
+  props: { readonly keymap?: EffectiveKeymap } = {},
+) {
+  const sections = () => {
+    const map = props.keymap;
+    if (map === undefined) return SHORTCUT_SECTIONS;
+    const bindings = (entries: EffectiveKeymap["file"]) =>
+      entries.map((binding) => ({
+        keys: [binding.keys.join(" then ")],
+        description: binding.description,
+      }));
+    return [
+      { title: "Workspace", shortcuts: bindings(map.workspace) },
+      { title: "File browser", shortcuts: bindings(map.file) },
+      { title: "Diff browser", shortcuts: bindings(map.diff) },
+      {
+        title: "Native controls",
+        shortcuts: [
+          {
+            keys: ["Esc"],
+            description: "Close help or the active input panel",
+          },
+          {
+            keys: ["Enter"],
+            description: "Submit searches and activate native controls",
+          },
+          ...(SHORTCUT_SECTIONS[2]?.shortcuts ?? []),
+        ],
+      },
+    ];
+  };
   return (
     <div class="shortcuts-help__sections">
-      <For each={SHORTCUT_SECTIONS}>
+      <For each={sections()}>
         {(section) => (
           <section class="shortcuts-help__section">
             <h3 class="shortcuts-help__heading">{section.title}</h3>
@@ -252,7 +283,10 @@ export function ShortcutSectionList() {
   );
 }
 
-export function ShortcutsHelpDialog(props: { readonly open: boolean }) {
+export function ShortcutsHelpDialog(props: {
+  readonly open: boolean;
+  readonly keymap?: EffectiveKeymap;
+}) {
   return (
     <Show when={props.open}>
       <div class="shortcuts-help-layer">
@@ -277,10 +311,13 @@ export function ShortcutsHelpDialog(props: { readonly open: boolean }) {
             Keyboard shortcuts
           </h2>
 
-          <ShortcutSectionList />
+          <ShortcutSectionList
+            {...(props.keymap === undefined ? {} : { keymap: props.keymap })}
+          />
 
           <p class="shortcuts-help__footer">
-            Shortcuts are ignored while typing in a search field.
+            Custom keymaps reload on restart. Native editing is preserved;
+            configured save/open shortcuts remain available while typing.
           </p>
         </div>
       </div>

@@ -52,6 +52,9 @@ export function createDirectoryTree(options: {
   const [expanded, setExpanded] = createSignal<ReadonlySet<string>>(new Set());
   let generation = 0;
   let previousRoot: string | null = null;
+  const [initializedRoot, setInitializedRoot] = createSignal<string | null>(
+    null,
+  );
   const update = (path: string, branch: Branch): void => {
     setBranches((previous) => new Map(previous).set(path, branch));
   };
@@ -147,6 +150,7 @@ export function createDirectoryTree(options: {
         setBranches(new Map());
         const retained = root === previousRoot ? expanded() : new Set<string>();
         previousRoot = root;
+        setInitializedRoot(root);
         setExpanded(retained);
         reuseSeed();
       },
@@ -188,6 +192,7 @@ export function createDirectoryTree(options: {
   createEffect(() => {
     if (!options.enabled()) return;
     const root = options.root();
+    if (root !== initializedRoot()) return;
     if (root !== null && !branches().has(root)) void load(root);
     // Rows include only descendants of expanded ancestors. Loading a parent
     // makes its expanded children reachable on the next reactive pass.

@@ -6,6 +6,7 @@ pub mod error;
 pub mod events;
 pub mod git_diff;
 pub mod github_pr_diff;
+pub mod keymap_config;
 pub mod markdown;
 pub mod media_stream;
 pub mod mp4_faststart;
@@ -115,6 +116,7 @@ pub fn run(startup_target: StartupTarget) -> Result<(), String> {
         .invoke_handler(tauri::generate_handler![
             commands::document::stop_document_watch,
             commands::document::get_startup_context,
+            commands::keymap::get_keymap_config,
             commands::document::detect_git_repository,
             commands::document::load_git_diff,
             commands::document::load_git_diff_file_text,

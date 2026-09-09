@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "solid-js/web";
+import { createComponent, createSignal, Show } from "solid-js";
+import {
+  createKeymapController,
+  KeymapContextProvider,
+  KeymapPopup,
+} from "../keymap/KeymapProvider";
 import type {
   GitDiffTarget,
   GitHubDiffSource,
@@ -14,6 +20,10 @@ const loadPrDiffFileTextMock = vi.hoisted(() => vi.fn());
 const loadGitDiffMock = vi.hoisted(() => vi.fn());
 const loadGitDiffFileTextMock = vi.hoisted(() => vi.fn());
 const openUrlMock = vi.hoisted(() => vi.fn());
+const getKeymapConfigMock = vi.hoisted(() => vi.fn());
+vi.mock("../../lib/tauri/keymap", () => ({
+  getKeymapConfig: getKeymapConfigMock,
+}));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: openUrlMock,
@@ -196,6 +206,7 @@ function click(selector: string): void {
 
 describe("PrDiffWorkspace", () => {
   let dispose: VoidFunction | undefined;
+  let reload: (() => Promise<void>) | null = null;
 
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>';
@@ -226,7 +237,13 @@ describe("PrDiffWorkspace", () => {
       throw new Error("missing test root");
     }
     dispose = render(
-      () => PrDiffWorkspace({ target: { kind: "github", target } }),
+      () =>
+        PrDiffWorkspace({
+          target: { kind: "github", target },
+          onReloadReady: (next) => {
+            reload = next;
+          },
+        }),
       root,
     );
   }
@@ -242,7 +259,229 @@ describe("PrDiffWorkspace", () => {
     );
   }
 
+  it("reloads fresh data while preserving Tree selection, expansions and filter; removed selections clear", async () => {
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([textDiffFile("src/note.md", "old text")]),
+    );
+    renderWorkspace();
+    await waitFor(() =>
+      expect(document.querySelector('[data-path="src"]')).not.toBeNull(),
+    );
+    click('[data-path="src"]');
+    click('[data-path="src/note.md"]');
+    click('[aria-label="Show filter"]');
+    const input = document.querySelector<HTMLInputElement>(
+      '[aria-label="Filter changed files"]',
+    );
+    if (input === null) throw new Error("missing filter");
+    input.value = "note";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([textDiffFile("src/note.md", "fresh text")]),
+    );
+    await reload?.();
+    expect(loadPrDiffMock).toHaveBeenLastCalledWith({
+      ...target,
+      use_cache: false,
+    });
+    expect(document.querySelector('[role="tree"]')).not.toBeNull();
+    expect(input.value).toBe("note");
+    expect(document.body.textContent).toContain("fresh text");
+    loadPrDiffMock.mockResolvedValue(snapshot([textDiffFile("elsewhere.md")]));
+    await reload?.();
+    expect(document.body.textContent).toContain("No file selected.");
+  });
+
+  it("ignores overlapping reloads and preserves last success on failure with Retry", async () => {
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([textDiffFile("note.md", "initial")]),
+    );
+    renderWorkspace();
+    await waitFor(() =>
+      expect(document.querySelector('[data-path="note.md"]')).not.toBeNull(),
+    );
+    click('[data-path="note.md"]');
+    let finishOld: ((value: PrDiffSnapshot) => void) | undefined;
+    loadPrDiffMock.mockImplementationOnce(
+      () =>
+        new Promise<PrDiffSnapshot>((resolve) => {
+          finishOld = resolve;
+        }),
+    );
+    const old = reload?.();
+    loadPrDiffMock.mockResolvedValueOnce(
+      snapshot([textDiffFile("note.md", "newest")]),
+    );
+    await reload?.();
+    finishOld?.(snapshot([textDiffFile("note.md", "stale data")]));
+    await old;
+    expect(document.body.textContent).toContain("newest");
+    expect(document.body.textContent).not.toContain("stale data");
+    loadPrDiffMock.mockRejectedValueOnce(new Error("Reload failed"));
+    await reload?.();
+    expect(document.body.textContent).toContain("newest");
+    expect(document.body.textContent).toContain("Reload failed");
+    loadPrDiffMock.mockResolvedValueOnce(
+      snapshot([textDiffFile("note.md", "retried")]),
+    );
+    click(".pr-diff-retry button");
+    await waitFor(() => expect(document.body.textContent).toContain("retried"));
+    dispose?.();
+    dispose = undefined;
+    expect(reload).toBeNull();
+  });
+
+  it("does not fetch old lazy content during refresh and ignores prior lazy results", async () => {
+    const lazyFile = { ...textDiffFile("note.md"), full_text: null };
+    loadPrDiffMock.mockResolvedValue(snapshot([lazyFile]));
+    renderWorkspace();
+    await waitFor(() =>
+      expect(document.querySelector('[data-path="note.md"]')).not.toBeNull(),
+    );
+    click('[data-path="note.md"]');
+    let finishText:
+      | ((value: { full_text: string; full_text_truncated: boolean }) => void)
+      | undefined;
+    loadPrDiffFileTextMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishText = resolve;
+        }),
+    );
+    click('[aria-label="Full file"]');
+    expect(loadPrDiffFileTextMock).toHaveBeenCalledTimes(1);
+    let finishReload: ((value: PrDiffSnapshot) => void) | undefined;
+    loadPrDiffMock.mockImplementationOnce(
+      () =>
+        new Promise<PrDiffSnapshot>((resolve) => {
+          finishReload = resolve;
+        }),
+    );
+    const refreshing = reload?.();
+    click('[aria-label="Left/right diff"]');
+    click('[aria-label="Full file"]');
+    expect(loadPrDiffFileTextMock).toHaveBeenCalledTimes(1);
+    finishReload?.(snapshot([textDiffFile("note.md", "fresh full content")]));
+    await refreshing;
+    finishText?.({
+      full_text: "outdated lazy text",
+      full_text_truncated: false,
+    });
+    await Promise.resolve();
+    expect(document.body.textContent).toContain("fresh full content");
+    expect(document.body.textContent).not.toContain("outdated lazy text");
+  });
+
+  it("disposes stale target loads when keyed diff targets change without clearing the new reload callback", async () => {
+    let finishOld: ((value: PrDiffSnapshot) => void) | undefined;
+    loadPrDiffMock.mockImplementationOnce(
+      () =>
+        new Promise<PrDiffSnapshot>((resolve) => {
+          finishOld = resolve;
+        }),
+    );
+    let switchTarget: ((next: GitHubPrTarget) => void) | undefined;
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing root");
+    dispose = render(() => {
+      const [active, setActive] = createSignal(target);
+      switchTarget = (next) => {
+        setActive(next);
+      };
+      return Show({
+        get when() {
+          return active();
+        },
+        keyed: true,
+        children: (next: GitHubPrTarget) =>
+          createComponent(PrDiffWorkspace, {
+            target: { kind: "github", target: next },
+            onReloadReady: (ready) => {
+              reload = ready;
+            },
+          }),
+      });
+    }, root);
+    loadPrDiffMock.mockResolvedValue(snapshot([textDiffFile("new-target.md")]));
+    switchTarget?.({ ...target, source: { kind: "pull_request", number: 2 } });
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("new-target.md"),
+    );
+    finishOld?.(snapshot([textDiffFile("obsolete-target.md")]));
+    await Promise.resolve();
+    expect(document.body.textContent).not.toContain("obsolete-target.md");
+    expect(reload).not.toBeNull();
+    await reload?.();
+    expect(loadPrDiffMock).toHaveBeenLastCalledWith({
+      ...target,
+      source: { kind: "pull_request", number: 2 },
+      use_cache: false,
+    });
+  });
+
+  it("dispatches configured diff sequences with dynamic help and no legacy mode/view shortcuts", async () => {
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([textDiffFile("README.md", "readme")]),
+    );
+    getKeymapConfigMock.mockResolvedValue({
+      path: null,
+      error: null,
+      config: {
+        mgr: {
+          keymap: [
+            { on: ["v", "s"], run: "diff.view.stack", desc: "My stacked view" },
+            { on: "x", run: "view.toggle", desc: "My browser view" },
+          ],
+        },
+        workspace: { keymap: [] },
+      },
+    });
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing root");
+    dispose = render(() => {
+      const controller = createKeymapController();
+      return createComponent(KeymapContextProvider.Provider, {
+        value: controller,
+        get children() {
+          return [
+            PrDiffWorkspace({ target: { kind: "github", target } }),
+            createComponent(KeymapPopup, { controller }),
+          ];
+        },
+      });
+    }, root);
+    await waitFor(() =>
+      expect(
+        document.querySelector<HTMLButtonElement>('[aria-label="Tree"]')?.title,
+      ).toBe("Tree view (x toggles)"),
+    );
+    await waitFor(() =>
+      expect(document.querySelector('[data-path="README.md"]')).not.toBeNull(),
+    );
+    click('[data-path="README.md"]');
+    for (const key of ["t", "2", "Tab"])
+      window.dispatchEvent(new KeyboardEvent("keydown", { key }));
+    expect(document.querySelector('[role="tree"]')).not.toBeNull();
+    expect(document.querySelector('[aria-label="Stack diff"]')).toBeNull();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "v" }));
+    expect(document.querySelector(".keymap-popup")?.textContent).toContain(
+      "My stacked view",
+    );
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "s" }));
+    expect(document.querySelector(".keymap-popup")).toBeNull();
+    await waitFor(() =>
+      expect(
+        document.querySelector('[aria-label="Stack diff"]'),
+      ).not.toBeNull(),
+    );
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "x" }));
+    expect(document.querySelector('[role="tree"]')).toBeNull();
+  });
+
   it("retries after an error and renders the resolved diff", async () => {
+    const notifications = document.createElement("div");
+    notifications.id = "workspace-notifications";
+    document.body.append(notifications);
     loadPrDiffMock
       .mockRejectedValueOnce(new Error("GitHub rate limit was exceeded"))
       .mockResolvedValueOnce(snapshot([textDiffFile("README.md")]));
@@ -256,7 +495,26 @@ describe("PrDiffWorkspace", () => {
       expect(document.body.textContent).toContain("Retry");
     });
 
-    click(".pr-diff-error button");
+    expect(
+      notifications.querySelector(".workspace-notification"),
+    ).not.toBeNull();
+    click('[aria-label="Close notification"]');
+    expect(document.querySelector(".workspace-notification")).toBeNull();
+    expect(document.querySelector(".pr-diff-retry button")).not.toBeNull();
+    const retry = document.querySelector<HTMLButtonElement>(
+      ".pr-diff-retry button",
+    );
+    retry?.focus();
+    for (const key of ["Enter", " ", "Tab"]) {
+      const event = new KeyboardEvent("keydown", {
+        key,
+        bubbles: true,
+        cancelable: true,
+      });
+      retry?.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+    }
+    click(".pr-diff-retry button");
 
     await waitFor(() => {
       expect(loadPrDiffMock).toHaveBeenCalledTimes(2);
