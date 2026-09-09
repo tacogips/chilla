@@ -119,7 +119,7 @@ Trusted macOS release assets are signed and notarized locally. Apple certificate
 Then publish the trusted DMG and `.app` zip with:
 
 ```bash
-mise run release-macos-dmg-local -- v0.2.0
+mise run release-macos-dmg-local -- v0.3.0
 ```
 
 The local release task mounts the final DMG and verifies the embedded app with

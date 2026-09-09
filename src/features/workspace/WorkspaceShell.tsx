@@ -1279,6 +1279,9 @@ export function WorkspaceShell() {
     } else if (hasActiveEpubPreview(fp())) stepActiveEpubPage(direction);
     else nudgeActiveDocumentPane(direction);
   };
+  const handleToggleFileTree = (): void => {
+    setFileTreeOpen((value) => !value);
+  };
   keymap.register({
     context: "workspace",
     enabled: () => !isShortcutsHelpOpen(),
@@ -1300,7 +1303,7 @@ export function WorkspaceShell() {
         if (currentSelectedPath() !== null) return handleCopyCurrentPath();
         return undefined;
       },
-      "sidebar.toggle": () => setFileTreeOpen((value) => !value),
+      "sidebar.toggle": handleToggleFileTree,
       "git.toggle": () => {
         if (activeGitDiffTarget() !== null) handleCloseGitDiff();
         else if (diffTarget() === null) return handleOpenGitDiff();
@@ -1396,6 +1399,8 @@ export function WorkspaceShell() {
         </Portal>
         <div class="workspace__frame">
           <WorkspaceHeader
+            isFileTreeOpen={isFileTreeOpen()}
+            onToggleFileTree={handleToggleFileTree}
             activeGitDiff={activeGitDiffTarget() !== null}
             appWindow={appWindow}
             canOpenGitDiff={
@@ -1444,6 +1449,7 @@ export function WorkspaceShell() {
               {(target) => (
                 <PrDiffWorkspace
                   target={target}
+                  isFileTreeOpen={isFileTreeOpen()}
                   onReloadReady={(reload) => setReloadDiff(() => reload)}
                 />
               )}

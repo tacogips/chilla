@@ -425,6 +425,112 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     },
   );
 
+  it.each(["directory", "git_diff", "github_pr"] as const)(
+    "collapses and expands the %s left pane through the header and Shift+L",
+    async (kind) => {
+      if (kind === "directory") {
+        documentMocks.getStartupContext.mockResolvedValue(
+          directoryStartupContext(null),
+        );
+        documentMocks.listDirectory.mockResolvedValue(emptyDirectoryPage());
+      } else {
+        const target =
+          kind === "git_diff"
+            ? { repo_path: "/workspace", source: { kind: "worktree" } }
+            : {
+                owner: "example",
+                repo: "project",
+                source: { kind: "pull_request", number: 1 },
+                url: "https://github.com/example/project/pull/1",
+                use_cache: true,
+              };
+        documentMocks.getStartupContext.mockResolvedValue({
+          initial_mode: "file_view",
+          browser_root: { kind, target },
+        });
+        const loader =
+          kind === "git_diff"
+            ? documentMocks.loadGitDiff
+            : documentMocks.loadPrDiff;
+        loader.mockReset();
+        loader.mockRejectedValue(new Error("Diff unavailable"));
+      }
+      dispose = renderWorkspace();
+      const selector = kind === "directory" ? ".file-browser" : ".pr-browser";
+      await waitForElement<HTMLElement>(selector);
+      const diffPane = document.querySelector(".pr-diff-pane");
+      const button = modeButton("Collapse left pane");
+      expect(button.title).toBe("Collapse left pane (Shift+L)");
+      expect(button.getAttribute("aria-expanded")).toBe("true");
+      const expectVisibility = (visible: boolean): void => {
+        const pane = document.querySelector<HTMLElement>(selector);
+        expect(pane !== null && !pane.hidden).toBe(visible);
+        expect(button.getAttribute("aria-expanded")).toBe(String(visible));
+        expect(button.getAttribute("aria-label")).toBe(
+          visible ? "Collapse left pane" : "Expand left pane",
+        );
+        if (kind !== "directory") {
+          expect(document.querySelector(".pr-diff-pane")).toBe(diffPane);
+          expect(
+            document
+              .querySelector(".pr-workspace")
+              ?.classList.contains("pr-workspace--no-browser"),
+          ).toBe(!visible);
+        }
+      };
+      button.click();
+      expectVisibility(false);
+      button.click();
+      expectVisibility(true);
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "L",
+          shiftKey: true,
+          bubbles: true,
+        }),
+      );
+      expectVisibility(false);
+      button.click();
+      expectVisibility(true);
+      if (kind !== "directory") {
+        expect(
+          kind === "git_diff"
+            ? documentMocks.loadGitDiff
+            : documentMocks.loadPrDiff,
+        ).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
+
+  it("uses the configured sidebar shortcut in the icon tooltip and toggle action", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.listDirectory.mockResolvedValue(emptyDirectoryPage());
+    documentMocks.getKeymapConfig.mockResolvedValue({
+      path: null,
+      error: null,
+      config: {
+        workspace: {
+          keymap: [
+            { on: "<C-b>", run: "sidebar.toggle", desc: "Toggle sidebar" },
+          ],
+        },
+      },
+    });
+    dispose = renderWorkspace();
+    await waitForElement<HTMLElement>(".file-browser");
+    const button = modeButton("Collapse left pane");
+    expect(button.title).toBe("Collapse left pane (Ctrl+B)");
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "b", ctrlKey: true, bubbles: true }),
+    );
+    expect(button.title).toBe("Expand left pane (Ctrl+B)");
+    expect(document.querySelector(".file-browser")).toBeNull();
+    button.click();
+    expect(document.querySelector(".file-browser")).not.toBeNull();
+  });
+
   it("restores the default Tree sort after another sort without stale listing state", async () => {
     documentMocks.getStartupContext.mockResolvedValue(
       directoryStartupContext(null),

@@ -142,6 +142,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
           documentPath={previewPath(props.filePreview)}
           fileName={props.filePreview?.file_name ?? ""}
           dragPanEnabled={props.filePreview?.kind === "image"}
+          layout={props.filePreview?.kind === "text" ? "source" : "rendered"}
           html={previewHtml(props.filePreview)}
           selectedAnchorId={null}
           subtitle={previewSubtitle(props.filePreview)}

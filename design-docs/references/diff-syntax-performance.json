@@ -1,0 +1,585 @@
+{
+  "runtime": "1.4.0",
+  "metric": "median of 9 warm passes over 2000 distinct lines; firstPassMilliseconds is the first observed full pass in this process (includes JIT and lazy keyword initialization, not isolated process startup); no result cache; reference tokenizer and keyword allocator frozen before changes",
+  "results": [
+    {
+      "kind": "plain",
+      "aliases": [
+        "sample.txt",
+        "unknown"
+      ],
+      "bytes": 98890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 0.12154199999999982,
+        "firstPassMilliseconds": 1.003499999999999,
+        "segments": 2000
+      },
+      "after": {
+        "milliseconds": 0.10441600000000051,
+        "firstPassMilliseconds": 0.669041,
+        "segments": 2000
+      },
+      "speedup": 1.1640170088875195
+    },
+    {
+      "kind": "javascript",
+      "aliases": [
+        "js",
+        "jsx",
+        "mjs",
+        "cjs",
+        "ts",
+        "tsx",
+        "mts",
+        "cts"
+      ],
+      "bytes": 164890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 8.764708000000013,
+        "firstPassMilliseconds": 14.515625,
+        "segments": 70000
+      },
+      "after": {
+        "milliseconds": 5.266375000000011,
+        "firstPassMilliseconds": 12.243792000000013,
+        "segments": 56000
+      },
+      "speedup": 1.6642772305428297
+    },
+    {
+      "kind": "java",
+      "aliases": [
+        "java"
+      ],
+      "bytes": 162890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 9.604917,
+        "firstPassMilliseconds": 10.941790999999995,
+        "segments": 62000
+      },
+      "after": {
+        "milliseconds": 4.4631669999999986,
+        "firstPassMilliseconds": 7.606083000000012,
+        "segments": 42000
+      },
+      "speedup": 2.152040692181136
+    },
+    {
+      "kind": "scala",
+      "aliases": [
+        "scala",
+        "sc"
+      ],
+      "bytes": 152890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 9.394000000000005,
+        "firstPassMilliseconds": 13.79283399999997,
+        "segments": 74000
+      },
+      "after": {
+        "milliseconds": 3.265166000000022,
+        "firstPassMilliseconds": 3.0284580000000005,
+        "segments": 64000
+      },
+      "speedup": 2.8770359608056504
+    },
+    {
+      "kind": "lisp",
+      "aliases": [
+        "lisp",
+        "lsp",
+        "cl",
+        "el"
+      ],
+      "bytes": 104890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 6.521916000000033,
+        "firstPassMilliseconds": 7.265749999999969,
+        "segments": 54000
+      },
+      "after": {
+        "milliseconds": 2.2367080000000215,
+        "firstPassMilliseconds": 2.716374999999971,
+        "segments": 42000
+      },
+      "speedup": 2.915854908195424
+    },
+    {
+      "kind": "ruby",
+      "aliases": [
+        "rb",
+        "rake",
+        "gemspec",
+        "Gemfile",
+        "Rakefile"
+      ],
+      "bytes": 122890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 7.715458000000012,
+        "firstPassMilliseconds": 7.590040999999928,
+        "segments": 48000
+      },
+      "after": {
+        "milliseconds": 2.4374579999999924,
+        "firstPassMilliseconds": 2.8192080000000033,
+        "segments": 40000
+      },
+      "speedup": 3.16537064433522
+    },
+    {
+      "kind": "python",
+      "aliases": [
+        "py",
+        "pyw"
+      ],
+      "bytes": 142890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 8.788208000000054,
+        "firstPassMilliseconds": 9.939540999999963,
+        "segments": 56000
+      },
+      "after": {
+        "milliseconds": 2.83887500000003,
+        "firstPassMilliseconds": 3.1855840000000626,
+        "segments": 46000
+      },
+      "speedup": 3.095665712650244
+    },
+    {
+      "kind": "c",
+      "aliases": [
+        "c",
+        "h"
+      ],
+      "bytes": 132890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 7.83520800000008,
+        "firstPassMilliseconds": 6.923583000000008,
+        "segments": 50000
+      },
+      "after": {
+        "milliseconds": 2.5793749999999136,
+        "firstPassMilliseconds": 2.770375000000058,
+        "segments": 42000
+      },
+      "speedup": 3.037638187545565
+    },
+    {
+      "kind": "cpp",
+      "aliases": [
+        "cpp",
+        "cc",
+        "cxx",
+        "hpp",
+        "hh",
+        "hxx"
+      ],
+      "bytes": 168890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 10.109000000000151,
+        "firstPassMilliseconds": 10.28916700000002,
+        "segments": 66000
+      },
+      "after": {
+        "milliseconds": 3.2664170000000468,
+        "firstPassMilliseconds": 3.675375000000031,
+        "segments": 50000
+      },
+      "speedup": 3.094828370045835
+    },
+    {
+      "kind": "zig",
+      "aliases": [
+        "zig"
+      ],
+      "bytes": 170890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 10.58420799999999,
+        "firstPassMilliseconds": 11.52924999999982,
+        "segments": 74000
+      },
+      "after": {
+        "milliseconds": 4.3599999999999,
+        "firstPassMilliseconds": 3.846625000000131,
+        "segments": 56000
+      },
+      "speedup": 2.4275706422018883
+    },
+    {
+      "kind": "haskell",
+      "aliases": [
+        "hs",
+        "lhs",
+        "hsc"
+      ],
+      "bytes": 164890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 9.261166000000003,
+        "firstPassMilliseconds": 8.753415999999788,
+        "segments": 66000
+      },
+      "after": {
+        "milliseconds": 3.8033329999998386,
+        "firstPassMilliseconds": 3.99149999999986,
+        "segments": 48000
+      },
+      "speedup": 2.4350131844885516
+    },
+    {
+      "kind": "swift",
+      "aliases": [
+        "swift"
+      ],
+      "bytes": 178890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 10.73179099999993,
+        "firstPassMilliseconds": 10.60437499999989,
+        "segments": 76000
+      },
+      "after": {
+        "milliseconds": 3.8592080000000806,
+        "firstPassMilliseconds": 4.297250000000076,
+        "segments": 58000
+      },
+      "speedup": 2.7808273096448044
+    },
+    {
+      "kind": "vue",
+      "aliases": [
+        "vue"
+      ],
+      "bytes": 156890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 8.034832999999935,
+        "firstPassMilliseconds": 8.75649999999996,
+        "segments": 62000
+      },
+      "after": {
+        "milliseconds": 2.845540999999912,
+        "firstPassMilliseconds": 3.1177920000000086,
+        "segments": 40000
+      },
+      "speedup": 2.823657434561717
+    },
+    {
+      "kind": "sql",
+      "aliases": [
+        "sql"
+      ],
+      "bytes": 160890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 9.12829099999999,
+        "firstPassMilliseconds": 10.39308300000016,
+        "segments": 58000
+      },
+      "after": {
+        "milliseconds": 3.336708999999928,
+        "firstPassMilliseconds": 2.8543750000001182,
+        "segments": 44000
+      },
+      "speedup": 2.735716839556637
+    },
+    {
+      "kind": "groovy",
+      "aliases": [
+        "gradle",
+        "groovy",
+        "gvy",
+        "gy",
+        "gsh"
+      ],
+      "bytes": 168890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 8.627792,
+        "firstPassMilliseconds": 9.208832999999913,
+        "segments": 58000
+      },
+      "after": {
+        "milliseconds": 2.7516669999999976,
+        "firstPassMilliseconds": 3.325166000000081,
+        "segments": 42000
+      },
+      "speedup": 3.135478239191009
+    },
+    {
+      "kind": "xml",
+      "aliases": [
+        "xml",
+        "svg"
+      ],
+      "bytes": 136890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 4.53449999999998,
+        "firstPassMilliseconds": 5.354458000000022,
+        "segments": 44000
+      },
+      "after": {
+        "milliseconds": 2.353791000000001,
+        "firstPassMilliseconds": 2.338457999999946,
+        "segments": 34000
+      },
+      "speedup": 1.9264667083865892
+    },
+    {
+      "kind": "properties",
+      "aliases": [
+        "properties"
+      ],
+      "bytes": 102890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 3.6942920000001322,
+        "firstPassMilliseconds": 2.956709000000046,
+        "segments": 36000
+      },
+      "after": {
+        "milliseconds": 1.7467499999997926,
+        "firstPassMilliseconds": 2.107332999999926,
+        "segments": 30000
+      },
+      "speedup": 2.114951767568668
+    },
+    {
+      "kind": "protobuf",
+      "aliases": [
+        "proto"
+      ],
+      "bytes": 148890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 8.15887500000008,
+        "firstPassMilliseconds": 8.651209000000108,
+        "segments": 58000
+      },
+      "after": {
+        "milliseconds": 2.9051660000000084,
+        "firstPassMilliseconds": 3.167333000000326,
+        "segments": 46000
+      },
+      "speedup": 2.8084023425856066
+    },
+    {
+      "kind": "nix",
+      "aliases": [
+        "nix"
+      ],
+      "bytes": 130890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 5.733958999999686,
+        "firstPassMilliseconds": 6.359207999999853,
+        "segments": 60000
+      },
+      "after": {
+        "milliseconds": 2.753458000000137,
+        "firstPassMilliseconds": 2.8985419999999067,
+        "segments": 48000
+      },
+      "speedup": 2.082457404470815
+    },
+    {
+      "kind": "dockerfile",
+      "aliases": [
+        "Dockerfile",
+        "sample.dockerfile"
+      ],
+      "bytes": 74890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 4.443375000000287,
+        "firstPassMilliseconds": 5.143667000000278,
+        "segments": 28000
+      },
+      "after": {
+        "milliseconds": 1.47787500000004,
+        "firstPassMilliseconds": 1.8131670000002487,
+        "segments": 14000
+      },
+      "speedup": 3.0065973103274413
+    },
+    {
+      "kind": "makefile",
+      "aliases": [
+        "Makefile",
+        "mk"
+      ],
+      "bytes": 98890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 4.398625000000266,
+        "firstPassMilliseconds": 4.333292000000256,
+        "segments": 34000
+      },
+      "after": {
+        "milliseconds": 1.8260409999998046,
+        "firstPassMilliseconds": 1.9929590000001554,
+        "segments": 24000
+      },
+      "speedup": 2.4088314555920354
+    },
+    {
+      "kind": "rust",
+      "aliases": [
+        "rs"
+      ],
+      "bytes": 156890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 9.366790999999921,
+        "firstPassMilliseconds": 10.082875000000058,
+        "segments": 74000
+      },
+      "after": {
+        "milliseconds": 3.899582999999893,
+        "firstPassMilliseconds": 3.7729169999997794,
+        "segments": 52000
+      },
+      "speedup": 2.4019981110801276
+    },
+    {
+      "kind": "shell",
+      "aliases": [
+        "sample.sh",
+        "sample.bash",
+        "sample.zsh",
+        "ksh",
+        "env",
+        ".bashrc",
+        ".zshrc",
+        ".profile",
+        "bash",
+        "sh",
+        "zsh"
+      ],
+      "bytes": 106890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 4.709792000000107,
+        "firstPassMilliseconds": 5.481999999999971,
+        "segments": 46000
+      },
+      "after": {
+        "milliseconds": 2.2438750000001164,
+        "firstPassMilliseconds": 2.127665999999863,
+        "segments": 38000
+      },
+      "speedup": 2.098954710043947
+    },
+    {
+      "kind": "json",
+      "aliases": [
+        "json",
+        "jsonc"
+      ],
+      "bytes": 152890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 5.667249999999967,
+        "firstPassMilliseconds": 5.907791000000088,
+        "segments": 68000
+      },
+      "after": {
+        "milliseconds": 4.87295899999981,
+        "firstPassMilliseconds": 8.764333000000079,
+        "segments": 66000
+      },
+      "speedup": 1.1629997297330408
+    },
+    {
+      "kind": "markdown",
+      "aliases": [
+        "md",
+        "markdown"
+      ],
+      "bytes": 156890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 10.596207999999933,
+        "firstPassMilliseconds": 18.467333000000053,
+        "segments": 94000
+      },
+      "after": {
+        "milliseconds": 6.790042000000085,
+        "firstPassMilliseconds": 11.78879199999983,
+        "segments": 32000
+      },
+      "speedup": 1.5605511718483922
+    },
+    {
+      "kind": "css",
+      "aliases": [
+        "css",
+        "scss",
+        "sass"
+      ],
+      "bytes": 164890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 6.253458000000137,
+        "firstPassMilliseconds": 7.569290999999794,
+        "segments": 60000
+      },
+      "after": {
+        "milliseconds": 4.25845900000013,
+        "firstPassMilliseconds": 6.24416599999995,
+        "segments": 46000
+      },
+      "speedup": 1.468479090675746
+    },
+    {
+      "kind": "toml",
+      "aliases": [
+        "toml"
+      ],
+      "bytes": 106890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 4.070667000000412,
+        "firstPassMilliseconds": 4.596374999999625,
+        "segments": 42000
+      },
+      "after": {
+        "milliseconds": 3.4420829999999114,
+        "firstPassMilliseconds": 3.460207999999966,
+        "segments": 32000
+      },
+      "speedup": 1.1826173279379135
+    },
+    {
+      "kind": "yaml",
+      "aliases": [
+        "yaml",
+        "yml"
+      ],
+      "bytes": 120890,
+      "lines": 2000,
+      "before": {
+        "milliseconds": 4.292500000000018,
+        "firstPassMilliseconds": 4.611750000000029,
+        "segments": 46000
+      },
+      "after": {
+        "milliseconds": 3.2914590000000317,
+        "firstPassMilliseconds": 3.3285000000000764,
+        "segments": 42000
+      },
+      "speedup": 1.304132908840723
+    }
+  ]
+}

@@ -158,7 +158,10 @@ The repository design documents started from a Markdown workbench concept, then 
   - images: inline image preview, including HEIC / HEIF when the platform WebView can decode the file
   - video: embedded video preview
   - PDF: embedded iframe preview
-  - text-like files: syntax-highlighted source preview
+  - text-like files: syntax-highlighted source preview with prebuilt grammar data and a native regex engine for faster loading; Markdown code fences share the same engine
+  - source preview layout: full-pane code with a small inset, independent scrolling/zoom, and compact language/size metadata in a footer
+  - diff highlighting: shared token scanning and span coalescing across all 28 tokenizer kinds; see the [complete syntax inventory and measured results](design-docs/specs/design-syntax-inventory.md)
+  - JSON files: dedicated source highlighting that preserves original formatting and avoids general-purpose grammar parsing
   - binary files: metadata/placeholder preview
 
 Markdown source can be edited in the raw pane and saved back to disk. If the file changes on disk while the editor has unsaved changes, chilla keeps the local buffer and surfaces a conflict flow instead of silently overwriting it.
@@ -181,7 +184,9 @@ Markdown source can be edited in the raw pane and saved back to disk. If the fil
 - Revision-aware workspace refresh that re-reads the current directory or explicit file set and active local preview, including image and PDF cache invalidation
 - Direct CSV view selection with `1` for raw source and `2` for formatted table when available
 - Theme toggle with frontend CSS variables and backend syntax-theme synchronization
-- Custom undecorated desktop window chrome
+- Custom desktop toolbar, with a native macOS title bar for window-manager compatibility
+- Startup window size and position fit the monitor's usable area, including smaller displays
+- Compact window minimum (320 × 240) allows half, third, and quarter tiling with window managers
 
 In directory Tree view, folders load as you expand them. The name filter applies
 to loaded files and keeps folders available for further browsing; use Load more
@@ -216,7 +221,7 @@ Default global shortcuts:
 - `Ctrl+U`: page the active file view up; in Git diff mode, page the selected diff file view rather than the changed-file sidebar
 - `j` or `ArrowDown`: scroll the active file view down one line when the file tree is hidden
 - `k` or `ArrowUp`: scroll the active file view up one line when the file tree is hidden
-- `Shift+L`: toggle file tree
+- `Shift+L`: collapse or expand the left pane; the sidebar icon in the main toolbar provides the same action, including in Git diff mode
 - `g`: toggle local Git diff for the opened repository
 - `y`: copy the selected file or directory absolute path
 - `r`: refresh the current directory or explicit file set and active local file
@@ -514,7 +519,7 @@ The local release task expects these environment variables to be exported by the
 Publish signed/notarized macOS release assets from the local machine with:
 
 ```bash
-mise run release-macos-dmg-local -- v0.2.0
+mise run release-macos-dmg-local -- v0.3.0
 ```
 
 The release task mounts the final DMG read-only and verifies the embedded app's

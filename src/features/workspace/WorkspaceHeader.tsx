@@ -8,12 +8,16 @@ import type {
 import type { ColorScheme } from "../../lib/theme";
 import {
   CloseWindowGlyph,
+  FileViewGlyph,
+  GitDiffGlyph,
   MaximizeWindowGlyph,
   MinimizeWindowGlyph,
   MoonGlyph,
+  OpenFilesGlyph,
   PreviewGlyph,
   RawSourceGlyph,
   ReloadGlyph,
+  SidebarGlyph,
   SunGlyph,
   TocGlyph,
 } from "./workspaceGlyphs";
@@ -29,6 +33,8 @@ interface WorkspaceWindowControls {
 }
 
 interface WorkspaceHeaderProps {
+  readonly isFileTreeOpen: boolean;
+  readonly onToggleFileTree: () => void;
   readonly markdownOpen: boolean;
   readonly markdownPane: MarkdownPane;
   readonly csvPreview: CsvPreview | null;
@@ -98,6 +104,24 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
   return (
     <header class="workspace__header" data-tauri-drag-region="">
       <div class="workspace__actions" data-tauri-drag-region="false">
+        <button
+          class={`button button--ghost workspace__icon-button${
+            props.isFileTreeOpen ? " button--active" : ""
+          }`}
+          type="button"
+          aria-label={
+            props.isFileTreeOpen ? "Collapse left pane" : "Expand left pane"
+          }
+          aria-expanded={props.isFileTreeOpen}
+          title={title(
+            props.isFileTreeOpen ? "Collapse left pane" : "Expand left pane",
+            "sidebar.toggle",
+            SHORTCUT_LABELS.toggleFileTree,
+          )}
+          onClick={props.onToggleFileTree}
+        >
+          <SidebarGlyph />
+        </button>
         <Show when={props.markdownOpen}>
           <div
             class="workspace__mode-group"
@@ -193,36 +217,36 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
           fallback={
             <Show when={props.canOpenGitDiff}>
               <button
-                class="button button--ghost"
+                class="button button--ghost workspace__icon-button"
                 type="button"
                 aria-label="Open Git diff mode"
                 title="Open Git diff mode"
                 onClick={props.onOpenGitDiff}
               >
-                Git diff
+                <GitDiffGlyph />
               </button>
             </Show>
           }
         >
           <button
-            class="button button--ghost"
+            class="button button--ghost workspace__icon-button"
             type="button"
             aria-label="Return to file view"
             title="Return to file view"
             onClick={props.onCloseGitDiff}
           >
-            File view
+            <FileViewGlyph />
           </button>
         </Show>
 
         <button
-          class="button"
+          class="button workspace__icon-button"
           type="button"
           aria-label="Open one or more files"
           title={title("Open files", "files.open", SHORTCUT_LABELS.openFiles)}
           onClick={props.onOpenFiles}
         >
-          Open files
+          <OpenFilesGlyph />
         </button>
 
         <Show when={props.hasTocDocument}>

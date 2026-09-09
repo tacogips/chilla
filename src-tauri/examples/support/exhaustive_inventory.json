@@ -1,0 +1,762 @@
+[
+  {
+    "extensions": [
+      "txt"
+    ],
+    "hidden": false,
+    "name": "Plain Text",
+    "scope": "text.plain"
+  },
+  {
+    "extensions": [
+      "asa"
+    ],
+    "hidden": false,
+    "name": "ASP",
+    "scope": "source.asp"
+  },
+  {
+    "extensions": [
+      "asp"
+    ],
+    "hidden": false,
+    "name": "HTML (ASP)",
+    "scope": "text.html.asp"
+  },
+  {
+    "extensions": [
+      "as"
+    ],
+    "hidden": false,
+    "name": "ActionScript",
+    "scope": "source.actionscript.2"
+  },
+  {
+    "extensions": [
+      "applescript",
+      "script editor"
+    ],
+    "hidden": false,
+    "name": "AppleScript",
+    "scope": "source.applescript"
+  },
+  {
+    "extensions": [
+      "bat",
+      "cmd"
+    ],
+    "hidden": false,
+    "name": "Batch File",
+    "scope": "source.dosbatch"
+  },
+  {
+    "extensions": [
+      "build"
+    ],
+    "hidden": false,
+    "name": "NAnt Build File",
+    "scope": "source.nant-build"
+  },
+  {
+    "extensions": [
+      "cs",
+      "csx"
+    ],
+    "hidden": false,
+    "name": "C#",
+    "scope": "source.cs"
+  },
+  {
+    "extensions": [
+      "cpp",
+      "cc",
+      "cp",
+      "cxx",
+      "c++",
+      "C",
+      "h",
+      "hh",
+      "hpp",
+      "hxx",
+      "h++",
+      "inl",
+      "ipp"
+    ],
+    "hidden": false,
+    "name": "C++",
+    "scope": "source.c++"
+  },
+  {
+    "extensions": [
+      "c",
+      "h"
+    ],
+    "hidden": false,
+    "name": "C",
+    "scope": "source.c"
+  },
+  {
+    "extensions": [
+      "css",
+      "css.erb",
+      "css.liquid"
+    ],
+    "hidden": false,
+    "name": "CSS",
+    "scope": "source.css"
+  },
+  {
+    "extensions": [
+      "clj"
+    ],
+    "hidden": false,
+    "name": "Clojure",
+    "scope": "source.clojure"
+  },
+  {
+    "extensions": [
+      "d",
+      "di"
+    ],
+    "hidden": false,
+    "name": "D",
+    "scope": "source.d"
+  },
+  {
+    "extensions": [
+      "diff",
+      "patch"
+    ],
+    "hidden": false,
+    "name": "Diff",
+    "scope": "source.diff"
+  },
+  {
+    "extensions": [
+      "erl",
+      "hrl",
+      "Emakefile",
+      "emakefile"
+    ],
+    "hidden": false,
+    "name": "Erlang",
+    "scope": "source.erlang"
+  },
+  {
+    "extensions": [
+      "yaws"
+    ],
+    "hidden": false,
+    "name": "HTML (Erlang)",
+    "scope": "text.html.erlang.yaws"
+  },
+  {
+    "extensions": [
+      "go"
+    ],
+    "hidden": false,
+    "name": "Go",
+    "scope": "source.go"
+  },
+  {
+    "extensions": [
+      "dot",
+      "DOT",
+      "gv"
+    ],
+    "hidden": false,
+    "name": "Graphviz (DOT)",
+    "scope": "source.dot"
+  },
+  {
+    "extensions": [
+      "groovy",
+      "gvy",
+      "gradle"
+    ],
+    "hidden": false,
+    "name": "Groovy",
+    "scope": "source.groovy"
+  },
+  {
+    "extensions": [
+      "html",
+      "htm",
+      "shtml",
+      "xhtml",
+      "inc",
+      "tmpl",
+      "tpl"
+    ],
+    "hidden": false,
+    "name": "HTML",
+    "scope": "text.html.basic"
+  },
+  {
+    "extensions": [
+      "hs"
+    ],
+    "hidden": false,
+    "name": "Haskell",
+    "scope": "source.haskell"
+  },
+  {
+    "extensions": [
+      "lhs"
+    ],
+    "hidden": false,
+    "name": "Literate Haskell",
+    "scope": "text.tex.latex.haskell"
+  },
+  {
+    "extensions": [
+      "jsp"
+    ],
+    "hidden": false,
+    "name": "Java Server Page (JSP)",
+    "scope": "text.html.jsp"
+  },
+  {
+    "extensions": [
+      "java",
+      "bsh"
+    ],
+    "hidden": false,
+    "name": "Java",
+    "scope": "source.java"
+  },
+  {
+    "extensions": [],
+    "hidden": false,
+    "name": "JavaDoc",
+    "scope": "text.html.javadoc"
+  },
+  {
+    "extensions": [
+      "properties"
+    ],
+    "hidden": false,
+    "name": "Java Properties",
+    "scope": "source.java-props"
+  },
+  {
+    "extensions": [
+      "json",
+      "sublime-settings",
+      "sublime-menu",
+      "sublime-keymap",
+      "sublime-mousemap",
+      "sublime-theme",
+      "sublime-build",
+      "sublime-project",
+      "sublime-completions",
+      "sublime-commands",
+      "sublime-macro",
+      "sublime-color-scheme"
+    ],
+    "hidden": false,
+    "name": "JSON",
+    "scope": "source.json"
+  },
+  {
+    "extensions": [
+      "js",
+      "htc"
+    ],
+    "hidden": false,
+    "name": "JavaScript",
+    "scope": "source.js"
+  },
+  {
+    "extensions": [],
+    "hidden": true,
+    "name": "Regular Expressions (Javascript)",
+    "scope": "source.regexp.js"
+  },
+  {
+    "extensions": [
+      "bib"
+    ],
+    "hidden": false,
+    "name": "BibTeX",
+    "scope": "text.bibtex"
+  },
+  {
+    "extensions": [],
+    "hidden": false,
+    "name": "LaTeX Log",
+    "scope": "text.log.latex"
+  },
+  {
+    "extensions": [
+      "tex",
+      "ltx"
+    ],
+    "hidden": false,
+    "name": "LaTeX",
+    "scope": "text.tex.latex"
+  },
+  {
+    "extensions": [
+      "sty",
+      "cls"
+    ],
+    "hidden": false,
+    "name": "TeX",
+    "scope": "text.tex"
+  },
+  {
+    "extensions": [
+      "lisp",
+      "cl",
+      "clisp",
+      "l",
+      "mud",
+      "el",
+      "scm",
+      "ss",
+      "lsp",
+      "fasl"
+    ],
+    "hidden": false,
+    "name": "Lisp",
+    "scope": "source.lisp"
+  },
+  {
+    "extensions": [
+      "lua"
+    ],
+    "hidden": false,
+    "name": "Lua",
+    "scope": "source.lua"
+  },
+  {
+    "extensions": [],
+    "hidden": true,
+    "name": "Make Output",
+    "scope": "source.build_output"
+  },
+  {
+    "extensions": [
+      "make",
+      "GNUmakefile",
+      "makefile",
+      "Makefile",
+      "OCamlMakefile",
+      "mak",
+      "mk"
+    ],
+    "hidden": false,
+    "name": "Makefile",
+    "scope": "source.makefile"
+  },
+  {
+    "extensions": [
+      "md",
+      "mdown",
+      "markdown",
+      "markdn"
+    ],
+    "hidden": false,
+    "name": "Markdown",
+    "scope": "text.html.markdown"
+  },
+  {
+    "extensions": [],
+    "hidden": false,
+    "name": "MultiMarkdown",
+    "scope": "text.html.markdown.multimarkdown"
+  },
+  {
+    "extensions": [
+      "matlab"
+    ],
+    "hidden": false,
+    "name": "MATLAB",
+    "scope": "source.matlab"
+  },
+  {
+    "extensions": [
+      "ml",
+      "mli"
+    ],
+    "hidden": false,
+    "name": "OCaml",
+    "scope": "source.ocaml"
+  },
+  {
+    "extensions": [
+      "mll"
+    ],
+    "hidden": false,
+    "name": "OCamllex",
+    "scope": "source.ocamllex"
+  },
+  {
+    "extensions": [
+      "mly"
+    ],
+    "hidden": false,
+    "name": "OCamlyacc",
+    "scope": "source.ocamlyacc"
+  },
+  {
+    "extensions": [],
+    "hidden": false,
+    "name": "camlp4",
+    "scope": "source.camlp4.ocaml"
+  },
+  {
+    "extensions": [
+      "mm",
+      "M",
+      "h"
+    ],
+    "hidden": false,
+    "name": "Objective-C++",
+    "scope": "source.objc++"
+  },
+  {
+    "extensions": [
+      "m",
+      "h"
+    ],
+    "hidden": false,
+    "name": "Objective-C",
+    "scope": "source.objc"
+  },
+  {
+    "extensions": [],
+    "hidden": true,
+    "name": "PHP Source",
+    "scope": "source.php"
+  },
+  {
+    "extensions": [
+      "php",
+      "php3",
+      "php4",
+      "php5",
+      "php7",
+      "phps",
+      "phpt",
+      "phtml"
+    ],
+    "hidden": false,
+    "name": "PHP",
+    "scope": "embedding.php"
+  },
+  {
+    "extensions": [
+      "pas",
+      "p",
+      "dpr"
+    ],
+    "hidden": false,
+    "name": "Pascal",
+    "scope": "source.pascal"
+  },
+  {
+    "extensions": [
+      "pl",
+      "pm",
+      "pod",
+      "t",
+      "PL"
+    ],
+    "hidden": false,
+    "name": "Perl",
+    "scope": "source.perl"
+  },
+  {
+    "extensions": [
+      "py",
+      "py3",
+      "pyw",
+      "pyi",
+      "pyx",
+      "pyx.in",
+      "pxd",
+      "pxd.in",
+      "pxi",
+      "pxi.in",
+      "rpy",
+      "cpy",
+      "SConstruct",
+      "Sconstruct",
+      "sconstruct",
+      "SConscript",
+      "gyp",
+      "gypi",
+      "Snakefile",
+      "wscript"
+    ],
+    "hidden": false,
+    "name": "Python",
+    "scope": "source.python"
+  },
+  {
+    "extensions": [],
+    "hidden": true,
+    "name": "Regular Expressions (Python)",
+    "scope": "source.regexp.python"
+  },
+  {
+    "extensions": [],
+    "hidden": false,
+    "name": "R Console",
+    "scope": "source.r-console"
+  },
+  {
+    "extensions": [
+      "R",
+      "r",
+      "s",
+      "S",
+      "Rprofile"
+    ],
+    "hidden": false,
+    "name": "R",
+    "scope": "source.r"
+  },
+  {
+    "extensions": [
+      "rd"
+    ],
+    "hidden": false,
+    "name": "Rd (R Documentation)",
+    "scope": "text.tex.latex.rd"
+  },
+  {
+    "extensions": [
+      "rails",
+      "rhtml",
+      "erb",
+      "html.erb"
+    ],
+    "hidden": false,
+    "name": "HTML (Rails)",
+    "scope": "text.html.ruby"
+  },
+  {
+    "extensions": [
+      "js.erb"
+    ],
+    "hidden": false,
+    "name": "JavaScript (Rails)",
+    "scope": "source.js.rails"
+  },
+  {
+    "extensions": [
+      "haml",
+      "sass"
+    ],
+    "hidden": false,
+    "name": "Ruby Haml",
+    "scope": "text.haml"
+  },
+  {
+    "extensions": [
+      "rxml",
+      "builder"
+    ],
+    "hidden": false,
+    "name": "Ruby on Rails",
+    "scope": "source.ruby.rails"
+  },
+  {
+    "extensions": [
+      "erbsql",
+      "sql.erb"
+    ],
+    "hidden": false,
+    "name": "SQL (Rails)",
+    "scope": "source.sql.ruby"
+  },
+  {
+    "extensions": [
+      "re"
+    ],
+    "hidden": false,
+    "name": "Regular Expression",
+    "scope": "source.regexp"
+  },
+  {
+    "extensions": [
+      "rst",
+      "rest"
+    ],
+    "hidden": false,
+    "name": "reStructuredText",
+    "scope": "text.restructuredtext"
+  },
+  {
+    "extensions": [
+      "rb",
+      "Appfile",
+      "Appraisals",
+      "Berksfile",
+      "Brewfile",
+      "capfile",
+      "cgi",
+      "Cheffile",
+      "config.ru",
+      "Deliverfile",
+      "Fastfile",
+      "fcgi",
+      "Gemfile",
+      "gemspec",
+      "Guardfile",
+      "irbrc",
+      "jbuilder",
+      "podspec",
+      "prawn",
+      "rabl",
+      "rake",
+      "Rakefile",
+      "Rantfile",
+      "rbx",
+      "rjs",
+      "ruby.rail",
+      "Scanfile",
+      "simplecov",
+      "Snapfile",
+      "thor",
+      "Thorfile",
+      "Vagrantfile"
+    ],
+    "hidden": false,
+    "name": "Ruby",
+    "scope": "source.ruby"
+  },
+  {
+    "extensions": [],
+    "hidden": true,
+    "name": "Cargo Build Results",
+    "scope": "source.build_results"
+  },
+  {
+    "extensions": [
+      "rs"
+    ],
+    "hidden": false,
+    "name": "Rust",
+    "scope": "source.rust"
+  },
+  {
+    "extensions": [
+      "sql",
+      "ddl",
+      "dml"
+    ],
+    "hidden": false,
+    "name": "SQL",
+    "scope": "source.sql"
+  },
+  {
+    "extensions": [
+      "scala",
+      "sbt"
+    ],
+    "hidden": false,
+    "name": "Scala",
+    "scope": "source.scala"
+  },
+  {
+    "extensions": [
+      "sh",
+      "bash",
+      "zsh",
+      "fish",
+      ".bash_aliases",
+      ".bash_completions",
+      ".bash_functions",
+      ".bash_login",
+      ".bash_logout",
+      ".bash_profile",
+      ".bash_variables",
+      ".bashrc",
+      ".profile",
+      ".textmate_init"
+    ],
+    "hidden": false,
+    "name": "Bourne Again Shell (bash)",
+    "scope": "source.shell.bash"
+  },
+  {
+    "extensions": [],
+    "hidden": true,
+    "name": "Shell-Unix-Generic",
+    "scope": "source.shell"
+  },
+  {
+    "extensions": [],
+    "hidden": true,
+    "name": "commands-builtin-shell-bash",
+    "scope": "commands.builtin.shell.bash"
+  },
+  {
+    "extensions": [
+      "adp"
+    ],
+    "hidden": false,
+    "name": "HTML (Tcl)",
+    "scope": "text.html.tcl"
+  },
+  {
+    "extensions": [
+      "tcl"
+    ],
+    "hidden": false,
+    "name": "Tcl",
+    "scope": "source.tcl"
+  },
+  {
+    "extensions": [
+      "textile"
+    ],
+    "hidden": false,
+    "name": "Textile",
+    "scope": "text.html.textile"
+  },
+  {
+    "extensions": [
+      "xml",
+      "xsd",
+      "xslt",
+      "tld",
+      "dtml",
+      "rss",
+      "opml",
+      "svg"
+    ],
+    "hidden": false,
+    "name": "XML",
+    "scope": "text.xml"
+  },
+  {
+    "extensions": [
+      "yaml",
+      "yml",
+      "sublime-syntax"
+    ],
+    "hidden": false,
+    "name": "YAML",
+    "scope": "source.yaml"
+  },
+  {
+    "extensions": [
+      "toml",
+      "tml",
+      "Cargo.lock",
+      "Gopkg.lock",
+      "Pipfile",
+      "pdm.lock",
+      "poetry.lock",
+      "uv.lock"
+    ],
+    "hidden": false,
+    "name": "TOML",
+    "scope": "source.toml"
+  }
+]

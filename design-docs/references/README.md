@@ -6,6 +6,7 @@ This directory contains reference materials for system design and implementation
 
 | Name | URL | Description |
 |------|-----|-------------|
+| AeroSpace window classification (0.21.3-Beta) | https://github.com/nikitabobko/AeroSpace/blob/d56e1637c3a1ed660d0cadd7534e94fb3218d1c3/Sources/AppBundle/model/AxUiElementWindowType.swift | Missing or disabled native fullscreen button triggers dialog/floating classification |
 | ign-template tauri-v1 | https://github.com/tacogips/ign-template/tree/cd4284b7c942f3b1bc38b81212525830e6c99bb8/tauri-v1 | Verified upstream mise-native tool/task baseline |
 | Tauri Prerequisites | https://v2.tauri.app/start/prerequisites/ | Native OS dependencies outside mise |
 | mise Continuous Integration | https://mise.jdx.dev/continuous-integration.html | mise-action and CI task execution |
@@ -47,6 +48,15 @@ This directory contains reference materials for system design and implementation
 | Konjac product page | sibling Konjac checkout: `../konjac/pubpage/` | Local reference for bilingual Vite pages, deterministic validation, responsive product captures, and Cloudflare Worker Static Assets deployment |
 
 ## Reference Documents
+
+### Syntax Highlighting Performance
+
+- [Complete syntax inventory and performance](../specs/design-syntax-inventory.md): all 76 backend grammars and 28 diff tokenizer kinds, with measured results and support limitations.
+- [Diff benchmark data](diff-syntax-performance.json): before/after medians, first observed passes, source sizes, and segment counts for every diff kind.
+- [Syntect performance and supported engines](https://github.com/trishume/syntect): lazy grammar/regex loading and the Oniguruma versus fancy-regex backend options.
+- [Syntect dump API](https://docs.rs/syntect/5.3.0/syntect/dumps/index.html): build-time syntax-set serialization and embedded uncompressed loading.
+- [Rust Onig](https://github.com/rust-onig/rust-onig): safe Rust wrapper, bundled native linking, and platform support.
+- [Oniguruma upstream](https://github.com/kkos/oniguruma): upstream C repository archived April 24, 2025; maintenance tradeoff considered when selecting the native engine.
 
 Reference documents should be organized by topic:
 

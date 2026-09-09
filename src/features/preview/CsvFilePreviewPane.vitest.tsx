@@ -12,7 +12,7 @@ function csvFixture(
     file_name: "sample.csv",
     mime_type: "text/csv",
     raw_html:
-      '<section class="file-preview file-preview--text"><p>x</p><pre>c</pre></section>',
+      '<section class="file-preview file-preview--text"><pre>c</pre><footer class="file-preview__meta" aria-label="File information">CSV · 16 B</footer></section>',
     rows: [
       ["a", "b"],
       ["c,d", "e"],
@@ -63,6 +63,7 @@ describe("CsvFilePreviewPane", () => {
     );
 
     const corner = root.querySelector(".csv-preview-table__corner");
+    expect(root.querySelector(".preview--source")).toBeNull();
     expect(corner).not.toBeNull();
     expect(root.querySelector(".preview__file-name")?.textContent).toBe(
       "sample.csv",
@@ -169,6 +170,13 @@ describe("CsvFilePreviewPane", () => {
 
     expect(root.innerHTML).toContain("file-preview");
     expect(root.innerHTML).toContain("<pre");
+    expect(root.querySelector(".preview--source")).not.toBeNull();
+    expect(root.querySelector("pre")?.nextElementSibling?.tagName).toBe(
+      "FOOTER",
+    );
+    expect(root.querySelector(".pane__header")?.textContent).not.toContain(
+      "CSV raw",
+    );
     expect(root.querySelector(".preview__file-name")?.textContent).toBe(
       "sample.csv",
     );

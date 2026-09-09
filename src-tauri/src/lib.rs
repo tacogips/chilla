@@ -10,6 +10,7 @@ pub mod keymap_config;
 pub mod markdown;
 pub mod media_stream;
 pub mod mp4_faststart;
+mod startup_window;
 pub mod syntax_highlight;
 pub mod verbose_log;
 pub mod viewer;
@@ -17,7 +18,7 @@ pub mod watcher;
 
 use std::time::Instant;
 
-use tauri::{Manager, WebviewWindow};
+use tauri::Manager;
 
 use app_state::AppState;
 use cli::StartupTarget;
@@ -29,6 +30,24 @@ use watcher::service::WatcherService;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(startup_target: StartupTarget) -> Result<(), String> {
     verbose_log::record_event("application_run_entry", "success");
+    let context = tauri::generate_context!();
+    #[cfg(target_os = "macos")]
+    let context = {
+        let mut context = context;
+        if let Some(main_window) = context
+            .config_mut()
+            .app
+            .windows
+            .iter_mut()
+            .find(|window| window.label == "main")
+        {
+            // A titled native window exposes the fullscreen Accessibility button
+            // that tiling managers use to distinguish normal windows from dialogs.
+            // Keep its titlebar above the custom toolbar to avoid overlapping controls.
+            main_window.decorations = true;
+        }
+        context
+    };
     let builder_started_at = verbose_log::is_enabled().then(Instant::now);
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -91,24 +110,36 @@ pub fn run(startup_target: StartupTarget) -> Result<(), String> {
             }
 
             if let Some(main_window) = main_window {
-                match clamp_main_window_to_work_area(&main_window) {
-                    Ok(clamped) => {
-                        if let Some(started_at) = setup_started_at {
-                            let outcome = if clamped { "clamped" } else { "unchanged" };
-                            verbose_log::record_phase("main_window_clamp", started_at, outcome);
+                // Native geometry setters can be asynchronous. Keep the event loop
+                // free while startup waits for the requested bounds to be applied.
+                tauri::async_runtime::spawn_blocking(move || {
+                    match startup_window::clamp_main_window_to_work_area(&main_window) {
+                        Ok(clamped) => {
+                            if let Some(started_at) = setup_started_at {
+                                let outcome = if clamped { "clamped" } else { "unchanged" };
+                                verbose_log::record_phase("main_window_clamp", started_at, outcome);
+                            }
+                        }
+                        Err(error) => {
+                            if let Some(started_at) = setup_started_at {
+                                verbose_log::record_phase_message(
+                                    "main_window_clamp",
+                                    started_at,
+                                    "failure",
+                                    &error.to_string(),
+                                );
+                            }
                         }
                     }
-                    Err(error) => {
-                        if let Some(started_at) = setup_started_at {
-                            verbose_log::record_phase_message(
-                                "main_window_clamp",
-                                started_at,
-                                "failure",
-                                &error.to_string(),
-                            );
-                        }
+                    if let Err(error) = main_window.show() {
+                        verbose_log::record_phase_message(
+                            "main_window_show",
+                            Instant::now(),
+                            "failure",
+                            &error.to_string(),
+                        );
                     }
-                }
+                });
             }
 
             Ok(())
@@ -132,28 +163,6 @@ pub fn run(startup_target: StartupTarget) -> Result<(), String> {
             commands::document::set_syntax_ui_theme,
             commands::document::render_markdown_preview,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .map_err(|error| error.to_string())
-}
-
-fn clamp_main_window_to_work_area(window: &WebviewWindow) -> tauri::Result<bool> {
-    let monitor = match window.current_monitor()? {
-        Some(monitor) => Some(monitor),
-        None => window.primary_monitor()?,
-    };
-    let Some(monitor) = monitor else {
-        return Ok(false);
-    };
-
-    let work_area = monitor.work_area();
-    let current_size = window.outer_size()?;
-    let clamped_width = current_size.width.min(work_area.size.width);
-    let clamped_height = current_size.height.min(work_area.size.height);
-    if clamped_width == current_size.width && clamped_height == current_size.height {
-        return Ok(false);
-    }
-
-    window.set_size(tauri::PhysicalSize::new(clamped_width, clamped_height))?;
-    window.center()?;
-    Ok(true)
 }

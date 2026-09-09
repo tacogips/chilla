@@ -59,6 +59,7 @@ export { buildDirectoryEntries } from "./prDiffBrowserEntries";
 type DiffViewMode = "left_right" | "full_file" | "stack" | "image";
 interface PrDiffWorkspaceProps {
   readonly target: DiffWorkspaceTarget;
+  readonly isFileTreeOpen?: boolean;
   readonly onReloadReady?: (reload: (() => Promise<void>) | null) => void;
 }
 
@@ -1443,11 +1444,19 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
   });
 
   return (
-    <div class="pr-workspace" style={prWorkspaceStyle()}>
+    <div
+      class="pr-workspace"
+      classList={{ "pr-workspace--no-browser": props.isFileTreeOpen === false }}
+      style={prWorkspaceStyle()}
+    >
       <Show when={standaloneKeymap}>
         <KeymapPopup controller={keymap} />
       </Show>
-      <aside class="pane pr-browser" ref={browserPane}>
+      <aside
+        class="pane pr-browser"
+        ref={browserPane}
+        hidden={props.isFileTreeOpen === false}
+      >
         <header class="pane__header">
           <span class="pane__title">Changed Files</span>
           <span>{files().length} files</span>

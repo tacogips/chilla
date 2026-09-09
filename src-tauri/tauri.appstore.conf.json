@@ -4,7 +4,7 @@
     "category": "Utility",
     "targets": ["app"],
     "macOS": {
-      "bundleVersion": "1",
+      "bundleVersion": "2",
       "minimumSystemVersion": "12.0"
     }
   }

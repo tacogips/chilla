@@ -1,0 +1,522 @@
+{
+  "entries": [
+    {
+      "extensions": [
+        "java",
+        "bsh"
+      ],
+      "hidden": false,
+      "measurements": [
+        {
+          "cold_render_ms": 14.572917,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.2152439999999998,
+            "parse_ms": 12.390339000000004,
+            "setup_ms": 0.479875,
+            "style_ms": 0.49615999999999916
+          },
+          "cold_total_ms": 15.152833000000001,
+          "highlighter_init_ms": 0.005582999999999999,
+          "html_bytes": 52655,
+          "html_hash": "460db04a44fe1980ba786efdc8ff4f0a7a788fba59b41f980a7739d17c709a06",
+          "reference_uncached_ms": [
+            10.951292,
+            10.172291999999999,
+            10.899666,
+            11.525834,
+            10.922791,
+            10.6175,
+            11.005749999999999,
+            11.847625,
+            12.011375,
+            10.601875,
+            12.104000000000001,
+            11.380958,
+            10.359542,
+            10.00575,
+            10.93825
+          ],
+          "set_load_ms": 0.574333,
+          "spans": 1216,
+          "theme": "dark",
+          "uncached_ms": [
+            9.990832999999999,
+            10.289375,
+            10.116,
+            10.680083,
+            11.02875,
+            10.016917,
+            10.204667,
+            11.370040999999999,
+            10.713125,
+            10.843125,
+            10.663791,
+            10.773125,
+            9.930583,
+            11.629999999999999,
+            9.899750000000001
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.1812149999999999,
+            "parse_ms": 9.967875000000003,
+            "setup_ms": 0.00125,
+            "style_ms": 0.4477069999999997
+          }
+        }
+      ],
+      "name": "Java",
+      "scope": "source.java",
+      "source_bytes": 8192,
+      "source_hash": "804dda74a8618b6d7e40dc4730403ed5a2d013378b53e6e7407c6119f0260b06"
+    },
+    {
+      "extensions": [
+        "mll"
+      ],
+      "hidden": false,
+      "measurements": [
+        {
+          "cold_render_ms": 11.760625000000001,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.16770499999999983,
+            "parse_ms": 10.051345,
+            "setup_ms": 0.11675,
+            "style_ms": 0.3840879999999988
+          },
+          "cold_total_ms": 12.464792000000001,
+          "highlighter_init_ms": 0.0053750000000000004,
+          "html_bytes": 44408,
+          "html_hash": "ea0db2ccdbe33ab6d4cb4a9f0db32a8569c62b2cc4c1dc1ddc9c33fea7e3a0ac",
+          "reference_uncached_ms": [
+            10.5485,
+            10.412292,
+            11.300041,
+            9.75425,
+            10.992999999999999,
+            11.282833,
+            10.791,
+            10.877833,
+            10.21,
+            10.713000000000001,
+            10.074,
+            9.366708,
+            10.364791,
+            10.837791,
+            10.077166
+          ],
+          "set_load_ms": 0.698792,
+          "spans": 954,
+          "theme": "dark",
+          "uncached_ms": [
+            10.435333,
+            10.708209,
+            10.727625,
+            9.574542000000001,
+            9.895249999999999,
+            10.605625,
+            10.828000000000001,
+            10.753499999999999,
+            10.63125,
+            9.645166999999999,
+            9.663082999999999,
+            9.327084,
+            10.132917,
+            10.353084,
+            9.8485
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.17770699999999978,
+            "parse_ms": 9.616346000000004,
+            "setup_ms": 0.0029170000000000003,
+            "style_ms": 0.4945889999999985
+          }
+        }
+      ],
+      "name": "OCamllex",
+      "scope": "source.ocamllex",
+      "source_bytes": 8321,
+      "source_hash": "78f19f92a6b2cd4834a8c6aa244ece1ef55cedc826f3c080e9b81cc53a106e85"
+    },
+    {
+      "extensions": [
+        "mly"
+      ],
+      "hidden": false,
+      "measurements": [
+        {
+          "cold_render_ms": 7.1795,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.21096199999999957,
+            "parse_ms": 6.105750000000002,
+            "setup_ms": 0.109167,
+            "style_ms": 0.5084609999999968
+          },
+          "cold_total_ms": 7.818,
+          "highlighter_init_ms": 0.00625,
+          "html_bytes": 54802,
+          "html_hash": "c6f6dead50ab9bf21a70e91476be6a64a1119f1f097c7ff2cdc2329ae4527e74",
+          "reference_uncached_ms": [
+            5.199375,
+            6.059959,
+            5.152042,
+            6.3589579999999994,
+            6.487749999999999,
+            5.065708000000001,
+            6.183333,
+            5.4605,
+            5.094292,
+            5.512833,
+            6.431834,
+            6.199792,
+            5.328958,
+            6.5549170000000005,
+            6.282165999999999
+          ],
+          "set_load_ms": 0.63225,
+          "spans": 1275,
+          "theme": "dark",
+          "uncached_ms": [
+            4.954834,
+            5.902,
+            4.863791999999999,
+            5.737042000000001,
+            5.3071660000000005,
+            4.878209,
+            5.566583,
+            4.871708,
+            5.2610410000000005,
+            5.939584,
+            4.836625,
+            5.707083,
+            5.2060830000000005,
+            5.800542,
+            4.88975
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.15724299999999972,
+            "parse_ms": 4.315569999999994,
+            "setup_ms": 0.00075,
+            "style_ms": 0.43303099999999745
+          }
+        }
+      ],
+      "name": "OCamlyacc",
+      "scope": "source.ocamlyacc",
+      "source_bytes": 8195,
+      "source_hash": "08ad58f07651ed53113e12b1032cf98fe5e0eb825e8eb73e60c16b26d2a63cc6"
+    },
+    {
+      "extensions": [
+        "pl",
+        "pm",
+        "pod",
+        "t",
+        "PL"
+      ],
+      "hidden": false,
+      "measurements": [
+        {
+          "cold_render_ms": 12.489958000000001,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.2758859999999992,
+            "parse_ms": 10.258510000000003,
+            "setup_ms": 0.45437500000000003,
+            "style_ms": 0.30504999999999916
+          },
+          "cold_total_ms": 13.159582000000002,
+          "highlighter_init_ms": 0.0050409999999999995,
+          "html_bytes": 81647,
+          "html_hash": "7f7057ec7dfc311f796116686af330c7e91f695143ebd5171ac12a879b52e757",
+          "reference_uncached_ms": [
+            10.55175,
+            9.77675,
+            10.709125,
+            10.949791000000001,
+            10.179,
+            10.437750000000001,
+            9.92625,
+            9.814542000000001,
+            9.733584,
+            9.681208,
+            10.482333,
+            10.300459,
+            10.503917,
+            9.636125,
+            9.6505
+          ],
+          "set_load_ms": 0.6645829999999999,
+          "spans": 1984,
+          "theme": "dark",
+          "uncached_ms": [
+            9.283415999999999,
+            10.569709,
+            9.326583,
+            10.05675,
+            9.257084,
+            10.131333,
+            10.127,
+            10.122041,
+            9.58525,
+            10.707416,
+            10.311666,
+            9.693709,
+            9.423667,
+            9.357958,
+            10.219459
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.2418009999999997,
+            "parse_ms": 9.278921999999996,
+            "setup_ms": 0.0035,
+            "style_ms": 0.2919269999999994
+          }
+        }
+      ],
+      "name": "Perl",
+      "scope": "source.perl",
+      "source_bytes": 8256,
+      "source_hash": "cdc0d9ed0a4a98a76e43f87f992dffe552122e7ede21c4b14ded8dff8baaabdc"
+    },
+    {
+      "extensions": [
+        "rails",
+        "rhtml",
+        "erb",
+        "html.erb"
+      ],
+      "hidden": false,
+      "measurements": [
+        {
+          "cold_render_ms": 23.833,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.38642299999999913,
+            "parse_ms": 23.28083699999999,
+            "setup_ms": 0.0335,
+            "style_ms": 0.5733729999999987
+          },
+          "cold_total_ms": 24.392623999999998,
+          "highlighter_init_ms": 0.002833,
+          "html_bytes": 116042,
+          "html_hash": "fef171e3a904a07c0550de4ca8a4f055c1e4df7f35454849c1ce5b1aedd0722e",
+          "reference_uncached_ms": [
+            19.259917,
+            20.862375,
+            19.264583,
+            19.436208,
+            20.624582999999998,
+            23.186625,
+            30.216459,
+            23.317458,
+            28.029917,
+            20.901458,
+            21.260791,
+            22.577791,
+            21.535167,
+            21.740665999999997,
+            21.009375
+          ],
+          "set_load_ms": 0.5567909999999999,
+          "spans": 2850,
+          "theme": "dark",
+          "uncached_ms": [
+            20.242,
+            19.843458000000002,
+            19.624292,
+            19.28975,
+            20.254708,
+            21.898375,
+            27.024167000000002,
+            29.354499999999998,
+            24.124584000000002,
+            20.798833,
+            20.35075,
+            20.698207999999997,
+            19.918542000000002,
+            19.822584,
+            20.784833
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.3911159999999993,
+            "parse_ms": 20.070001,
+            "setup_ms": 0.003375,
+            "style_ms": 0.6234989999999988
+          }
+        }
+      ],
+      "name": "HTML (Rails)",
+      "scope": "text.html.ruby",
+      "source_bytes": 8265,
+      "source_hash": "5b30a26f68100db7faeb3fb9c019ba749f3ab96513d7aabe3684cd5577f59f86"
+    },
+    {
+      "extensions": [
+        "sh",
+        "bash",
+        "zsh",
+        "fish",
+        ".bash_aliases",
+        ".bash_completions",
+        ".bash_functions",
+        ".bash_login",
+        ".bash_logout",
+        ".bash_profile",
+        ".bash_variables",
+        ".bashrc",
+        ".profile",
+        ".textmate_init"
+      ],
+      "hidden": false,
+      "measurements": [
+        {
+          "cold_render_ms": 15.700917000000002,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.27082199999999934,
+            "parse_ms": 13.168195000000006,
+            "setup_ms": 0.6156659999999999,
+            "style_ms": 0.5246479999999983
+          },
+          "cold_total_ms": 16.225500000000004,
+          "highlighter_init_ms": 0.004958,
+          "html_bytes": 82693,
+          "html_hash": "416c9608941f2cc091d8cf45019d6bbff341672503924d4ca5f418aa5c3d4d80",
+          "reference_uncached_ms": [
+            11.607042,
+            11.163791,
+            13.093499999999999,
+            11.601583,
+            12.074375,
+            11.337916,
+            13.648709,
+            15.083292,
+            14.823125,
+            14.193416000000001,
+            16.616125,
+            17.589166,
+            13.899958999999999,
+            13.153500000000001,
+            12.726416
+          ],
+          "set_load_ms": 0.519625,
+          "spans": 1984,
+          "theme": "dark",
+          "uncached_ms": [
+            11.624834,
+            11.019708,
+            11.942207999999999,
+            10.430541,
+            10.50525,
+            10.675042,
+            11.735459,
+            12.194958,
+            16.508041000000002,
+            13.712125,
+            12.583791,
+            15.918584,
+            13.168584000000001,
+            12.221458,
+            11.577584
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.2839049999999989,
+            "parse_ms": 10.80545600000001,
+            "setup_ms": 0.003125,
+            "style_ms": 0.5435119999999988
+          }
+        }
+      ],
+      "name": "Bourne Again Shell (bash)",
+      "scope": "source.shell.bash",
+      "source_bytes": 8246,
+      "source_hash": "6a633ab4463bdc1451f8230a77d2488a00b4a06945c02fd1e71cea76d81a2603"
+    },
+    {
+      "extensions": [
+        "textile"
+      ],
+      "hidden": false,
+      "measurements": [
+        {
+          "cold_render_ms": 5.814459,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.20405199999999937,
+            "parse_ms": 5.5874280000000045,
+            "setup_ms": 0.09975,
+            "style_ms": 0.1653729999999992
+          },
+          "cold_total_ms": 6.349209,
+          "highlighter_init_ms": 0.0050420000000000005,
+          "html_bytes": 53139,
+          "html_hash": "23131c10eda82b133eff092e572bd40b377c6cd876ad9f733aeeede25247fed5",
+          "reference_uncached_ms": [
+            4.956292,
+            4.6453750000000005,
+            4.114750000000001,
+            4.655916,
+            5.02075,
+            4.654667000000001,
+            4.993709,
+            4.537583000000001,
+            4.5596250000000005,
+            4.9996670000000005,
+            4.970708,
+            4.633,
+            4.123,
+            5.220416999999999,
+            5.428
+          ],
+          "set_load_ms": 0.5297080000000001,
+          "spans": 1153,
+          "theme": "dark",
+          "uncached_ms": [
+            4.687333,
+            4.8437920000000005,
+            4.24125,
+            3.986834,
+            5.05475,
+            4.594417,
+            4.00975,
+            4.4270000000000005,
+            4.858542000000001,
+            4.663666,
+            4.852583,
+            4.842458,
+            4.055334,
+            4.872790999999999,
+            4.926583
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.16858199999999993,
+            "parse_ms": 4.3102519999999975,
+            "setup_ms": 0.002333,
+            "style_ms": 0.1601119999999993
+          }
+        }
+      ],
+      "name": "Textile",
+      "scope": "text.html.textile",
+      "source_bytes": 8192,
+      "source_hash": "6fa2fda78761374e147970a0cac7c98d8e1449070c176967ced7dd556511512a"
+    }
+  ],
+  "fixture_target_bytes": 8192,
+  "grammar_count": 7,
+  "pipeline": "scope-cache-streaming",
+  "profile": "release",
+  "sample_order": "alternating reference/optimized pairs",
+  "samples": 15,
+  "timing_notes": "Each grammar/theme gets a fresh packdump for cold full rendering and a separate fresh packdump for cold stages. Theme loading is excluded. Highlighter setup is recorded separately for the optimized path, and is inside the reference renderer. Warm uncached calls reparse all source; no whole-source result cache is used. Stage instrumentation collects per-line regions; full optimized rendering streams them."
+}

@@ -1,8 +1,19 @@
 import type { SyntaxKind } from "./prDiffSyntaxTypes";
 
+// One set per finite syntax kind, rather than allocating a set for every diff line.
+const keywordSets = new Map<SyntaxKind, ReadonlySet<string>>();
+
 export function keywordSetForSyntax(
   syntaxKind: SyntaxKind,
 ): ReadonlySet<string> {
+  const existing = keywordSets.get(syntaxKind);
+  if (existing !== undefined) return existing;
+  const keywords = createKeywordSet(syntaxKind);
+  keywordSets.set(syntaxKind, keywords);
+  return keywords;
+}
+
+function createKeywordSet(syntaxKind: SyntaxKind): ReadonlySet<string> {
   switch (syntaxKind) {
     case "javascript":
       return new Set([

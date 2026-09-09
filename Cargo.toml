@@ -1,3 +1,13 @@
 [workspace]
 members = ["src-tauri"]
 resolver = "2"
+
+# Keep application code debuggable while optimizing syntax parsing hot loops.
+[profile.dev.package.syntect]
+opt-level = 3
+
+[profile.dev.package.onig]
+opt-level = 3
+
+[profile.dev.package.onig_sys]
+opt-level = 3

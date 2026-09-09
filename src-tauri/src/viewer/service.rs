@@ -270,11 +270,11 @@ impl ViewerService {
         let highlighted_html =
             syntax_highlight::highlight_file_source(&source_text, path, ui_theme);
         let html = format!(
-            "<section class=\"file-preview file-preview--text\"><p class=\"file-preview__meta\">File type: {} | File size: {}{}</p>{}</section>",
+            "<section class=\"file-preview file-preview--text\">{}<footer class=\"file-preview__meta\" aria-label=\"File information\">{} · {}{}</footer></section>",
+            highlighted_html,
             escape_html_text(&file_type),
             escape_html_text(&format_file_size(file_bytes.len() as u64)),
             encoding_notice,
-            highlighted_html,
         );
 
         Ok(FilePreview::Text {
@@ -313,11 +313,11 @@ impl ViewerService {
         let highlighted_html =
             syntax_highlight::highlight_file_source(source_for_view, path, ui_theme);
         let raw_html = format!(
-            "<section class=\"file-preview file-preview--text\"><p class=\"file-preview__meta\">File type: {} | File size: {}{}</p>{}</section>",
+            "<section class=\"file-preview file-preview--text\">{}<footer class=\"file-preview__meta\" aria-label=\"File information\">{} · {}{}</footer></section>",
+            highlighted_html,
             escape_html_text(&file_type),
             escape_html_text(&format_file_size(file_bytes.len() as u64)),
             encoding_notice,
-            highlighted_html,
         );
 
         let parsed = parse_csv_preview(source_for_view, CsvPreviewLimits::default());

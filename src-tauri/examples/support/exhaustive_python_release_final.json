@@ -1,0 +1,134 @@
+{
+  "entries": [
+    {
+      "extensions": [
+        "py",
+        "py3",
+        "pyw",
+        "pyi",
+        "pyx",
+        "pyx.in",
+        "pxd",
+        "pxd.in",
+        "pxi",
+        "pxi.in",
+        "rpy",
+        "cpy",
+        "SConstruct",
+        "Sconstruct",
+        "sconstruct",
+        "SConscript",
+        "gyp",
+        "gypi",
+        "Snakefile",
+        "wscript"
+      ],
+      "hidden": false,
+      "measurements": [
+        {
+          "cold_render_ms": 25.315084000000002,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.29256999999999916,
+            "parse_ms": 22.997908999999982,
+            "setup_ms": 0.993125,
+            "style_ms": 0.5345269999999984
+          },
+          "cold_total_ms": 25.92546,
+          "highlighter_init_ms": 0.006042,
+          "html_bytes": 69231,
+          "html_hash": "74a97daf4d0bf7d02a25df1f068e40742ca8bd1e98e310d56c54ec7df359c9d7",
+          "reference_uncached_ms": [
+            21.363042,
+            16.934458,
+            18.061207999999997,
+            16.992041999999998,
+            18.516375,
+            19.467209,
+            17.366540999999998,
+            16.930875,
+            16.937958
+          ],
+          "set_load_ms": 0.604334,
+          "spans": 1656,
+          "theme": "dark",
+          "uncached_ms": [
+            17.430457999999998,
+            17.521708,
+            17.777874999999998,
+            16.6195,
+            16.569750000000003,
+            15.756917,
+            16.883542000000002,
+            17.051209,
+            16.30025
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.25979899999999945,
+            "parse_ms": 16.64125500000001,
+            "setup_ms": 0.003583,
+            "style_ms": 0.523457999999999
+          }
+        },
+        {
+          "cold_render_ms": 21.434124999999998,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.2524159999999996,
+            "parse_ms": 20.196417999999998,
+            "setup_ms": 0.800791,
+            "style_ms": 0.6248649999999984
+          },
+          "cold_total_ms": 22.134458,
+          "highlighter_init_ms": 0.025582999999999998,
+          "html_bytes": 58973,
+          "html_hash": "d0d1927a70abdc67ff5e94d1b9a0f3d81a1c53e97714c9b024740625b5ee1d99",
+          "reference_uncached_ms": [
+            25.708041,
+            26.578417,
+            23.563125,
+            24.117334,
+            23.575540999999998,
+            25.039875,
+            23.623124999999998,
+            24.633209,
+            25.734166
+          ],
+          "set_load_ms": 0.67475,
+          "spans": 1196,
+          "theme": "light",
+          "uncached_ms": [
+            14.819542,
+            15.555667,
+            16.864625,
+            15.084708000000001,
+            17.454,
+            16.548582999999997,
+            17.153458,
+            17.16575,
+            17.389125
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.2278759999999997,
+            "parse_ms": 16.986084000000005,
+            "setup_ms": 0.0022500000000000003,
+            "style_ms": 0.5834569999999988
+          }
+        }
+      ],
+      "name": "Python",
+      "scope": "source.python",
+      "source_bytes": 8280,
+      "source_hash": "cdff998054a5e299e18489a25e22e7feade286ddbfd74768072ee0271ec0b388"
+    }
+  ],
+  "fixture_target_bytes": 8192,
+  "grammar_count": 1,
+  "pipeline": "scope-cache-streaming",
+  "profile": "release",
+  "sample_order": "alternating reference/optimized pairs",
+  "samples": 9,
+  "timing_notes": "Each grammar/theme gets a fresh packdump for cold full rendering and a separate fresh packdump for cold stages. Theme loading is excluded. Highlighter setup is recorded separately for the optimized path, and is inside the reference renderer. Warm uncached calls reparse all source; no whole-source result cache is used. Stage instrumentation collects per-line regions; full optimized rendering streams them."
+}

@@ -11,13 +11,46 @@ function pushSyntaxSegment(
   text: string,
 ): void {
   if (text.length > 0) {
-    segments.push({ kind, text });
+    const previous = segments[segments.length - 1];
+    if (previous?.kind === kind) {
+      segments[segments.length - 1] = { kind, text: previous.text + text };
+    } else {
+      segments.push({ kind, text });
+    }
   }
 }
+
+function isDigit(code: number): boolean {
+  return code >= 48 && code <= 57;
+}
+
+function isIdentifierStart(code: number): boolean {
+  return (
+    (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 95
+  );
+}
+
+function isIdentifierPart(code: number): boolean {
+  return isIdentifierStart(code) || isDigit(code) || code === 45;
+}
+
+function numberEnd(content: string, start: number): number {
+  let end = start + 1;
+  while (isDigit(content.charCodeAt(end))) end += 1;
+  if (content.charCodeAt(end) === 46 && isDigit(content.charCodeAt(end + 1))) {
+    end += 2;
+    while (isDigit(content.charCodeAt(end))) end += 1;
+  }
+  return end;
+}
+
+const punctuation = new Set("[]{}():;,.=<>/+*-");
 
 function highlightMarkdownSegments(content: string): readonly SyntaxSegment[] {
   const segments: SyntaxSegment[] = [];
   let index = 0;
+  let nonKeyUntil = 0;
+  let invalidLinkUntil = 0;
 
   const heading = content.match(/^#{1,6}(?=\s)/);
   if (heading !== null) {
@@ -33,44 +66,74 @@ function highlightMarkdownSegments(content: string): readonly SyntaxSegment[] {
   }
 
   while (index < content.length) {
-    const rest = content.slice(index);
-    const inlineCode = rest.match(/^`+[^`]+`+/);
-    if (inlineCode !== null) {
-      pushSyntaxSegment(segments, "string", inlineCode[0]);
-      index += inlineCode[0].length;
-      continue;
-    }
-
-    const link = rest.match(/^\[[^\]]+\]\([^)]+\)/);
-    if (link !== null) {
-      pushSyntaxSegment(segments, "markup", link[0]);
-      index += link[0].length;
-      continue;
-    }
-
-    const frontMatterKey = rest.match(/^[A-Za-z0-9_-]+(?=\s*:)/);
-    if (frontMatterKey !== null) {
-      pushSyntaxSegment(segments, "keyword", frontMatterKey[0]);
-      index += frontMatterKey[0].length;
-      continue;
-    }
-
-    const number = rest.match(/^\d+(?:\.\d+)?/);
-    if (number !== null) {
-      pushSyntaxSegment(segments, "number", number[0]);
-      index += number[0].length;
-      continue;
-    }
-
     const char = content[index] ?? "";
-    if (/[\[\]{}():;,.=<>/+*-]/.test(char)) {
+    if (char === "`") {
+      let openingEnd = index + 1;
+      while (content[openingEnd] === "`") openingEnd += 1;
+      const closingStart = content.indexOf("`", openingEnd);
+      if (closingStart >= 0) {
+        let end = closingStart + 1;
+        while (content[end] === "`") end += 1;
+        pushSyntaxSegment(segments, "string", content.slice(index, end));
+        index = end;
+      } else {
+        pushSyntaxSegment(segments, "plain", content.slice(index, openingEnd));
+        index = openingEnd;
+      }
+      continue;
+    }
+    if (char === "[" && index >= invalidLinkUntil) {
+      const labelEnd = content.indexOf("]", index + 1);
+      const targetEnd =
+        content[labelEnd + 1] === "(" ? content.indexOf(")", labelEnd + 2) : -1;
+      if (labelEnd > index + 1 && targetEnd > labelEnd + 2) {
+        pushSyntaxSegment(
+          segments,
+          "markup",
+          content.slice(index, targetEnd + 1),
+        );
+        index = targetEnd + 1;
+        continue;
+      }
+      invalidLinkUntil = labelEnd < 0 ? content.length : labelEnd;
+    }
+    const code = content.charCodeAt(index);
+    if (index >= nonKeyUntil && isIdentifierPart(code)) {
+      let end = index + 1;
+      while (isIdentifierPart(content.charCodeAt(end))) end += 1;
+      let colon = end;
+      while (colon < content.length && /\s/.test(content[colon] ?? ""))
+        colon += 1;
+      if (content[colon] === ":") {
+        pushSyntaxSegment(segments, "keyword", content.slice(index, end));
+        index = end;
+        continue;
+      }
+      // No suffix in this identifier can be a key either. Avoid rescanning it.
+      nonKeyUntil = end;
+    }
+    if (isDigit(code)) {
+      const end = numberEnd(content, index);
+      pushSyntaxSegment(segments, "number", content.slice(index, end));
+      index = end;
+      continue;
+    }
+    if (punctuation.has(char)) {
       pushSyntaxSegment(segments, "punctuation", char);
       index += 1;
       continue;
     }
 
-    pushSyntaxSegment(segments, "plain", char);
-    index += 1;
+    let end = index + 1;
+    // A failed key probe already classified this identifier; consume its letters
+    // together while retaining the old number/punctuation boundaries.
+    while (end < nonKeyUntil && isIdentifierStart(content.charCodeAt(end)))
+      end += 1;
+    if (char === " " || char === "\t") {
+      while (content[end] === " " || content[end] === "\t") end += 1;
+    }
+    pushSyntaxSegment(segments, "plain", content.slice(index, end));
+    index = end;
   }
 
   return segments.length === 0 ? [{ kind: "plain", text: content }] : segments;
@@ -116,34 +179,39 @@ export function highlightSyntaxSegments(
       continue;
     }
 
-    if (/\d/.test(char)) {
-      const match = body.slice(index).match(/^\d+(?:\.\d+)?/);
-      const text = match?.[0] ?? char;
-      pushSyntaxSegment(segments, "number", text);
-      index += text.length;
+    const code = body.charCodeAt(index);
+    if (isDigit(code)) {
+      const end = numberEnd(body, index);
+      pushSyntaxSegment(segments, "number", body.slice(index, end));
+      index = end;
       continue;
     }
 
-    if (/[A-Za-z_]/.test(char)) {
-      const match = body.slice(index).match(/^[A-Za-z_][A-Za-z0-9_-]*/);
-      const text = match?.[0] ?? char;
+    if (isIdentifierStart(code)) {
+      let end = index + 1;
+      while (isIdentifierPart(body.charCodeAt(end))) end += 1;
+      const text = body.slice(index, end);
       pushSyntaxSegment(
         segments,
         keywords.has(text) ? "keyword" : "plain",
         text,
       );
-      index += text.length;
+      index = end;
       continue;
     }
 
-    if (/[\[\]{}():;,.=<>/+*-]/.test(char)) {
+    if (punctuation.has(char)) {
       pushSyntaxSegment(segments, "punctuation", char);
       index += 1;
       continue;
     }
 
-    pushSyntaxSegment(segments, "plain", char);
-    index += 1;
+    let end = index + 1;
+    if (char === " " || char === "\t") {
+      while (body[end] === " " || body[end] === "\t") end += 1;
+    }
+    pushSyntaxSegment(segments, "plain", body.slice(index, end));
+    index = end;
   }
 
   if (comment.length > 0) {

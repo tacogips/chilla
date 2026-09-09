@@ -1,6 +1,6 @@
 [package]
 name = "chilla"
-version = "0.2.0"
+version = "0.3.0"
 description = "A lightweight file and Git viewer"
 edition = "2021"
 license = "MIT"
@@ -11,6 +11,15 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+syntect = { version = "5.3", default-features = false, features = [
+  "default-syntaxes",
+  "yaml-load",
+  "dump-create",
+  "regex-onig",
+] }
+
+[dev-dependencies]
+syntect = { version = "5.3", default-features = false, features = ["default-syntaxes", "yaml-load"] }
 
 [dependencies]
 base64 = "0.22"
@@ -23,9 +32,10 @@ roxmltree = "0.20"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 syntect = { version = "5.3", default-features = false, features = [
-  "default-fancy",
+  "default-themes",
   "html",
   "dump-load",
+  "regex-onig",
 ] }
 tauri = { version = "2", features = ["custom-protocol", "protocol-asset"] }
 tauri-plugin-dialog = "2.7.0"
@@ -34,3 +44,7 @@ thiserror = "2"
 toml = { version = "=0.9.12", default-features = false, features = ["serde", "parse"] }
 tree_magic_mini = "3.2.2"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "=0.6.4", default-features = false, features = ["std"] }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSScreen"] }

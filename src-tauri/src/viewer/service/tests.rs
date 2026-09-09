@@ -5,6 +5,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+mod source_footer;
+
 use super::test_epub::{write_test_epub, write_test_epub_with_toc_mode, EpubFixtureTocMode};
 use super::{fallback_media_mime_type, ViewerService};
 use crate::{
@@ -414,7 +416,7 @@ fn open_file_preview_distinguishes_markdown_text_media_and_binary_files() {
         FilePreview::Text {
             html, size_bytes, ..
         } => {
-            assert!(html.contains("File type: Plain Text | File size: 10 B"));
+            assert!(html.contains("Plain Text · 10 B</footer>"));
             assert!(html.contains("<pre"));
             assert!(html.contains("plain text"));
             assert_eq!(size_bytes, 10);
@@ -932,8 +934,7 @@ fn open_file_preview_treats_shell_and_nix_sources_as_text() {
         FilePreview::Text {
             html, size_bytes, ..
         } => {
-            assert!(html.contains("File type: Shell | File size: "));
-            assert!(html.contains(" | File size: "));
+            assert!(html.contains("Shell · 31 B</footer>"));
             assert!(!html.contains("Syntax:"));
             assert_eq!(size_bytes, 31);
         }
@@ -947,8 +948,7 @@ fn open_file_preview_treats_shell_and_nix_sources_as_text() {
         FilePreview::Text {
             html, size_bytes, ..
         } => {
-            assert!(html.contains("File type: Shell | File size: "));
-            assert!(html.contains(" | File size: "));
+            assert!(html.contains("Shell · 9 B</footer>"));
             assert!(!html.contains("Syntax:"));
             assert_eq!(size_bytes, 9);
         }
@@ -962,8 +962,7 @@ fn open_file_preview_treats_shell_and_nix_sources_as_text() {
         FilePreview::Text {
             html, size_bytes, ..
         } => {
-            assert!(html.contains("File type: Nix | File size: "));
-            assert!(html.contains(" | File size: "));
+            assert!(html.contains("Nix · 55 B</footer>"));
             assert!(!html.contains("Syntax:"));
             assert_eq!(size_bytes, 55);
         }

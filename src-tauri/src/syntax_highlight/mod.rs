@@ -1,11 +1,19 @@
 //! Syntax highlighting for file previews and Markdown fenced blocks (syntect).
 
+mod json;
+mod render;
+
+#[doc(hidden)]
+pub mod diagnostics;
+
+#[cfg(test)]
+mod regression_tests;
+
 use std::path::Path;
 use std::sync::OnceLock;
 
-use syntect::highlighting::{Theme, ThemeSet};
-use syntect::html::highlighted_html_for_string;
-use syntect::parsing::{SyntaxDefinition, SyntaxReference, SyntaxSet};
+use syntect::highlighting::{Highlighter, Theme, ThemeSet};
+use syntect::parsing::{SyntaxReference, SyntaxSet};
 
 /// UI theme for syntect (paired with app light/dark).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -26,15 +34,24 @@ impl SyntaxUiTheme {
 
 static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
 static THEME_SET: OnceLock<ThemeSet> = OnceLock::new();
+static DARK_HIGHLIGHTER: OnceLock<Highlighter<'static>> = OnceLock::new();
+static LIGHT_HIGHLIGHTER: OnceLock<Highlighter<'static>> = OnceLock::new();
+
+fn theme_highlighter(ui: SyntaxUiTheme) -> &'static Highlighter<'static> {
+    match ui {
+        SyntaxUiTheme::Dark => &DARK_HIGHLIGHTER,
+        SyntaxUiTheme::Light => &LIGHT_HIGHLIGHTER,
+    }
+    .get_or_init(|| Highlighter::new(syntect_theme(ui)))
+}
 
 fn syntax_set() -> &'static SyntaxSet {
     SYNTAX_SET.get_or_init(|| {
-        let mut builder = SyntaxSet::load_defaults_newlines().into_builder();
-        let toml_src = include_str!("../../syntaxes/TOML.sublime-syntax");
-        let toml_def = SyntaxDefinition::load_from_str(toml_src, true, Some("TOML.sublime-syntax"))
-            .expect("embedded TOML.sublime-syntax must be valid");
-        builder.add(toml_def);
-        builder.build()
+        syntect::dumps::from_uncompressed_data(include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/chilla-syntaxes.packdump"
+        )))
+        .expect("build-generated syntax packdump must be valid")
     })
 }
 
@@ -163,6 +180,9 @@ fn path_syntax_display_name(path: &Path) -> Option<String> {
 }
 
 pub fn describe_file_syntax(path: &Path) -> String {
+    if is_json_path(path) {
+        return "JSON".to_string();
+    }
     let ss = syntax_set();
     let syntax = resolve_syntax(ss, None, Some(path), None);
 
@@ -193,10 +213,19 @@ fn escaped_fallback(source: &str) -> String {
 
 /// Full-file preview in the file viewer: grammar is inferred from the file path.
 pub fn highlight_file_source(source: &str, path: &Path, ui: SyntaxUiTheme) -> String {
+    if is_json_path(path) {
+        return json::highlight(source, syntect_theme(ui), theme_highlighter(ui));
+    }
     let ss = syntax_set();
     let syntax = resolve_syntax(ss, None, Some(path), Some(source));
-    highlighted_html_for_string(source, ss, syntax, syntect_theme(ui))
+    render::highlight(source, ss, syntax, syntect_theme(ui), theme_highlighter(ui))
         .unwrap_or_else(|_| escaped_fallback(source))
+}
+
+fn is_json_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
 }
 
 /// Markdown fenced block: `lang_token` is the first word of the info string (e.g. `rust`).
@@ -207,7 +236,7 @@ pub fn highlight_markdown_fence(
 ) -> String {
     let ss = syntax_set();
     let syntax = resolve_syntax(ss, lang_token, None, Some(source));
-    highlighted_html_for_string(source, ss, syntax, syntect_theme(ui))
+    render::highlight(source, ss, syntax, syntect_theme(ui), theme_highlighter(ui))
         .unwrap_or_else(|_| escaped_fallback(source))
 }
 

@@ -7,6 +7,7 @@ import "github-markdown-css/github-markdown.css";
 import {
   createEffect,
   createSignal,
+  Show,
   on,
   onCleanup,
   onMount,
@@ -30,6 +31,7 @@ interface PreviewPaneProps {
   readonly colorScheme: ColorScheme;
   readonly subtitle?: string;
   readonly dragPanEnabled?: boolean;
+  readonly layout?: "rendered" | "source";
 }
 
 type PreviewZoomDirection = "in" | "out";
@@ -734,6 +736,7 @@ export function PreviewPane(props: PreviewPaneProps) {
         () => props.html,
         () => props.documentPath,
         () => props.colorScheme,
+        () => props.layout,
       ],
       ([visible, html, documentPath, colorScheme]) => {
         const container = containerRef;
@@ -743,6 +746,12 @@ export function PreviewPane(props: PreviewPaneProps) {
         }
 
         const currentRunId = ++enhancementRunId;
+
+        // Source HTML contains only escaped code and file metadata. Markdown
+        // enhancements are unnecessary. JSX owns source HTML updates, so avoid
+        // parsing and building its potentially large DOM a second time here.
+        if (props.layout === "source") return;
+
         container.innerHTML = html;
 
         void enhancePreviewContent(
@@ -777,7 +786,9 @@ export function PreviewPane(props: PreviewPaneProps) {
     <section class={`pane${props.visible ? "" : " pane--hidden"}`}>
       <PreviewHeader fileName={props.fileName}>
         <span class="preview__header-detail">
-          <span>{props.subtitle ?? "Rendered HTML"}</span>
+          <Show when={props.layout !== "source"}>
+            <span>{props.subtitle ?? "Rendered HTML"}</span>
+          </Show>
           <span class="preview__zoom" aria-live="polite">
             {zoom()}%
           </span>
@@ -785,12 +796,12 @@ export function PreviewPane(props: PreviewPaneProps) {
       </PreviewHeader>
       <div
         ref={previewRef}
-        class="pane__body preview"
+        class={`pane__body preview${props.layout === "source" ? " preview--source" : ""}`}
         style={previewThemeStyle(props.colorScheme)}
       >
         <div
           ref={containerRef}
-          class="preview__content preview__zoom-surface markdown-body"
+          class={`preview__content ${props.layout === "source" ? "preview__source-content" : "preview__zoom-surface markdown-body"}`}
           style={{
             ...previewThemeStyle(props.colorScheme),
             ...previewZoomStyle(zoom()),

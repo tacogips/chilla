@@ -64,6 +64,51 @@ export function RawSourceGlyph() {
   );
 }
 
+export function OpenFilesGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M3 10V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1M3 10h19l-3 10H3z"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}
+
+export function GitDiffGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M8 3H4v18h4M16 3h4v18h-4M9 8h6M12 5v6M9 16h6"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}
+
+export function FileViewGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h6"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}
+
 export function PreviewGlyph() {
   return (
     <WorkspaceHeaderIcon>
@@ -83,6 +128,24 @@ export function PreviewGlyph() {
         stroke="currentColor"
         stroke-width="2"
       />
+    </WorkspaceHeaderIcon>
+  );
+}
+
+export function SidebarGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <rect
+        x="3"
+        y="4"
+        width="18"
+        height="16"
+        rx="2"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      />
+      <path d="M9 4v16" fill="none" stroke="currentColor" stroke-width="2" />
     </WorkspaceHeaderIcon>
   );
 }

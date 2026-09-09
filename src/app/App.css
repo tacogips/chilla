@@ -1864,6 +1864,14 @@ button {
   min-height: 0;
 }
 
+.pr-workspace.pr-workspace--no-browser {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pr-browser[hidden] {
+  display: none;
+}
+
 .pr-browser,
 .pr-diff-pane {
   min-width: 0;
@@ -2567,6 +2575,60 @@ button {
 .file-preview__meta {
   color: var(--text-subtle);
   font-size: 0.78rem;
+}
+
+/* Source panes reserve the available area for code. Only the pre scrolls;
+   metadata stays below it and does not scale when source text is zoomed. */
+.pane__body.preview--source {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.preview__source-content,
+.preview__source-content > .file-preview--text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--markdown-surface);
+}
+
+.preview__source-content > .file-preview--text > pre {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: calc(14px * var(--preview-zoom-scale));
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.preview__source-content > .file-preview--text > pre code {
+  font-size: inherit;
+}
+
+.preview__source-content > .file-preview--text > .file-preview__meta {
+  flex: none;
+  margin: 0;
+  padding: 3px 8px;
+  border-top: 1px solid var(--markdown-border);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .empty {

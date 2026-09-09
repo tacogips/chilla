@@ -44,6 +44,7 @@ export function CsvFilePreviewPane(props: CsvFilePreviewPaneProps) {
           documentPath={null}
           fileName={props.preview.file_name}
           html={props.preview.raw_html}
+          layout="source"
           selectedAnchorId={null}
           subtitle={props.subtitle}
           visible={true}

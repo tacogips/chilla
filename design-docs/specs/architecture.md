@@ -851,3 +851,56 @@ their current behavior.
 
 Frontend DOM tests verify the selected basename appears in shared and dedicated
 preview headers and that switching preview payloads updates the displayed name.
+
+## Startup Window Bounds
+
+Before showing the main window, the Rust desktop layer fits its outer bounds
+inside the current monitor's usable work area, falling back to the primary
+monitor when necessary. Both size and position are constrained, including
+negative monitor coordinates and menu bar or Dock offsets. Physical coordinates
+are used consistently so display scaling does not mix units.
+
+On macOS, native screen visible bounds supply the vertical menu bar offset that
+the currently locked Tauri runtime omits. The existing locked Objective-C
+bindings are used with macOS-only dependencies and limited features. Startup
+waits for queued geometry changes without blocking the main event loop, with a
+bounded fallback so a failed adjustment does not indefinitely hide the window.
+
+The configured initial size remains the preferred size. On smaller displays,
+the minimum content size is reduced as needed to allow the window to fit.
+Sizing accounts for any difference between inner and outer dimensions. Windows
+already inside the work area retain their geometry. Startup remains usable if
+monitor information is unavailable or adjustment fails: the window is still
+shown and existing verbose diagnostics record adjustment errors.
+
+Regression tests cover oversized and misplaced windows, offset monitors,
+scaled displays, and work areas smaller than the configured minimum size.
+
+### Window Tiling
+
+The preferred launch size is independent of the smallest permitted window.
+The native minimum content size is 320 by 240 logical pixels: the width matches
+the frontend body's existing minimum, and the height allows compact tiles while
+retaining a usable header and content viewport. External window managers can
+resize the window below its preferred launch size without startup sizing running
+again. The former 960 by 640 minimum prevented half and quarter tiles on laptop
+and smaller external displays. Native Accessibility resize and position readback
+verify this contract on macOS. AeroSpace must identify the main window as a
+normal window and automatically place it in the tiling tree. Borderless native
+windows omit standard window controls and trigger AeroSpace's dialog heuristic,
+even when the Accessibility subrole is AXStandardWindow. The macOS window must
+retain native standard window semantics; no application-specific AeroSpace rule
+or user configuration change is required.
+
+macOS enables native decorations before the main window is created, placing the
+native title bar above the existing custom toolbar. Other platforms keep the
+configured borderless presentation. This preserves actual native close and
+fullscreen controls instead of emulating Accessibility attributes.
+
+### Left Pane Toggle
+
+The main toolbar always offers an icon button to collapse or expand the left
+file pane, including when the pane is hidden. It uses the same state and action
+as the default Shift+L shortcut. Its accessible label describes the next action,
+its expanded state reflects actual visibility, and its tooltip uses the effective
+configured shortcut. The control remains available in file and Git diff modes.

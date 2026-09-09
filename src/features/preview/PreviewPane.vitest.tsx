@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
+import { readFileSync } from "node:fs";
 import {
   mermaidThemeVariables,
   nextPreviewZoom,
@@ -53,6 +54,127 @@ describe("PreviewPane", () => {
     rootStyle.removeProperty("--markdown-border");
     rootStyle.removeProperty("--font-sans");
     document.body.innerHTML = "";
+  });
+
+  it("gives source one inset code scroll area and keeps metadata outside zoom", () => {
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing test root");
+    const css = readFileSync("src/app/App.css", "utf8");
+    const sourceCss = css.slice(
+      css.indexOf(".pane__body.preview--source {"),
+      css.indexOf("\n.empty {"),
+    );
+    const style = document.createElement("style");
+    style.textContent = sourceCss;
+    root.append(style);
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath={null}
+          fileName="sample.py"
+          layout="source"
+          subtitle="Redundant metadata"
+          selectedAnchorId={null}
+          visible={true}
+          html={
+            '<section class="file-preview file-preview--text"><pre>print(&quot;hello&quot;)\n</pre><footer class="file-preview__meta" aria-label="File information">Python · 15 B</footer></section>'
+          }
+        />
+      ),
+      root,
+    );
+    const body = root.querySelector<HTMLElement>(".preview--source");
+    const content = root.querySelector<HTMLElement>(".preview__source-content");
+    const pre = root.querySelector("pre");
+    const footer = root.querySelector("footer");
+    if (body === null || content === null || pre === null || footer === null)
+      throw new Error("missing source layout");
+    expect(getComputedStyle(body).padding).toBe("0px");
+    expect(getComputedStyle(body).overflow).toBe("hidden");
+    expect(getComputedStyle(pre).padding).toBe("8px");
+    expect(getComputedStyle(pre).overflow).toBe("auto");
+    expect(getComputedStyle(pre).whiteSpace).toBe("pre");
+    expect(getComputedStyle(footer).fontSize).toBe("12px");
+    expect(pre.nextElementSibling).toBe(footer);
+    expect(pre.textContent).toBe('print("hello")\n');
+    expect(root.querySelector(".preview__zoom-surface")).toBeNull();
+    expect(root.querySelector(".markdown-body")).toBeNull();
+    expect(root.querySelector(".pane__header")?.textContent).not.toContain(
+      "Redundant metadata",
+    );
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "+" }));
+    expect(content.style.getPropertyValue("--preview-zoom-scale")).toBe("1.1");
+    expect(getComputedStyle(footer).fontSize).toBe("12px");
+    expect(sourceCss).toContain(
+      "font-size: calc(14px * var(--preview-zoom-scale))",
+    );
+  });
+
+  it("inserts source HTML only once per content update", () => {
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing test root");
+    const initial =
+      '<section class="file-preview--text"><pre>first</pre><footer>Python</footer></section>';
+    const updated =
+      '<section class="file-preview--text"><pre>second</pre><footer>JSON</footer></section>';
+    const setter = vi.spyOn(Element.prototype, "innerHTML", "set");
+    try {
+      const [html, setHtml] = createSignal(initial);
+      dispose = render(
+        () => (
+          <PreviewPane
+            colorScheme="dark"
+            documentPath={null}
+            fileName="sample"
+            layout="source"
+            selectedAnchorId={null}
+            visible={true}
+            html={html()}
+          />
+        ),
+        root,
+      );
+      expect(
+        setter.mock.calls.filter(([value]) => value === initial),
+      ).toHaveLength(1);
+      setHtml(updated);
+      expect(
+        setter.mock.calls.filter(([value]) => value === updated),
+      ).toHaveLength(1);
+      expect(root.querySelector("pre")?.textContent).toBe("second");
+    } finally {
+      setter.mockRestore();
+    }
+  });
+
+  it("switches source layout off for rendered content without losing zoom", () => {
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing test root");
+    const [layout, setLayout] = createSignal<"source" | "rendered">("source");
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="light"
+          documentPath={null}
+          fileName="sample"
+          layout={layout()}
+          selectedAnchorId={null}
+          visible={true}
+          html="<pre></pre>"
+        />
+      ),
+      root,
+    );
+    expect(root.querySelector(".preview--source")).not.toBeNull();
+    setLayout("rendered");
+    expect(root.querySelector(".preview--source")).toBeNull();
+    expect(
+      root.querySelector(".preview__zoom-surface.markdown-body"),
+    ).not.toBeNull();
+    expect(root.querySelector(".pane__header")?.textContent).toContain(
+      "Rendered HTML",
+    );
   });
 
   it("shows the selected basename and updates it reactively", () => {

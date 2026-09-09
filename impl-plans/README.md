@@ -2,6 +2,13 @@
 
 This directory contains implementation plans that translate design documents into actionable implementation specifications.
 
+- [JSON Preview Performance](completed/json-preview-performance.md): measured debug/release bottleneck and verified dedicated JSON source highlighting.
+- [Shared Syntax Performance](completed/shared-syntax-performance.md): verified build-time grammar loading and native regex improvements across the shared language highlighter.
+
+- [Startup Window Bounds](completed/startup-window-bounds.md): completed startup sizing and positioning fix.
+- [Window Tiling](completed/window-tiling.md): completed AeroSpace classification and compact window sizing fix.
+- [Left Pane Toggle](completed/left-pane-toggle.md): completed toolbar icon and shared file/diff sidebar toggle.
+
 ## Purpose
 
 Implementation plans bridge design documents (what to build) and actual code (how to build). They provide:
@@ -47,6 +54,8 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| [Exhaustive Syntax Performance](completed/exhaustive-syntax-performance.md) | 2026-09-09 | [Complete syntax inventory](../design-docs/specs/design-syntax-inventory.md) |
+| [Source Preview Layout](completed/source-preview-layout.md) | 2026-09-09 | [Content-first source preview](../design-docs/specs/design-source-preview-layout.md) |
 | `macos-mounted-dmg-trust-gate.md` | 2026-09-09 | `design-docs/specs/design-macos-dmg-release.md#mounted-artifact-trust-gate` |
 | `mise-native-toolchain.md` | 2026-09-09 | `design-docs/specs/architecture.md#mise-native-toolchain` |
 | `github-diff-shortcut-reload.md` | 2026-09-09 | `design-docs/specs/design-file-viewer-mode.md#github-diff-startup-and-reload` |
