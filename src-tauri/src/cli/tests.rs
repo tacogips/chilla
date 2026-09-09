@@ -71,6 +71,19 @@ fn rejects_missing_malformed_and_extra_shorthand_arguments() {
         vec!["chilla", "github:octocat/Hello-World", "--unknown"],
         vec!["chilla", "github:octocat/Hello-World", "0"],
         vec!["chilla", "github:octocat/Hello-World", "+42"],
+        vec![
+            "chilla",
+            "github:octocat/Hello-World",
+            "main...topic",
+            "extra",
+        ],
+        vec![
+            "chilla",
+            "github:octocat/Hello-World",
+            "abcd1234",
+            "--unknown",
+        ],
+        vec!["chilla", "github:octocat/Hello-World", "main..."],
     ] {
         assert!(
             parse_cli(arguments.clone()).is_err(),
@@ -99,8 +112,49 @@ fn help_documents_github_shorthand_and_transport_urls() {
     let CliParseOutcome::Help(help) = parse_cli(["chilla", "--help"]).expect("help") else {
         panic!("expected help");
     };
-    assert!(help.contains("github:<owner>/<repo> <pr-id>"));
+    assert!(help.contains("github:<owner>/<repo> <pr-id|sha|commit:sha|base...head>"));
+    assert!(help.contains("Use commit:<sha> for all-numeric SHAs"));
     assert!(help.contains(".diff and .patch"));
+}
+
+#[test]
+fn parses_commit_and_branch_shorthand_with_global_options() {
+    for (selector, path) in [
+        ("abcd1234", "commit/abcd1234"),
+        ("commit:1234", "commit/1234"),
+        ("main...feature/topic", "compare/main...feature/topic"),
+    ] {
+        for flag in ["--no-github-diff-cache", "--no-pr-diff-cache"] {
+            for arguments in [
+                vec!["chilla", flag, "github:octocat/Hello-World", selector],
+                vec![
+                    "chilla",
+                    "github:octocat/Hello-World",
+                    flag,
+                    "--verbose",
+                    selector,
+                ],
+                vec![
+                    "chilla",
+                    "--verbose",
+                    "github:octocat/Hello-World",
+                    selector,
+                    flag,
+                ],
+            ] {
+                let CliParseOutcome::Run(StartupTarget::GitHubPr(target)) =
+                    parse_cli(arguments).expect("diff shorthand")
+                else {
+                    panic!("expected GitHub target");
+                };
+                assert_eq!(
+                    target.url,
+                    format!("https://github.com/octocat/Hello-World/{path}")
+                );
+                assert!(!target.use_cache);
+            }
+        }
+    }
 }
 
 struct TestDir {

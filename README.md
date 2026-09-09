@@ -286,7 +286,12 @@ Diff viewer:
   - `https://github.com/<owner>/<repo>/commit/<sha>`
   - `https://github.com/<owner>/<repo>/compare/<base>...<head>`
 - PR, commit and compare `.diff`/`.patch` URLs are accepted as equivalent startup targets. A literal trailing `.diff`/`.patch` is treated as a transport suffix; use an encoded dot (`%2E`) when it belongs to a compare ref name.
-- Short PR syntax: `chilla github:<owner>/<repo> <number>`.
+- GitHub shorthand:
+  - PR: `chilla github:<owner>/<repo> <number>`
+  - Branch comparison: `chilla github:<owner>/<repo> 'main...feature/branch'`
+  - Commit: `chilla github:<owner>/<repo> abcdef12`
+  - Explicit commit (including all-numeric SHAs): `chilla github:<owner>/<repo> commit:12345678`
+  - Bare decimal numbers always mean PR numbers; commit SHAs accept 4–40 hexadecimal characters.
 - Changed files open in Tree view by default; expand directories to navigate the diff like a file tree.
 - Use the header reload button or `r` (configurable `document.reload`) to fetch the active diff again. GitHub reload bypasses snapshot cache reuse, preserves surviving selection/tree context, and clears stale full-file previews.
 - Add `--no-github-diff-cache` before the URL or shorthand to bypass the temp-directory cache. The older `--no-pr-diff-cache` flag remains available as a compatibility alias.

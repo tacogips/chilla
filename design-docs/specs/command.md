@@ -151,6 +151,20 @@ While local Git diff mode is active:
 - Opening full-file content or projected changed-file entries must go through repository-scoped Tauri commands.
 - Returning to normal file view restores ordinary directory browsing behavior for the previously opened location.
 
+### GitHub Diff Shorthand
+
+`chilla github:<owner>/<repo> <target>` opens the existing read-only GitHub diff viewer.
+Positive decimal targets remain PR numbers, including leading zeroes. A hexadecimal
+commit SHA (4–40 characters, with at least one non-digit) selects a commit;
+`commit:<sha>` explicitly selects a SHA, including all-numeric SHAs.
+`<base>...<head>` selects a branch comparison, including refs containing slashes.
+Refs are literal Git refs, not URL syntax: encode them when constructing canonical
+GitHub URLs so percent signs, query delimiters, fragments, and `.diff`/`.patch`
+suffixes cannot silently change the target. Reject invalid/empty refs and ambiguous
+or malformed ranges, flags, missing arguments, and extra arguments with usage errors.
+The existing cache-disable aliases and verbose option work for all shorthand targets.
+Reuse existing source variants and API loading; no frontend contract change is needed.
+
 ### Future-Compatible Command Notes
 
 - The initial design does not require subcommands such as `open`, `watch`, or `export`.

@@ -2,6 +2,8 @@
 
 This directory contains implementation plans that translate design documents into actionable implementation specifications.
 
+- [GitHub Diff Shorthand](completed/github-diff-shorthand.md): verified repository shorthand for commits and branch comparisons.
+
 - [JSON Preview Performance](completed/json-preview-performance.md): measured debug/release bottleneck and verified dedicated JSON source highlighting.
 - [Shared Syntax Performance](completed/shared-syntax-performance.md): verified build-time grammar loading and native regex improvements across the shared language highlighter.
 

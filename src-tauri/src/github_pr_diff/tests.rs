@@ -1,6 +1,119 @@
 use std::cell::RefCell;
 
 #[test]
+fn shorthand_selects_commits_and_preserves_numeric_pull_requests() {
+    for sha in [
+        "abcd",
+        "ABCDEF123456",
+        "0123456789abcdef0123456789abcdef012345ab",
+    ] {
+        for selector in [sha.to_string(), format!("commit:{sha}")] {
+            let target = GitHubPrTarget::parse_shorthand("github:octocat/Hello-World", &selector)
+                .expect("commit shorthand");
+            assert_eq!(target.source, GitHubDiffSource::Commit { sha: sha.into() });
+            assert_eq!(
+                target.api_url(),
+                format!("https://api.github.com/repos/octocat/Hello-World/commits/{sha}")
+            );
+            assert_eq!(
+                GitHubPrTarget::parse(&target.url).expect("canonical URL"),
+                target
+            );
+        }
+    }
+    let numeric = GitHubPrTarget::parse_shorthand("github:octocat/Hello-World", "commit:1234")
+        .expect("numeric commit");
+    assert_eq!(
+        numeric.source,
+        GitHubDiffSource::Commit { sha: "1234".into() }
+    );
+    let pr = GitHubPrTarget::parse_shorthand("github:octocat/Hello-World", "0001234")
+        .expect("numeric PR");
+    assert_eq!(pr.source, GitHubDiffSource::PullRequest { number: 1234 });
+}
+
+#[test]
+fn shorthand_comparisons_preserve_literal_refs_in_web_and_api_urls() {
+    for (selector, encoded) in [
+        ("main...feature/topic", "main...feature/topic"),
+        ("release/v1...topic.diff", "release/v1...topic%2Ediff"),
+        ("main.patch...topic.patch", "main%2Epatch...topic%2Epatch"),
+        (
+            "base%2Fname...topic#fragment",
+            "base%252Fname...topic%23fragment",
+        ),
+        ("main...topic%3Fquery", "main...topic%253Fquery"),
+        (
+            "main...feature/日本語",
+            "main...feature/%E6%97%A5%E6%9C%AC%E8%AA%9E",
+        ),
+    ] {
+        let target = GitHubPrTarget::parse_shorthand("github:octocat/Hello-World", selector)
+            .expect("compare shorthand");
+        assert_eq!(
+            target.url,
+            format!("https://github.com/octocat/Hello-World/compare/{encoded}")
+        );
+        assert_eq!(
+            target.api_url(),
+            format!("https://api.github.com/repos/octocat/Hello-World/compare/{encoded}")
+        );
+        assert_eq!(
+            GitHubPrTarget::parse(&target.url).expect("canonical URL"),
+            target
+        );
+        assert_eq!(
+            GitHubPrTarget::parse(&target.diff_url()).expect("diff URL"),
+            target
+        );
+    }
+}
+
+#[test]
+fn shorthand_rejects_invalid_commits_and_comparison_refs() {
+    for selector in [
+        "abc",
+        "commit:",
+        "commit:abc",
+        "commit:xyz123",
+        "abcd?query",
+        "abcd#fragment",
+        "commit:12345678901234567890123456789012345678901",
+        "main",
+        "main..head",
+        "...head",
+        "main...",
+        "main...head...extra",
+        "main....head",
+        "main...head..other",
+        "main...topic?query",
+        "main...topic name",
+        "main...topic\nname",
+        "main...topic~1",
+        "main...topic^",
+        "main...topic:other",
+        "main...topic*",
+        "main...topic[",
+        "main...topic\\name",
+        "main...@",
+        "main...topic@{1}",
+        "main...topic.",
+        "main...-topic",
+        "-main...topic",
+        "main.../topic",
+        "main...topic/",
+        "main...topic//name",
+        "main...topic/.hidden",
+        "main...topic.lock/child",
+    ] {
+        assert!(
+            GitHubPrTarget::parse_shorthand("github:octocat/Hello-World", selector).is_err(),
+            "accepted {selector:?}"
+        );
+    }
+}
+
+#[test]
 fn normalizes_diff_and_patch_urls_without_losing_slash_refs() {
     for target_path in [
         "pull/42",

@@ -118,13 +118,13 @@ impl GitHubDiffSource {
 
 impl GitHubPrTarget {
     /// Resolve the CLI's short repository spelling without treating input as a URL.
-    pub fn parse_shorthand(repository: &str, number: &str) -> AppResult<Self> {
+    pub fn parse_shorthand(repository: &str, target: &str) -> AppResult<Self> {
         let Some((owner, repo)) = repository
             .strip_prefix("github:")
             .and_then(|value| value.split_once('/'))
         else {
             return Err(AppError::cli_usage(
-                "Expected GitHub shorthand: github:<owner>/<repo> <positive-pr-id>",
+                "Expected GitHub shorthand: github:<owner>/<repo> <pr-id|sha|commit:sha|base...head>",
                 2,
             ));
         };
@@ -149,12 +149,18 @@ impl GitHubPrTarget {
                 2,
             ));
         }
-        let number = parse_pull_request_number(number)?;
+        let source = parse_shorthand_source(target)?;
+        let path = match &source {
+            GitHubDiffSource::PullRequest { number } => format!("pull/{number}"),
+            GitHubDiffSource::Commit { sha } => format!("commit/{sha}"),
+            GitHubDiffSource::Compare { base, head } => format!("compare/{base}...{head}"),
+            _ => return Err(AppError::State("unexpected GitHub shorthand source".into())),
+        };
         Ok(Self {
             owner: owner.to_string(),
             repo: repo.to_string(),
-            source: GitHubDiffSource::PullRequest { number },
-            url: format!("https://github.com/{owner}/{repo}/pull/{number}"),
+            source,
+            url: format!("https://github.com/{owner}/{repo}/{path}"),
             use_cache: true,
         })
     }
@@ -311,6 +317,73 @@ impl GitHubPrTarget {
     fn api_context(&self) -> &'static str {
         self.source.request_context()
     }
+}
+
+fn parse_shorthand_source(target: &str) -> AppResult<GitHubDiffSource> {
+    if !target.is_empty() && target.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Ok(GitHubDiffSource::PullRequest {
+            number: parse_pull_request_number(target)?,
+        });
+    }
+    if let Some((base, head)) = target.split_once("...") {
+        return Ok(GitHubDiffSource::Compare {
+            base: encode_shorthand_ref(base)?,
+            head: encode_shorthand_ref(head)?,
+        });
+    }
+    let sha = target.strip_prefix("commit:").unwrap_or(target);
+    if (4..=40).contains(&sha.len()) && sha.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Ok(GitHubDiffSource::Commit {
+            sha: sha.to_string(),
+        });
+    }
+    Err(AppError::cli_usage(
+        "GitHub shorthand target must be a positive PR number, a 4-40 character hexadecimal SHA, commit:<sha>, or <base>...<head>",
+        2,
+    ))
+}
+
+fn encode_shorthand_ref(value: &str) -> AppResult<String> {
+    if value.is_empty()
+        || value == "@"
+        || value.starts_with('-')
+        || value.ends_with('.')
+        || value.contains("..")
+        || value.contains("@{")
+        || value.chars().any(|character| {
+            character.is_control()
+                || character.is_whitespace()
+                || matches!(character, '~' | '^' | ':' | '?' | '*' | '[' | '\\')
+        })
+        || value
+            .split('/')
+            .any(|part| part.is_empty() || part.starts_with('.') || part.ends_with(".lock"))
+    {
+        return Err(AppError::cli_usage(
+            "GitHub shorthand comparisons require two valid literal Git refs separated by ...",
+            2,
+        ));
+    }
+
+    // Sources already store URL-encoded refs for the existing API loader. Encode
+    // literal percent/fragment characters and protect transport-looking suffixes.
+    let suffix_dot = value
+        .strip_suffix(".diff")
+        .or_else(|| value.strip_suffix(".patch"))
+        .map(str::len);
+    Ok(value
+        .bytes()
+        .enumerate()
+        .map(|(index, byte)| {
+            if byte.is_ascii_alphanumeric()
+                || (matches!(byte, b'-' | b'_' | b'.' | b'/') && Some(index) != suffix_dot)
+            {
+                char::from(byte).to_string()
+            } else {
+                format!("%{byte:02X}")
+            }
+        })
+        .collect())
 }
 
 pub(super) fn short_sha(sha: &str) -> &str {

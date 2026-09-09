@@ -252,13 +252,13 @@ fn parse_github_shorthand(args: &[OsString]) -> AppResult<GitHubPrTarget> {
         .into_iter()
         .filter(|value| !is_no_github_diff_cache_flag(value))
         .collect::<Vec<_>>();
-    let [repository, number] = positional.as_slice() else {
+    let [repository, selector] = positional.as_slice() else {
         return Err(AppError::cli_usage(
-            "GitHub shorthand requires exactly: github:<owner>/<repo> <positive-pr-id>",
+            "GitHub shorthand requires exactly: github:<owner>/<repo> <pr-id|sha|commit:sha|base...head>",
             2,
         ));
     };
-    let mut target = GitHubPrTarget::parse_shorthand(repository, number)?;
+    let mut target = GitHubPrTarget::parse_shorthand(repository, selector)?;
     target.use_cache = use_cache;
     Ok(target)
 }
@@ -389,7 +389,7 @@ fn is_no_github_diff_cache_flag(value: &str) -> bool {
 
 fn help_text(binary_name: &str) -> String {
     format!(
-        "Usage:\n  {binary_name} [--verbose] [path ...]\n  {binary_name} [--verbose] <github-diff-url>\n  {binary_name} [--verbose] --no-github-diff-cache <github-diff-url>\n  {binary_name} [--verbose] --no-pr-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--no-github-diff-cache] github:<owner>/<repo> <pr-id>\n  {binary_name} [--verbose] <git-dir> <commit-or-range>\n  {binary_name} --help\n  {binary_name} --version\n\nIf no paths are provided, chilla opens the current working directory in file view mode.\nIf a GitHub pull request, commit, or compare URL is provided, chilla opens that GitHub diff in read-only mode.\nGitHub .diff and .patch URL forms are also supported.\nThe github: shorthand requires a positive decimal PR number.\nIf a Git directory plus commit or range is provided, chilla opens that local Git diff in read-only mode.\nGitHub diffs are cached under the system temp directory and refreshed when GitHub reports a newer updated marker.\n--no-pr-diff-cache remains supported as a compatibility alias for --no-github-diff-cache.\nIf two or more file paths are provided, chilla opens file view mode with the left pane limited to those files.\n\nOptions:\n  --verbose  Write startup and file-I/O diagnostics to {} and mirror them to an attached terminal.\n  --help     Show this help text.\n  --version  Show the application version.",
+        "Usage:\n  {binary_name} [--verbose] [path ...]\n  {binary_name} [--verbose] <github-diff-url>\n  {binary_name} [--verbose] --no-github-diff-cache <github-diff-url>\n  {binary_name} [--verbose] --no-pr-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--no-github-diff-cache] github:<owner>/<repo> <pr-id|sha|commit:sha|base...head>\n  {binary_name} [--verbose] <git-dir> <commit-or-range>\n  {binary_name} --help\n  {binary_name} --version\n\nIf no paths are provided, chilla opens the current working directory in file view mode.\nIf a GitHub pull request, commit, or compare URL is provided, chilla opens that GitHub diff in read-only mode.\nGitHub .diff and .patch URL forms are also supported.\nThe github: shorthand accepts a positive decimal PR number, a 4-40 character hexadecimal SHA, commit:<sha>, or <base>...<head> (slash refs supported). Use commit:<sha> for all-numeric SHAs.\nIf a Git directory plus commit or range is provided, chilla opens that local Git diff in read-only mode.\nGitHub diffs are cached under the system temp directory and refreshed when GitHub reports a newer updated marker.\n--no-pr-diff-cache remains supported as a compatibility alias for --no-github-diff-cache.\nIf two or more file paths are provided, chilla opens file view mode with the left pane limited to those files.\n\nOptions:\n  --verbose  Write startup and file-I/O diagnostics to {} and mirror them to an attached terminal.\n  --help     Show this help text.\n  --version  Show the application version.",
         verbose_log::VERBOSE_LOG_PATH_PATTERN,
     )
 }
