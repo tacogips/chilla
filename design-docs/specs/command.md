@@ -35,6 +35,7 @@ The positional arguments are named `path` in product messaging and accept relati
 |------|------|---------|-------------|
 | `--help` | boolean | `false` | Show CLI help and exit without starting the desktop app |
 | `--version` | boolean | `false` | Show application version and exit without starting the desktop app |
+| `--csv-first-row-header=true\|false` | boolean value | `false` | Initial first-row header setting for each new CSV preview; see CSV File-Open Options below |
 | `--verbose` | boolean | `false` | Write startup and file-I/O diagnostics to `~/Library/Logs/chilla/chilla-verbose-<pid>[-<collision>].log`; also mirror the same records to an attached terminal |
 | `--no-github-diff-cache` | boolean | `false` | Bypass the GitHub diff cache for a GitHub diff URL startup target |
 | `--no-pr-diff-cache` | boolean | `false` | Compatibility alias for `--no-github-diff-cache` |
@@ -84,6 +85,24 @@ The positional arguments are named `path` in product messaging and accept relati
 - For GitHub diff viewer mode, startup context includes the canonical source URL and parsed owner/repository/source identity. Diff retrieval occurs through the Tauri backend after app startup so loading and network errors can be shown in the workspace.
 - For local Git diff viewer mode, startup context includes the detected repository root, the originally requested Git directory, source kind, and normalized revision selector. Diff retrieval occurs through the Tauri backend after app startup so Git and revision errors can be shown in the workspace.
 - Markdown mode still recognizes `.md`, `.markdown`, and `.mdown` as Markdown inputs.
+
+### CSV File-Open Options
+
+`chilla --csv-first-row-header=true report.csv` opens the formatted CSV preview
+with record 1 as column headers. `chilla --csv-first-row-header=false report.csv`
+explicitly preserves numeric column headings and all records as data. Omission
+is equivalent to false. A preview checkbox can change the active setting.
+
+- Only the equals-value form `--csv-first-row-header=true|false` is supported. Values are lowercase and exact; bare flags, empty values, space-separated values, and other spellings are invalid usage (exit 2). There is no short alias or environment variable.
+- The option may appear before, between, or after positional startup arguments. Remove it before target classification while retaining its typed value in the startup request. Repeated valid occurrences use the last value; any invalid occurrence is an error.
+- It composes with `--verbose`, file/directory/file-set targets, and existing Git/GitHub/cache flags. It has no effect on non-CSV and diff rendering; it remains the initial default for subsequently opened CSV files during this launch.
+- With no positional paths it opens the current directory. Mixed CSV and non-CSV file sets retain existing path order and validation rules.
+- After valid global options are removed, a lone `--help` or `--version` remains an information-only exit (0), without starting the app or creating verbose logs. Invalid header option syntax still exits 2, including alongside an information flag.
+- Carry the value through `StartupContext.file_open_options.csv_first_row_as_header`. Typed `open_file_preview` options can override the launch default for a particular open, including explicit false; legacy path-only IPC calls retain false.
+- The UI setting survives Raw/Formatted changes and same-preview reload, but does not persist on disk or become a global preference. Selecting a new preview uses its explicit open option or the launch default; returning to a previous file is a new preview.
+
+See [CSV Viewer Design](design-csv-viewer.md#first-row-header-options) for the
+request/response schema, data flow, table semantics, and verification matrix.
 
 ### Verbose Diagnostic Contract
 
