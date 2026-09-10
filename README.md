@@ -198,15 +198,20 @@ visibility controls sit on the right. Click the filter icon or press `f` or `/` 
 and focus the search field. Press `Esc` in that field to clear and close it.
 
 The directory toolbar also has **Search file contents** (`Shift+S`) and **Find files** (`s`) icons.
-Enter a query and press Enter to search recursively below the current directory.
+Enter a query and press Enter or `Ctrl+M` to search recursively below the current
+directory and focus the first result. With current results, either key returns
+to the first result without repeating the search.
 Content search finds literal, case-sensitive text and shows matching lines with
 their paths and line numbers. Find files matches part of a filename or relative
-path, ignoring case. Use the arrow keys to enter and navigate results; `j`/`k`
+path, ignoring case. Use the arrow keys to navigate results; `j`/`k`
 also move down/up while a result is focused. Focusing a result previews the file.
 Click a result or press Enter on it to open the file. Press `l` on a result, or
-click its right-hand jump icon, to browse its containing directory with that file
+click its right-arrow icon, to browse its containing directory with that file
 selected and focused.
-Escape closes search and returns to browsing. Both searches follow Git-ignore visibility.
+From results or browsing, press `s` or `Shift+S` to focus the corresponding search
+field again. Each mode retains its query when reopened; these keys still type
+normal text inside input fields. Escape closes search and returns to browsing.
+Both searches follow Git-ignore visibility.
 Search skips symlinks and Git metadata; content search also skips binary,
 non-UTF-8 and oversized files. Skipped entries and incomplete results are reported.
 
@@ -226,6 +231,7 @@ Default global shortcuts:
 - `j` or `ArrowDown`: scroll the active file view down one line when the file tree is hidden
 - `k` or `ArrowUp`: scroll the active file view up one line when the file tree is hidden
 - `Shift+L`: collapse or expand the left pane; the sidebar icon in the main toolbar provides the same action, including in Git diff mode
+- Collapsing the left pane moves keyboard focus to the preview and disables hidden browser controls and shortcuts. Expanding restores browser focus and navigation. Starting chilla with file arguments opens the preview with the left pane collapsed; opening a directory keeps it expanded.
 - `g`: toggle local Git diff for the opened repository
 - `y`: copy the selected file or directory absolute path
 - `r`: refresh the current directory or explicit file set and active local file
@@ -235,7 +241,10 @@ Default global shortcuts:
 - `2`: select Markdown preview or formatted CSV view when available
 - `+` / `-`: native preview zoom, from 50%-300% for rendered content or 50%-800% for direct SVG/raster images, in 10% steps (not configured by keymap.toml)
 - `Ctrl+mouse wheel`: native preview zoom under the pointer (not configured by keymap.toml)
-- `Shift+S`: toggle light/dark theme outside the directory browser keyboard context
+- `Shift+D`: toggle light/dark theme, including while browsing files
+
+Theme switching uses `Shift+D` so `Shift+S` remains dedicated to content search.
+Navigation, scrolling, and numeric view shortcuts act on the active document or diff context.
 
 File tree shortcuts:
 

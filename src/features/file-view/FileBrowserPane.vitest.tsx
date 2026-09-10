@@ -25,6 +25,100 @@ describe("FileBrowserPane", () => {
     document.body.innerHTML = "";
   });
 
+  it("refocuses search with s/Shift+S and retains separate queries across mode switches and reopen", async () => {
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing test root");
+    dispose = render(
+      () => (
+        <FileBrowserPane
+          active={true}
+          listingKind="directory"
+          directory={{
+            current_directory_path: "/workspace",
+            parent_directory_path: "/",
+            entries: [],
+            total_entry_count: 0,
+          }}
+          sort={{ field: "name", direction: "asc" }}
+          query=""
+          hideGitIgnored={false}
+          selectedPath={null}
+          canLoadMore={false}
+          isLoadingMore={false}
+          onChangeQuery={() => {}}
+          onChangeSort={() => {}}
+          onLoadMore={() => {}}
+          onSelectEntry={() => {}}
+          onConfirmEntry={() => {}}
+          onNavigateToParent={() => {}}
+          onToggleGitIgnored={() => {}}
+        />
+      ),
+      root,
+    );
+    const press = (
+      key: string,
+      target: EventTarget = document.activeElement ?? document.body,
+      shiftKey = false,
+    ) => {
+      const event = new KeyboardEvent("keydown", {
+        key,
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      });
+      target.dispatchEvent(event);
+      return event;
+    };
+    const input = () => {
+      const element = root.querySelector<HTMLInputElement>(
+        ".directory-search__input",
+      );
+      if (element === null) throw new Error("missing search input");
+      return element;
+    };
+    const type = (value: string) => {
+      input().value = value;
+      input().dispatchEvent(new InputEvent("input", { bubbles: true }));
+    };
+    const findFiles = root.querySelector<HTMLButtonElement>(
+      '[aria-label="Find files"]',
+    );
+    if (findFiles === null) throw new Error("missing find files button");
+    press("s", findFiles);
+    await Promise.resolve();
+    type("filename");
+    expect(press("s").defaultPrevented).toBe(false);
+    expect(press("S", input(), true).defaultPrevented).toBe(false);
+    const close = root.querySelector<HTMLButtonElement>(
+      ".directory-search__close",
+    );
+    if (close === null) throw new Error("missing search close button");
+    close.focus();
+    press("s");
+    await Promise.resolve();
+    expect(document.activeElement).toBe(input());
+    expect(input().value).toBe("filename");
+    close.focus();
+    press("S", close, true);
+    await Promise.resolve();
+    expect(input().value).toBe("");
+    expect(input().getAttribute("aria-label")).toBe(
+      "Search file contents query",
+    );
+    type("content query");
+    press("Escape");
+    await Promise.resolve();
+    press("s");
+    await Promise.resolve();
+    expect(input().value).toBe("filename");
+    press("Escape");
+    await Promise.resolve();
+    press("S", document.activeElement ?? root, true);
+    await Promise.resolve();
+    expect(input().value).toBe("content query");
+  });
+
   it("renders file names as stable ellipsized text without marquee DOM", () => {
     const root = document.getElementById("root");
 

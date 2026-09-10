@@ -166,7 +166,7 @@ export const DEFAULT_KEYMAP_INPUT: Readonly<
       "presentation.rendered",
       "Select Preview view (Markdown) or Formatted view (CSV)",
     ),
-    b("S", "theme.toggle", "Toggle theme outside browser"),
+    b("D", "theme.toggle", "Toggle light / dark theme"),
   ],
 };
 const names: Readonly<Record<string, string>> = {

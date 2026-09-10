@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compileKeymap,
+  DEFAULT_KEYMAP_INPUT,
   eventKey,
   matchingBindings,
   normalizeKey,
@@ -8,6 +9,81 @@ import {
 } from "./keymap";
 
 describe("keymap compilation", () => {
+  it("has no shadowed defaults or unrelated browser/workspace prefix collisions", () => {
+    const defaults = compileKeymap({});
+    for (const context of ["file", "diff", "workspace"] as const) {
+      // Compilation removes unreachable bindings, so compare against the raw defaults.
+      expect(defaults[context]).toHaveLength(
+        DEFAULT_KEYMAP_INPUT[context].length,
+      );
+    }
+    for (const context of ["file", "diff"] as const) {
+      const overlaps = defaults[context].flatMap((browser) =>
+        defaults.workspace
+          .filter((workspace) => {
+            const prefixLength = Math.min(
+              browser.keys.length,
+              workspace.keys.length,
+            );
+            return browser.keys
+              .slice(0, prefixLength)
+              .every((key, index) => key === workspace.keys[index]);
+          })
+          .map((workspace) => ({
+            keys: browser.keys,
+            browser: browser.actions,
+            workspace: workspace.actions,
+          })),
+      );
+      // These equivalent actions intentionally follow the active surface.
+      const navigation = [
+        { keys: ["j"], browser: ["cursor.down"], workspace: ["document.next"] },
+        {
+          keys: ["<Down>"],
+          browser: ["cursor.down"],
+          workspace: ["document.next"],
+        },
+        {
+          keys: ["k"],
+          browser: ["cursor.up"],
+          workspace: ["document.previous"],
+        },
+        {
+          keys: ["<Up>"],
+          browser: ["cursor.up"],
+          workspace: ["document.previous"],
+        },
+      ];
+      expect(overlaps).toEqual(
+        context === "file"
+          ? navigation
+          : [
+              ...navigation,
+              {
+                keys: ["1"],
+                browser: ["diff.view.split"],
+                workspace: ["presentation.raw"],
+              },
+              {
+                keys: ["2"],
+                browser: ["diff.view.stack"],
+                workspace: ["presentation.rendered"],
+              },
+              {
+                keys: ["<C-d>"],
+                browser: ["scroll.down"],
+                workspace: ["scroll.down"],
+              },
+              {
+                keys: ["<C-u>"],
+                browser: ["scroll.up"],
+                workspace: ["scroll.up"],
+              },
+            ],
+      );
+    }
+  });
+
   it("preserves defaults and merges prepend/default/append with first-key priority", () => {
     const defaults = compileKeymap({});
     expect(matchingBindings(defaults.file, ["s"])[0]?.actions).toEqual([

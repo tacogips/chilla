@@ -1319,6 +1319,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
   const revealFilter = () => {
     setFilterOpen(true);
     queueMicrotask(() => {
+      if (props.isFileTreeOpen === false) return;
       filterInput?.focus();
       filterInput?.select();
     });
@@ -1331,6 +1332,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
       setCursorPath(entries()[0]?.path ?? null);
     }
     queueMicrotask(() => {
+      if (props.isFileTreeOpen === false) return;
       const row = Array.from(
         browserPane?.querySelectorAll<HTMLButtonElement>("button[data-path]") ??
           [],
@@ -1343,6 +1345,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
     cursorPath();
     entries();
     queueMicrotask(() => {
+      if (props.isFileTreeOpen === false) return;
       const row = Array.from(
         browserPane?.querySelectorAll<HTMLButtonElement>("button[data-path]") ??
           [],
@@ -1377,19 +1380,36 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
       if (child !== undefined && child.depth > entry.depth) focusEntry(child);
     } else selectEntry(entry);
   };
+  const moveCursorOrPreview = (direction: -1 | 1): void => {
+    if (props.isFileTreeOpen !== false) {
+      moveCursor(direction);
+    } else if (diffFileView !== undefined) {
+      const lineHeight = Number.parseFloat(
+        getComputedStyle(diffFileView).lineHeight,
+      );
+      diffFileView.scrollTop +=
+        (Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 24) *
+        direction;
+    }
+  };
   keymap.register({
     context: "diff",
     enabled: () => true,
-    identity: () => `${currentDir()}:${browserView()}`,
-    accepts: (event) =>
+    identity: () =>
+      `${currentDir()}:${browserView()}:${props.isFileTreeOpen !== false}`,
+    accepts: (event, action) =>
+      (props.isFileTreeOpen !== false ||
+        !["parent", "enter", "open", "filter", "view.toggle"].includes(
+          action,
+        )) &&
       !(
         event.target instanceof Element &&
         event.target.closest(".file-browser__toolbar") !== null &&
         ["Enter", " ", "Tab"].includes(event.key)
       ),
     actions: {
-      "cursor.up": () => moveCursor(-1),
-      "cursor.down": () => moveCursor(1),
+      "cursor.up": () => moveCursorOrPreview(-1),
+      "cursor.down": () => moveCursorOrPreview(1),
       parent: () => {
         if (browserView() === "tree") moveTreeLeft();
         else navigateParent();
@@ -1456,6 +1476,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
         class="pane pr-browser"
         ref={browserPane}
         hidden={props.isFileTreeOpen === false}
+        inert={props.isFileTreeOpen === false}
       >
         <header class="pane__header">
           <span class="pane__title">Changed Files</span>
@@ -1702,7 +1723,7 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
         />
       </aside>
 
-      <section class="pane pr-diff-pane">
+      <section class="pane pr-diff-pane" tabIndex={-1}>
         <header class="pane__header pr-diff-header">
           <div class="pr-diff-header__title">
             <span class="pane__title">

@@ -135,6 +135,66 @@ describe("DirectorySearchPanel", () => {
     expect(panel.onClose).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["Enter", "Ctrl+M"])(
+    "focuses the first result on %s and reuses current results",
+    async (shortcut) => {
+      vi.mocked(searchDirectory).mockResolvedValue(result);
+      const panel = setup();
+      await Promise.resolve();
+      panel.type("literal");
+      const submit = () =>
+        panel.input.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: shortcut === "Enter" ? "Enter" : "m",
+            ctrlKey: shortcut === "Ctrl+M",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      submit();
+      await vi.waitFor(() =>
+        expect(document.activeElement?.className).toBe(
+          "directory-search__result",
+        ),
+      );
+      expect(panel.onPreview).toHaveBeenCalledWith(result.matches[0]?.entry);
+      expect(panel.onOpen).not.toHaveBeenCalled();
+      panel.input.focus();
+      submit();
+      expect(document.activeElement?.className).toBe(
+        "directory-search__result",
+      );
+      expect(searchDirectory).toHaveBeenCalledTimes(1);
+      expect(panel.input.value).toBe("literal");
+    },
+  );
+
+  it("allows a new query while an invalidated request is pending", async () => {
+    let finishOld: ((value: DirectorySearchResult) => void) | undefined;
+    vi.mocked(searchDirectory)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishOld = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ ...result, matches: [] });
+    const panel = setup();
+    panel.type("old");
+    panel.submit();
+    panel.type("new");
+    panel.submit();
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain("No matches found"),
+    );
+    finishOld?.(result);
+    await Promise.resolve();
+    expect(document.querySelector(".directory-search__result")).toBeNull();
+    expect(document.activeElement).toBe(panel.input);
+    expect(panel.input.value).toBe("new");
+    expect(searchDirectory).toHaveBeenCalledTimes(2);
+  });
+
   it.each(["name", "content"] as const)(
     "navigates %s results with j/k and previews on focus and reveals with l, Shift+Enter or the jump button",
     async (kind) => {
@@ -182,7 +242,7 @@ describe("DirectorySearchPanel", () => {
       expect(key(panel.input, "j").defaultPrevented).toBe(false);
       expect(key(panel.input, "k").defaultPrevented).toBe(false);
       expect(key(panel.input, "l").defaultPrevented).toBe(false);
-      expect(panel.onPreview).not.toHaveBeenCalled();
+      expect(panel.onPreview).toHaveBeenCalledWith(first.entry);
       expect(panel.onReveal).not.toHaveBeenCalled();
       expect(document.activeElement).toBe(panel.input);
       key(panel.input, "ArrowDown");

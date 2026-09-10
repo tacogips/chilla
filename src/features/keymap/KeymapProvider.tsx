@@ -111,10 +111,10 @@ export function createKeymapController(loadConfig = true) {
       if (!["Shift", "Control", "Alt", "Meta"].includes(event.key)) cancel();
       return;
     }
-    const editable =
-      isEditableKeyboardTarget(event.target) ||
-      (event.target instanceof Element &&
-        event.target.closest(".directory-search") !== null);
+    const editable = isEditableKeyboardTarget(event.target);
+    const inSearch =
+      event.target instanceof Element &&
+      event.target.closest(".directory-search") !== null;
     const modal =
       event.target instanceof Element &&
       event.target.closest('[role="dialog"]') !== null;
@@ -164,6 +164,17 @@ export function createKeymapController(loadConfig = true) {
       const bindings = keymap()[scope.context].filter(
         (binding) =>
           binding.actions.every((action) => scope.accepts(event, action)) &&
+          (!inSearch ||
+            editable ||
+            (scope.context === "file" &&
+              binding.actions.every((action) =>
+                ["search.name", "search.content", "noop"].includes(action),
+              )) ||
+            (scope.context === "workspace" &&
+              (event.ctrlKey || event.metaKey) &&
+              binding.actions.every((action) =>
+                ["files.open", "document.save", "noop"].includes(action),
+              ))) &&
           (!editable ||
             (scope.context === "workspace" &&
               (event.ctrlKey || event.metaKey) &&

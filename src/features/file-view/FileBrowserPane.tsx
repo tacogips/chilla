@@ -296,6 +296,10 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
   createEffect(() => {
     if (props.listingKind !== "directory") setSearchKind(null);
   });
+  const searchQueries: Record<DirectorySearchKind, string> = {
+    name: "",
+    content: "",
+  };
   const closeSearch = (): void => {
     setSearchKind(null);
     queueMicrotask(() => searchReturnFocus?.focus());
@@ -753,11 +757,11 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
         props.onChangeSort({ field, direction });
   keymap.register({
     context: "file",
-    enabled: () =>
-      props.active && !isDirectoryInformationOpen() && searchKind() === null,
+    enabled: () => props.active && !isDirectoryInformationOpen(),
     identity: () =>
       `${props.listingKind}:${props.directory?.current_directory_path ?? ""}:${props.viewMode ?? viewMode()}`,
     accepts: (event, action) => {
+      if (searchKind() !== null) return action.startsWith("search.");
       if (
         action === "open" &&
         event.key === " " &&
@@ -992,6 +996,10 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
             <DirectorySearchPanel
               root={props.directory?.current_directory_path ?? ""}
               kind={kind()}
+              initialQuery={searchQueries[kind()]}
+              onQueryChange={(query) => {
+                searchQueries[kind()] = query;
+              }}
               hideGitIgnored={props.hideGitIgnored}
               onClose={closeSearch}
               onOpen={(entry) => props.onConfirmEntry(entry)}

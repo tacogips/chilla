@@ -97,6 +97,7 @@ import { resolveCurrentWindow } from "./workspaceWindow";
 type MarkdownPane = "raw" | "preview";
 export function WorkspaceShell() {
   const keymap = createKeymapController();
+  let workspaceElement: HTMLElement | undefined;
   const appWindow = resolveCurrentWindow();
   let directoryRequestId = 0;
   let previewRequestId = 0;
@@ -715,7 +716,7 @@ export function WorkspaceShell() {
         }
       } else {
         setActiveGitDiffTarget(null);
-        setFileTreeOpen(true);
+        setFileTreeOpen(false);
 
         await loadExplicitFileSetState(
           browserRoot.source_order_paths,
@@ -730,6 +731,7 @@ export function WorkspaceShell() {
       );
     } finally {
       setLoading(false);
+      if (!isFileTreeOpen()) queueMicrotask(focusVisiblePane);
     }
   };
 
@@ -1317,8 +1319,27 @@ export function WorkspaceShell() {
     } else if (hasActiveEpubPreview(fp())) stepActiveEpubPage(direction);
     else nudgeActiveDocumentPane(direction);
   };
+  const focusVisiblePane = (): void => {
+    const pane = workspaceElement?.querySelector<HTMLElement>(
+      isFileTreeOpen()
+        ? ".file-browser, .pr-browser"
+        : ".workspace__document-column, .pr-diff-pane",
+    );
+    if (isFileTreeOpen()) {
+      const selected = pane?.querySelector<HTMLElement>(
+        '[aria-selected="true"], .file-browser__button--active, button[data-path][tabindex="0"]',
+      );
+      (selected ?? pane?.querySelector<HTMLElement>("button") ?? pane)?.focus({
+        preventScroll: true,
+      });
+    } else {
+      pane?.focus({ preventScroll: true });
+    }
+  };
   const handleToggleFileTree = (): void => {
+    clearSelectionPreviewDebounce();
     setFileTreeOpen((value) => !value);
+    queueMicrotask(focusVisiblePane);
   };
   keymap.register({
     context: "workspace",
@@ -1427,7 +1448,7 @@ export function WorkspaceShell() {
 
   return (
     <KeymapContextProvider.Provider value={keymap}>
-      <main class="workspace">
+      <main class="workspace" ref={workspaceElement}>
         <Portal>
           <ShortcutsHelpDialog
             open={isShortcutsHelpOpen()}

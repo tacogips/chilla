@@ -486,8 +486,22 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       };
       button.click();
       expectVisibility(false);
+      await waitFor(() =>
+        expect(document.activeElement).toBe(
+          document.querySelector(
+            kind === "directory"
+              ? ".workspace__document-column"
+              : ".pr-diff-pane",
+          ),
+        ),
+      );
       button.click();
       expectVisibility(true);
+      await waitFor(() =>
+        expect(
+          document.querySelector(selector)?.contains(document.activeElement),
+        ).toBe(true),
+      );
       window.dispatchEvent(
         new KeyboardEvent("keydown", {
           key: "L",
@@ -505,6 +519,59 @@ describe("WorkspaceShell numeric view shortcuts", () => {
             : documentMocks.loadPrDiff,
         ).toHaveBeenCalledTimes(1);
       }
+    },
+  );
+
+  it.each(["single", "set"] as const)(
+    "starts explicit %s files folded with preview focus and restores browser navigation",
+    async (kind) => {
+      documentMocks.getStartupContext.mockResolvedValue(
+        kind === "single"
+          ? directoryStartupContext("/workspace/data.csv")
+          : explicitFileSetStartupContext(),
+      );
+      const page = directoryPageWithPaths([
+        "/workspace/data.csv",
+        "/workspace/other.csv",
+      ]);
+      documentMocks.listDirectory.mockResolvedValue(page);
+      documentMocks.listExplicitFileSet.mockResolvedValue(page);
+      documentMocks.openFilePreview.mockResolvedValue(csvPreview());
+      dispose = renderWorkspace();
+      await waitFor(() => {
+        expect(document.querySelector(".csv-preview-table")).not.toBeNull();
+        expect(document.activeElement).toBe(
+          document.querySelector(".workspace__document-column"),
+        );
+      });
+      expect(document.querySelector(".file-browser")).toBeNull();
+      for (const key of ["j", "ArrowRight", "Enter", "f", "t"]) {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key }));
+      }
+      expect(document.querySelector(".file-browser")).toBeNull();
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(1);
+      modeButton("Expand left pane").click();
+      await waitFor(() =>
+        expect(document.activeElement?.getAttribute("data-path")).toBe(
+          "/workspace/data.csv",
+        ),
+      );
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "j" }));
+      await waitFor(() =>
+        expect(
+          document
+            .querySelector(".file-browser__button--active")
+            ?.getAttribute("data-path"),
+        ).toBe("/workspace/other.csv"),
+      );
+      modeButton("Collapse left pane").click();
+      await waitFor(() =>
+        expect(document.activeElement).toBe(
+          document.querySelector(".workspace__document-column"),
+        ),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(1);
     },
   );
 
@@ -995,7 +1062,7 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     const theme = document
       .querySelector(".workspace__theme-toggle")
       ?.getAttribute("aria-label");
-    for (const key of ["t", "f", "/", "s", "S", ",", "m", "0", "?", "L"])
+    for (const key of ["t", "f", "/", "s", "S", "D", ",", "m", "0", "?", "L"])
       row.dispatchEvent(
         new KeyboardEvent("keydown", {
           key,
@@ -1099,7 +1166,7 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     );
     expect(document.querySelector(".file-browser__sequence-popup")).toBeNull();
     window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "S", shiftKey: true }),
+      new KeyboardEvent("keydown", { key: "D", shiftKey: true }),
     );
     await waitFor(() =>
       expect(
@@ -1434,6 +1501,7 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     await waitFor(() => {
       expect(document.body.textContent).toContain("data.csv");
     });
+    modeButton("Expand left pane").click();
     modeButton("Refresh workspace").click();
 
     await waitFor(() => {

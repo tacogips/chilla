@@ -59,7 +59,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
   const mediaKind = createMemo(() => mediaPreviewKind(mediaPreview()));
 
   return (
-    <div class="workspace__document-column">
+    <div class="workspace__document-column" tabIndex={-1}>
       <Show when={props.markdownDoc !== null && props.markdownPane === "raw"}>
         <section class="pane workspace__markdown-raw-pane">
           <header class="pane__header">

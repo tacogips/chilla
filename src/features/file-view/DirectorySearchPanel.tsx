@@ -19,6 +19,8 @@ export function DirectorySearchPanel(props: {
   readonly root: string;
   readonly kind: DirectorySearchKind;
   readonly hideGitIgnored: boolean;
+  readonly initialQuery?: string;
+  readonly onQueryChange?: (query: string) => void;
   readonly onClose: VoidFunction;
   readonly onOpen: (entry: DirectoryEntry) => void;
   readonly onReveal: (entry: DirectoryEntry) => void;
@@ -32,20 +34,21 @@ export function DirectorySearchPanel(props: {
   let section: HTMLElement | undefined;
   let input: HTMLInputElement | undefined;
   let generation = 0;
-  let inFlight = false;
+  let inFlight: number | null = null;
   let mounted = true;
   const invalidate = (): void => {
     generation += 1;
     setResult(null);
     setError(null);
     setSelected(-1);
+    setBusy(false);
   };
   createEffect(
     on(
       () => [props.root, props.kind, props.hideGitIgnored] as const,
       () => {
         invalidate();
-        setQuery("");
+        setQuery(props.initialQuery ?? "");
         queueMicrotask(() => {
           if (mounted) input?.focus();
         });
@@ -58,10 +61,14 @@ export function DirectorySearchPanel(props: {
     generation += 1;
   });
   const submit = async (): Promise<void> => {
-    if (query().trim() === "" || inFlight) return;
+    if (query().trim() === "" || inFlight === generation) return;
+    if (result() !== null) {
+      focusFirstResult();
+      return;
+    }
     invalidate();
     const request = generation;
-    inFlight = true;
+    inFlight = request;
     setBusy(true);
     try {
       const next = await searchDirectory({
@@ -70,9 +77,15 @@ export function DirectorySearchPanel(props: {
         kind: props.kind,
         hideGitIgnored: props.hideGitIgnored,
       });
-      if (mounted && request === generation) setResult(next);
+      if (mounted && request === generation) {
+        setResult(next);
+        queueMicrotask(() => {
+          if (mounted && request === generation) focusFirstResult();
+        });
+      }
     } catch (cause: unknown) {
-      if (mounted && request === generation)
+      if (mounted && request === generation) {
+        input?.focus();
         setError(
           cause instanceof Error
             ? cause.message
@@ -80,16 +93,23 @@ export function DirectorySearchPanel(props: {
               ? cause
               : "Directory search failed",
         );
+      }
     } finally {
-      inFlight = false;
-      if (mounted) setBusy(false);
+      if (inFlight === request) inFlight = null;
+      if (mounted && request === generation) setBusy(false);
     }
+  };
+  const focusFirstResult = (): void => {
+    const first = section?.querySelector<HTMLButtonElement>(
+      ".directory-search__result",
+    );
+    (first ?? input)?.focus();
   };
   const move = (direction: -1 | 1): void => {
     const count = result()?.matches.length ?? 0;
     if (count === 0) return;
     const index =
-      selected() < 0
+      document.activeElement === input || selected() < 0
         ? direction === 1
           ? 0
           : count - 1
@@ -111,8 +131,18 @@ export function DirectorySearchPanel(props: {
       }}
       onKeyDown={(event) => {
         event.stopPropagation();
-        if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey)
+        if (event.isComposing || event.metaKey || event.altKey) return;
+        if (
+          event.target === input &&
+          !event.shiftKey &&
+          ((!event.ctrlKey && event.key === "Enter") ||
+            (event.ctrlKey && event.key.toLowerCase() === "m"))
+        ) {
+          event.preventDefault();
+          void submit();
           return;
+        }
+        if (event.ctrlKey) return;
         const inResults =
           event.target instanceof Element &&
           event.target.closest(".directory-search__results") !== null;
@@ -133,13 +163,6 @@ export function DirectorySearchPanel(props: {
             event.preventDefault();
             props.onReveal(match.entry);
           }
-        } else if (
-          event.key === "Enter" &&
-          !event.shiftKey &&
-          event.target === input
-        ) {
-          event.preventDefault();
-          void submit();
         }
       }}
     >
@@ -170,6 +193,7 @@ export function DirectorySearchPanel(props: {
           onInput={(event) => {
             invalidate();
             setQuery(event.currentTarget.value);
+            props.onQueryChange?.(event.currentTarget.value);
           }}
         />
         <button
@@ -195,7 +219,8 @@ export function DirectorySearchPanel(props: {
       <div class="directory-search__status" role="status" aria-live="polite">
         <Show when={busy()}>Searching...</Show>
         <Show when={!busy() && result() === null && error() === null}>
-          Enter a query and press Enter to search subdirectories.
+          Enter a query and press Enter or Ctrl+M to search and focus the first
+          result.
         </Show>
         <Show when={result()}>
           {(value) => (
@@ -303,7 +328,7 @@ export function DirectorySearchPanel(props: {
                   stroke-linecap="round"
                   stroke-linejoin="round"
                 >
-                  <path d="M10 5H4v15h15v-6M14 4h6v6M20 4 10 14" />
+                  <path d="M4 12h16m-6-6 6 6-6 6" />
                 </svg>
               </button>
             </li>

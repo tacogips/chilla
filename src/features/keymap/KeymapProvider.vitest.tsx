@@ -52,6 +52,8 @@ function setup() {
     "document.save": vi.fn(),
     "files.open": vi.fn(),
     "git.toggle": vi.fn(),
+    "theme.toggle": vi.fn(),
+    "scroll.down": vi.fn(),
   };
   let controller: KeymapController | undefined;
   dispose = render(() => {
@@ -112,6 +114,61 @@ function setup() {
 }
 
 describe("keymap controller", () => {
+  it("keeps search independent from theme with and without an active browser", async () => {
+    const test = setup();
+    await settle();
+    test.press("s");
+    test.press("S", { shiftKey: true });
+    expect(test.actions["search.name"]).toHaveBeenCalledOnce();
+    expect(test.actions["search.content"]).toHaveBeenCalledOnce();
+    expect(test.workspace["theme.toggle"]).not.toHaveBeenCalled();
+    expect(test.press("D", { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(test.workspace["theme.toggle"]).toHaveBeenCalledOnce();
+    expect(test.workspace["scroll.down"]).not.toHaveBeenCalled();
+    test.press("d", { ctrlKey: true });
+    expect(test.workspace["scroll.down"]).toHaveBeenCalledOnce();
+    expect(test.workspace["theme.toggle"]).toHaveBeenCalledOnce();
+    expect(test.actions["search.content"]).toHaveBeenCalledOnce();
+
+    test.setEnabled(false);
+    expect(test.press("S", { shiftKey: true }).defaultPrevented).toBe(false);
+    test.press("D", { shiftKey: true });
+    expect(test.workspace["theme.toggle"]).toHaveBeenCalledTimes(2);
+    test.input.focus();
+    expect(
+      test.press("D", { shiftKey: true }, test.input).defaultPrevented,
+    ).toBe(false);
+    expect(test.workspace["theme.toggle"]).toHaveBeenCalledTimes(2);
+  });
+
+  it("dispatches configured search shortcuts from results while leaving result navigation and typing alone", async () => {
+    vi.mocked(getKeymapConfig).mockResolvedValue(
+      response({
+        mgr: {
+          keymap: [
+            { on: "f", run: "search.name" },
+            { on: ["g", "s"], run: "search.content" },
+          ],
+        },
+      }),
+    );
+    const test = setup();
+    await settle();
+    test.container.classList.add("directory-search");
+    expect(test.press("s").defaultPrevented).toBe(false);
+    expect(test.press("Enter").defaultPrevented).toBe(false);
+    expect(test.press("j").defaultPrevented).toBe(false);
+    expect(test.press("f").defaultPrevented).toBe(true);
+    expect(test.actions["search.name"]).toHaveBeenCalledOnce();
+    test.press("g");
+    test.press("s");
+    expect(test.actions["search.content"]).toHaveBeenCalledOnce();
+    test.input.focus();
+    expect(test.press("f", {}, test.input).defaultPrevented).toBe(false);
+    expect(test.press("s", {}, test.input).defaultPrevented).toBe(false);
+    expect(test.actions["search.name"]).toHaveBeenCalledOnce();
+  });
+
   it("honors explicit empty replacements without leaving browser or global defaults active", async () => {
     vi.mocked(getKeymapConfig).mockResolvedValue(
       response({ mgr: { keymap: [] }, workspace: { keymap: [] } }),

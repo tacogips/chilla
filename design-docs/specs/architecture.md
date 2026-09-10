@@ -905,6 +905,14 @@ as the default Shift+L shortcut. Its accessible label describes the next action,
 its expanded state reflects actual visibility, and its tooltip uses the effective
 configured shortcut. The control remains available in file and Git diff modes.
 
+Collapsing transfers keyboard focus to the visible document or diff preview.
+Hidden browser controls cannot receive focus or execute browser shortcuts;
+preview scrolling and diff presentation shortcuts remain available. Expanding
+restores browser interaction and focuses the selected row when available.
+Starting with explicit file arguments collapses the pane and focuses the loaded
+preview, including an explicit set of files. Directory and diff-target startup
+keep the browser expanded. Visibility is session state, not a persisted preference.
+
 ### Recursive Search Result Navigation
 
 Both filename and content search support unmodified `j`/`k` while focus is in

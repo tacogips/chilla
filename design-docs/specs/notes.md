@@ -269,3 +269,33 @@ Notable items that do not fit into architecture or client categories.
 - `bun run test:tauri:e2e:linux`
 
 ---
+
+## Default Shortcut Collision Audit
+
+Keep frequent content search on `Shift+S`; move the less frequent theme toggle
+to unused `Shift+D` in every workspace/browser context. Update help and tooltips.
+Custom keymap overrides retain their existing behavior.
+
+Audit default bindings and hard-coded preview handlers for exact-key and prefix
+collisions. Browser navigation (`j`, `k`, arrows), contextual scrolling
+(`Ctrl+D`/`Ctrl+U`), numeric view selection (`1`/`2`), and `Tab` intentionally
+operate on the active surface; preserve these contextual equivalents. File and
+diff browser scopes are mutually exclusive. Sort sequences begin with comma,
+so their following `s`/`S` keys do not conflict with direct search.
+
+Verify theme/search dispatch with the browser active, inactive, and while typing,
+and guard against new unrelated default collisions. Record any further actual
+conflicts found during implementation and prefer navigation/search over cosmetic
+actions. No backend contract changes are required.
+
+### Search Keyboard Return Flow
+
+Enter or Ctrl+M in the query field runs a new query and moves focus to the first
+result after completion; when results are current, it focuses the first result
+without repeating the request. Result focus previews the file. Empty or failed
+searches retain input focus. Existing result activation/reveal stays available.
+From result or non-editable browsing focus, search shortcuts refocus the query;
+retain the query for each search mode when returning or reopening search. Typing
+`s` or `S` in an editable field remains ordinary text entry. Respect configured
+search bindings. Replace the containing-directory external-link glyph with a
+plain right arrow, retaining its accessible label and reveal behavior.

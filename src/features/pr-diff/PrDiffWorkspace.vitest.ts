@@ -1476,6 +1476,76 @@ describe("PrDiffWorkspace", () => {
     },
   );
 
+  it("isolates the folded browser while preserving diff scrolling, modes and file navigation", async () => {
+    loadPrDiffMock.mockResolvedValue(
+      snapshot([textDiffFile("a.md", "first"), textDiffFile("b.md", "second")]),
+    );
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing root");
+    const [visible, setVisible] = createSignal(true);
+    dispose = render(
+      () =>
+        PrDiffWorkspace({
+          target: { kind: "github", target },
+          get isFileTreeOpen() {
+            return visible();
+          },
+        }),
+      root,
+    );
+    await waitFor(() =>
+      expect(document.querySelector('[data-path="a.md"]')).not.toBeNull(),
+    );
+    click('[data-path="a.md"]');
+    const browser = document.querySelector<HTMLElement>(".pr-browser");
+    const selectedPath = () =>
+      browser
+        ?.querySelector('[aria-selected="true"]')
+        ?.getAttribute("data-path");
+    expect(selectedPath()).toBe("a.md");
+    const pane = document.querySelector<HTMLElement>(".pr-diff-pane");
+    setVisible(false);
+    pane?.focus();
+    for (const key of ["ArrowRight", "Enter", "f", "t", "h", "l"]) {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key }));
+    }
+    expect(browser?.hidden).toBe(true);
+    expect(browser?.inert).toBe(true);
+    expect(browser?.querySelector("input")).toBeNull();
+    expect(browser?.querySelector('[role="tree"]')).not.toBeNull();
+    expect(selectedPath()).toBe("a.md");
+    const fileView = document.querySelector<HTMLElement>(".pr-diff-fileview");
+    expect(fileView).not.toBeNull();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "j" }));
+    expect(fileView?.scrollTop).toBeGreaterThan(0);
+    expect(selectedPath()).toBe("a.md");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k" }));
+    expect(fileView?.scrollTop).toBe(0);
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "d", ctrlKey: true }),
+    );
+    expect(fileView?.scrollTop).toBeGreaterThan(0);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "2" }));
+    expect(
+      document
+        .querySelector('[aria-label="Stack"]')
+        ?.classList.contains("workspace__mode--active"),
+    ).toBe(true);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: ">" }));
+    await waitFor(() =>
+      expect(document.querySelector(".pr-diff-pane")?.textContent).toContain(
+        "second",
+      ),
+    );
+    await Promise.resolve();
+    expect(document.activeElement).toBe(pane);
+    setVisible(true);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "f" }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(browser?.querySelector("input")),
+    );
+  });
+
   it("defaults Git diff to a tree and preserves the preview while collapsing folders", async () => {
     loadGitDiffMock.mockResolvedValue(
       snapshot([

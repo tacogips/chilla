@@ -14,7 +14,7 @@ export const SHORTCUT_LABELS = {
   toggleMarkdownPane: "Shift+P",
   rawView: "1",
   secondaryView: "2",
-  toggleTheme: "Shift+S",
+  toggleTheme: "Shift+D",
   toggleFileTree: "Shift+L",
 } as const;
 
@@ -91,8 +91,8 @@ export const SHORTCUT_SECTIONS: readonly {
         description: "Select Preview view (Markdown) or Formatted view (CSV)",
       },
       {
-        keys: ["Shift", "S"],
-        description: "Toggle light / dark theme (outside the file browser)",
+        keys: ["Shift", "D"],
+        description: "Toggle light / dark theme",
       },
       {
         keys: ["Ctrl", "S"],
