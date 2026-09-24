@@ -6,12 +6,19 @@ interface PdfFilePreviewPaneProps {
   readonly path: string;
   readonly fileName: string;
   readonly revision: string;
+  readonly localResourceGeneration?: number | undefined;
 }
 
 export function PdfFilePreviewPane(props: PdfFilePreviewPaneProps) {
   const pdfSrc = createMemo(() => {
     const url = new URL(convertFileSrc(props.path));
     url.searchParams.set("revision", props.revision);
+    if ((props.localResourceGeneration ?? 0) > 0) {
+      url.searchParams.set(
+        "chilla_refresh",
+        String(props.localResourceGeneration),
+      );
+    }
     return url.toString();
   });
 

@@ -11,6 +11,7 @@ interface MediaFilePreviewPaneProps {
   readonly streamUrl?: string | null;
   readonly fileName: string;
   readonly autoplayRequestId: number;
+  readonly localResourceGeneration?: number | undefined;
 }
 
 const LARGE_MEDIA_SEEK_SECONDS = 15;
@@ -76,7 +77,19 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
   const isVideo = () => props.kind === "video";
   const usesLinuxVideoBlobFallback = isLinuxWebKitDesktop() && isVideo();
   const isLinuxVideoLayout = usesLinuxVideoBlobFallback && isVideo();
-  const resolvedMediaSrc = () => props.streamUrl ?? convertFileSrc(props.path);
+  const resolvedMediaSrc = () => {
+    if (props.streamUrl !== undefined && props.streamUrl !== null) {
+      return props.streamUrl;
+    }
+    const url = new URL(convertFileSrc(props.path));
+    if ((props.localResourceGeneration ?? 0) > 0) {
+      url.searchParams.set(
+        "chilla_refresh",
+        String(props.localResourceGeneration),
+      );
+    }
+    return url.toString();
+  };
   const mediaPreload = () =>
     props.streamUrl !== undefined && props.streamUrl !== null && isVideo()
       ? "auto"
@@ -124,6 +137,7 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
     void props.path;
     void props.streamUrl;
     void props.kind;
+    void props.localResourceGeneration;
     loadGeneration += 1;
     handledAutoplayRequestId = 0;
     setPlaybackFailed(false);

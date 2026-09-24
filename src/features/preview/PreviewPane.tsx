@@ -31,6 +31,8 @@ interface PreviewPaneProps {
   readonly colorScheme: ColorScheme;
   readonly subtitle?: string;
   readonly dragPanEnabled?: boolean;
+  readonly imageRevision?: string | undefined;
+  readonly localResourceGeneration?: number | undefined;
   readonly layout?: "rendered" | "source";
 }
 
@@ -408,10 +410,12 @@ function attachImageLoadFallback(
 async function enhancePreviewMedia(
   container: HTMLElement,
   documentPath: string | null,
+  imageRevision?: string,
+  localResourceGeneration = 0,
 ) {
   const mediaElements = Array.from(
     container.querySelectorAll<HTMLElement>(
-      "img[src], video[src], video source[src], iframe[src], embed[src]",
+      "img[src], video[src], video source[src], audio[src], audio source[src], iframe[src], embed[src]",
     ),
   );
 
@@ -433,7 +437,24 @@ async function enhancePreviewMedia(
     }
 
     if (resolvedResource !== null) {
-      element.setAttribute("src", resolvedResource.url);
+      if (imageRevision !== undefined || localResourceGeneration > 0) {
+        const revisedUrl = new URL(resolvedResource.url);
+        if (
+          element instanceof HTMLImageElement &&
+          imageRevision !== undefined
+        ) {
+          revisedUrl.searchParams.set("chilla_revision", imageRevision);
+        }
+        if (localResourceGeneration > 0) {
+          revisedUrl.searchParams.set(
+            "chilla_refresh",
+            String(localResourceGeneration),
+          );
+        }
+        element.setAttribute("src", revisedUrl.toString());
+      } else {
+        element.setAttribute("src", resolvedResource.url);
+      }
     }
   }
 }
@@ -544,6 +565,8 @@ export async function enhancePreviewContent(
   documentPath: string | null,
   colorScheme: ColorScheme,
   isCurrent: () => boolean,
+  imageRevision?: string,
+  localResourceGeneration = 0,
 ) {
   if (!isCurrent()) {
     return;
@@ -565,7 +588,12 @@ export async function enhancePreviewContent(
   }
 
   enhanceAsciinemaEmbeds(container);
-  await enhancePreviewMedia(container, documentPath);
+  await enhancePreviewMedia(
+    container,
+    documentPath,
+    imageRevision,
+    localResourceGeneration,
+  );
 
   if (!isCurrent()) {
     return;
@@ -737,6 +765,8 @@ export function PreviewPane(props: PreviewPaneProps) {
         () => props.documentPath,
         () => props.colorScheme,
         () => props.layout,
+        () => props.imageRevision,
+        () => props.localResourceGeneration,
       ],
       ([visible, html, documentPath, colorScheme]) => {
         const container = containerRef;
@@ -759,6 +789,8 @@ export function PreviewPane(props: PreviewPaneProps) {
           documentPath,
           colorScheme,
           () => currentRunId === enhancementRunId,
+          props.imageRevision,
+          props.localResourceGeneration,
         ).catch(() => {
           // Leave the rendered markup intact if asset or Mermaid enhancement fails.
         });

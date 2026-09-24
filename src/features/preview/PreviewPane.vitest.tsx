@@ -369,6 +369,145 @@ describe("PreviewPane", () => {
     });
   });
 
+  it("changes only a direct SVG image URL when its revision changes", async () => {
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing test root");
+    const [revision, setRevision] = createSignal("2026-01-01T00:00:00Z");
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath="/docs/chart.svg"
+          fileName="chart.svg"
+          html='<figure><img src="/docs/chart.svg" alt="chart" /></figure>'
+          imageRevision={revision()}
+          selectedAnchorId={null}
+          visible={true}
+        />
+      ),
+      root,
+    );
+    const image = await waitForElement<HTMLImageElement>(
+      'img[src*="chilla_revision="]',
+    );
+    const firstUrl = image.src;
+    expect(new URL(firstUrl).searchParams.get("chilla_revision")).toBe(
+      "2026-01-01T00:00:00Z",
+    );
+
+    setRevision("2026-01-02T00:00:00Z");
+    await waitFor(() => {
+      const refreshed = root.querySelector<HTMLImageElement>("img");
+      expect(refreshed?.src).not.toBe(firstUrl);
+      expect(
+        new URL(refreshed?.src ?? "").searchParams.get("chilla_revision"),
+      ).toBe("2026-01-02T00:00:00Z");
+    });
+  });
+
+  it("refreshes a direct image when its modification marker is unchanged", async () => {
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing test root");
+    const [generation, setGeneration] = createSignal(0);
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath="/docs/chart.svg"
+          fileName="chart.svg"
+          html='<figure><img src="/docs/chart.svg" alt="chart" /></figure>'
+          imageRevision="unchanged"
+          localResourceGeneration={generation()}
+          selectedAnchorId={null}
+          visible={true}
+        />
+      ),
+      root,
+    );
+    const image = await waitForElement<HTMLImageElement>('img[alt="chart"]');
+    await waitFor(() => expect(image.src).toContain("chilla_revision="));
+    const firstUrl = image.src;
+    setGeneration(1);
+    await waitFor(() => {
+      const refreshed =
+        root.querySelector<HTMLImageElement>('img[alt="chart"]');
+      expect(refreshed?.src).not.toBe(firstUrl);
+      expect(
+        new URL(refreshed?.src ?? "").searchParams.get("chilla_refresh"),
+      ).toBe("1");
+      expect(
+        new URL(refreshed?.src ?? "").searchParams.get("chilla_revision"),
+      ).toBe("unchanged");
+    });
+  });
+
+  it("leaves embedded Markdown image URLs without a document revision", async () => {
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing test root");
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath="/docs/notes.md"
+          fileName="notes.md"
+          html='<p><img src="./chart.svg" alt="chart" /></p>'
+          selectedAnchorId={null}
+          visible={true}
+        />
+      ),
+      root,
+    );
+    const image = await waitForElement<HTMLImageElement>(
+      'img[src="asset:///docs/./chart.svg"]',
+    );
+    expect(image.src).not.toContain("chilla_revision");
+  });
+
+  it("refreshes unchanged local assets without changing remote URLs", async () => {
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing test root");
+    const [generation, setGeneration] = createSignal(0);
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath="/docs/notes.md"
+          fileName="notes.md"
+          html={
+            '<img src="./chart.svg?size=small" alt="local" /><audio src="./note.mp3"></audio><img src="https://example.com/chart.svg" alt="remote" />'
+          }
+          localResourceGeneration={generation()}
+          selectedAnchorId={null}
+          visible={true}
+        />
+      ),
+      root,
+    );
+    const localImage =
+      await waitForElement<HTMLImageElement>('img[alt="local"]');
+    await waitFor(() => expect(localImage.src).toContain("asset:///docs/"));
+    const firstUrl = localImage.src;
+
+    setGeneration(1);
+    await waitFor(() => {
+      const refreshed =
+        root.querySelector<HTMLImageElement>('img[alt="local"]');
+      expect(refreshed?.src).not.toBe(firstUrl);
+      const url = new URL(refreshed?.src ?? "");
+      expect(url.searchParams.get("size")).toBe("small");
+      expect(url.searchParams.get("chilla_refresh")).toBe("1");
+      expect(url.searchParams.has("chilla_revision")).toBe(false);
+      expect(
+        new URL(
+          root.querySelector<HTMLAudioElement>("audio")?.src ?? "",
+        ).searchParams.get("chilla_refresh"),
+      ).toBe("1");
+      expect(
+        root.querySelector<HTMLImageElement>('img[alt="remote"]')?.src,
+      ).toBe("https://example.com/chart.svg");
+    });
+  });
+
   it("maps Mermaid theme colors from the active preview element", () => {
     const root = document.getElementById("root");
 

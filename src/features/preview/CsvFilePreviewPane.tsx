@@ -1,4 +1,4 @@
-import { For, Match, Switch } from "solid-js";
+import { For, Match, Show, Switch } from "solid-js";
 import type {
   DocumentPresentationMode,
   FilePreview,
@@ -33,6 +33,8 @@ interface CsvFilePreviewPaneProps {
   readonly presentationMode: DocumentPresentationMode;
   readonly colorScheme: ColorScheme;
   readonly subtitle: string;
+  readonly firstRowAsHeader: boolean;
+  readonly onFirstRowAsHeaderChange: (value: boolean) => void;
 }
 
 export function CsvFilePreviewPane(props: CsvFilePreviewPaneProps) {
@@ -55,6 +57,18 @@ export function CsvFilePreviewPane(props: CsvFilePreviewPaneProps) {
         <section class="pane">
           <PreviewHeader fileName={props.preview.file_name}>
             <span>Formatted CSV</span>
+            <label class="csv-preview-header-option">
+              <input
+                aria-label="Use first row as header"
+                checked={props.firstRowAsHeader}
+                disabled={!props.preview.formatted_available}
+                onChange={(event) =>
+                  props.onFirstRowAsHeaderChange(event.currentTarget.checked)
+                }
+                type="checkbox"
+              />
+              <span>Use first row as header</span>
+            </label>
           </PreviewHeader>
           <div
             class="pane__body preview"
@@ -65,7 +79,10 @@ export function CsvFilePreviewPane(props: CsvFilePreviewPaneProps) {
               style={previewThemeStyle(props.colorScheme)}
             >
               <CsvPreviewNotices preview={props.preview} />
-              <CsvTable preview={props.preview} />
+              <ShowCsvTable
+                firstRowAsHeader={props.firstRowAsHeader}
+                preview={props.preview}
+              />
             </div>
           </div>
         </section>
@@ -100,24 +117,79 @@ function CsvNotice(props: {
   readonly kind: "error" | "truncate";
   readonly text: string;
 }) {
-  if (!props.when) {
-    return null;
-  }
-
   const mod =
     props.kind === "error"
       ? "csv-preview-notice csv-preview-notice--error"
       : "csv-preview-notice csv-preview-notice--truncate";
 
-  return <p class={mod}>{props.text}</p>;
+  return (
+    <Show when={props.when}>
+      <p class={mod}>{props.text}</p>
+    </Show>
+  );
 }
 
-function CsvTable(props: { readonly preview: CsvPreviewModel }) {
+function ShowCsvTable(props: {
+  readonly preview: CsvPreviewModel;
+  readonly firstRowAsHeader: boolean;
+}) {
+  return (
+    <Show when={props.preview.formatted_available}>
+      <Show
+        when={props.preview.rows.length > 0}
+        fallback={<p class="csv-preview-empty-state">No CSV records</p>}
+      >
+        <CsvTable
+          firstRowAsHeader={props.firstRowAsHeader}
+          preview={props.preview}
+        />
+        <CsvRowCount
+          firstRowAsHeader={props.firstRowAsHeader}
+          preview={props.preview}
+        />
+      </Show>
+    </Show>
+  );
+}
+
+function CsvRowCount(props: {
+  readonly preview: CsvPreviewModel;
+  readonly firstRowAsHeader: boolean;
+}) {
+  const headerOffset = () =>
+    props.firstRowAsHeader && props.preview.rows.length > 0 ? 1 : 0;
+  const dataRows = () => props.preview.rows.length - headerOffset();
+  const totalRows = () =>
+    props.preview.total_row_count === null
+      ? null
+      : Math.max(props.preview.total_row_count - headerOffset(), 0);
+  const totalText = () =>
+    totalRows() === null ? "unknown total" : `${totalRows()} total`;
+
+  return (
+    <p class="csv-preview-row-count">
+      {dataRows() === 1 ? "1 data row" : `${dataRows()} data rows`} (
+      {totalText()})
+    </p>
+  );
+}
+
+function CsvTable(props: {
+  readonly preview: CsvPreviewModel;
+  readonly firstRowAsHeader: boolean;
+}) {
   const cols = () =>
     Array.from(
       { length: Math.max(props.preview.column_count, 0) },
       (_, index) => String(index + 1),
     );
+  const headerRow = () =>
+    props.firstRowAsHeader && props.preview.rows.length > 0
+      ? padCsvRow(props.preview.rows[0] ?? [], props.preview.column_count)
+      : null;
+  const bodyRows = () =>
+    headerRow() === null ? props.preview.rows : props.preview.rows.slice(1);
+  const sourceRowOffset = () => (headerRow() === null ? 1 : 2);
 
   return (
     <div class="csv-preview-scroll">
@@ -126,20 +198,33 @@ function CsvTable(props: { readonly preview: CsvPreviewModel }) {
           <tr>
             <th class="csv-preview-table__corner" scope="col" />
             <For each={cols()}>
-              {(label) => (
-                <th class="csv-preview-table__col-head" scope="col">
-                  {label}
-                </th>
-              )}
+              {(numericLabel, index) => {
+                const sourceLabel = () => headerRow()?.[index()];
+                const usesFallback = () =>
+                  sourceLabel() === "" || sourceLabel() === undefined;
+                const label = () =>
+                  usesFallback() ? numericLabel : sourceLabel();
+                return (
+                  <th
+                    aria-label={
+                      usesFallback() ? `Column ${numericLabel}` : undefined
+                    }
+                    class="csv-preview-table__col-head"
+                    scope="col"
+                  >
+                    {label()}
+                  </th>
+                );
+              }}
             </For>
           </tr>
         </thead>
         <tbody>
-          <For each={props.preview.rows}>
+          <For each={bodyRows()}>
             {(row, rowIndex) => (
               <tr>
                 <th class="csv-preview-table__row-head" scope="row">
-                  {String(rowIndex() + 1)}
+                  {String(rowIndex() + sourceRowOffset())}
                 </th>
                 <For each={padCsvRow(row, props.preview.column_count)}>
                   {(cell) => (
@@ -153,6 +238,9 @@ function CsvTable(props: { readonly preview: CsvPreviewModel }) {
           </For>
         </tbody>
       </table>
+      {bodyRows().length === 0 ? (
+        <p class="csv-preview-empty-state">No data rows</p>
+      ) : null}
     </div>
   );
 }

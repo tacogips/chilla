@@ -33,10 +33,18 @@ pub enum BrowserRoot {
     },
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct FileOpenOptions {
+    #[serde(default)]
+    pub csv_first_row_as_header: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct StartupContext {
     pub initial_mode: WorkspaceMode,
     pub browser_root: BrowserRoot,
+    pub file_open_options: FileOpenOptions,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -186,6 +194,7 @@ pub enum FilePreview {
         truncated: bool,
         formatted_available: bool,
         parse_error: Option<String>,
+        first_row_as_header: bool,
         size_bytes: u64,
         last_modified: String,
     },

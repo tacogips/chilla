@@ -25,7 +25,7 @@ use crate::{
     },
     viewer::types::{
         BrowserRoot, CsvRowCountStatus, DirectoryListSort, DirectoryPage, ExplicitFileSetPage,
-        FilePreview, StartupContext, WorkspaceMode,
+        FileOpenOptions, FilePreview, StartupContext, WorkspaceMode,
     },
 };
 
@@ -38,6 +38,14 @@ impl ViewerService {
     }
 
     pub fn startup_context(&self, target: &StartupTarget) -> AppResult<StartupContext> {
+        self.startup_context_with_options(target, FileOpenOptions::default())
+    }
+
+    pub fn startup_context_with_options(
+        &self,
+        target: &StartupTarget,
+        file_open_options: FileOpenOptions,
+    ) -> AppResult<StartupContext> {
         match target {
             StartupTarget::CurrentDirectory(path) | StartupTarget::Directory(path) => {
                 let directory_path = canonicalize_directory_path(path)?;
@@ -47,6 +55,7 @@ impl ViewerService {
                         current_directory_path: display_path(&directory_path),
                         selected_file_path: None,
                     },
+                    file_open_options,
                 })
             }
             StartupTarget::File(path) => {
@@ -59,6 +68,7 @@ impl ViewerService {
                         current_directory_path: display_path(&current_directory_path),
                         selected_file_path: Some(display_path(&file_path)),
                     },
+                    file_open_options,
                 })
             }
             StartupTarget::FileSet(paths) => {
@@ -77,6 +87,7 @@ impl ViewerService {
                         selected_file_path,
                         source_order_paths,
                     },
+                    file_open_options,
                 })
             }
             StartupTarget::GitHubPr(target) => Ok(StartupContext {
@@ -84,12 +95,14 @@ impl ViewerService {
                 browser_root: BrowserRoot::GitHubPr {
                     target: target.clone(),
                 },
+                file_open_options,
             }),
             StartupTarget::GitDiff(target) => Ok(StartupContext {
                 initial_mode: WorkspaceMode::PrDiff,
                 browser_root: BrowserRoot::GitDiff {
                     target: target.clone(),
                 },
+                file_open_options,
             }),
         }
     }
@@ -121,6 +134,15 @@ impl ViewerService {
         &self,
         path: &Path,
         ui_theme: SyntaxUiTheme,
+    ) -> AppResult<FilePreview> {
+        self.open_file_preview_with_options(path, ui_theme, FileOpenOptions::default())
+    }
+
+    pub fn open_file_preview_with_options(
+        &self,
+        path: &Path,
+        ui_theme: SyntaxUiTheme,
+        options: FileOpenOptions,
     ) -> AppResult<FilePreview> {
         let file_path = canonicalize_file_path(path)?;
 
@@ -154,7 +176,12 @@ impl ViewerService {
         }
 
         if should_preview_as_csv(&file_path, &mime_type) {
-            return self.open_csv_preview(&file_path, mime_type, ui_theme);
+            return self.open_csv_preview(
+                &file_path,
+                mime_type,
+                ui_theme,
+                options.csv_first_row_as_header,
+            );
         }
 
         if is_textual_mime(&mime_type) {
@@ -293,6 +320,7 @@ impl ViewerService {
         path: &Path,
         mime_type: String,
         ui_theme: SyntaxUiTheme,
+        first_row_as_header: bool,
     ) -> AppResult<FilePreview> {
         let file_bytes =
             observed_read(path).map_err(|source| AppError::io("read", path, source))?;
@@ -344,6 +372,7 @@ impl ViewerService {
             truncated: parsed.truncated,
             formatted_available,
             parse_error,
+            first_row_as_header,
             size_bytes: file_bytes.len() as u64,
             last_modified: last_modified_string(path)?,
         })

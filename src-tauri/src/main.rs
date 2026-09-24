@@ -11,6 +11,10 @@ fn main() {
     let process_started_at = Instant::now();
     match normalize_cli(std::env::args_os()) {
         CliNormalizationOutcome::Information(outcome) => print_information(outcome),
+        CliNormalizationOutcome::Error(error) => {
+            eprintln!("{error}");
+            std::process::exit(error.exit_code());
+        }
         CliNormalizationOutcome::Parse(input) => {
             let verbose = input.options.verbose;
             verbose_log::initialize(VerboseInit {
@@ -22,10 +26,10 @@ fn main() {
             }
 
             match parse_normalized_cli(input) {
-                Ok(CliParseOutcome::Run(startup_target)) => {
+                Ok(CliParseOutcome::Run(startup_request)) => {
                     verbose_log::record_phase("cli_parse", process_started_at, "success");
-                    verbose_log::arm_startup_load(&startup_target);
-                    if let Err(error) = chilla_lib::run(startup_target) {
+                    verbose_log::arm_startup_load(&startup_request.target);
+                    if let Err(error) = chilla_lib::run(startup_request) {
                         verbose_log::record_phase_message(
                             "application_run",
                             process_started_at,

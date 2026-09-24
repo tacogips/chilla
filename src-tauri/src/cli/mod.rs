@@ -11,7 +11,7 @@ use crate::{
     git_diff::GitDiffTarget,
     github_pr_diff::GitHubPrTarget,
     verbose_log::{self, VerboseIoOutcome},
-    viewer::service::resolve_startup_target,
+    viewer::{service::resolve_startup_target, types::FileOpenOptions},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,14 +26,21 @@ pub enum StartupTarget {
 
 #[derive(Debug)]
 pub enum CliParseOutcome {
-    Run(StartupTarget),
+    Run(StartupRequest),
     Help(String),
     Version(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartupRequest {
+    pub target: StartupTarget,
+    pub file_open_options: FileOpenOptions,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct CliOptions {
     pub verbose: bool,
+    pub file_open_options: FileOpenOptions,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,6 +52,7 @@ pub struct NormalizedCli {
 pub enum CliNormalizationOutcome {
     Information(CliParseOutcome),
     Parse(NormalizedCli),
+    Error(AppError),
 }
 
 pub fn normalize_cli<I, T>(args: I) -> CliNormalizationOutcome
@@ -60,10 +68,20 @@ where
         .unwrap_or_else(|| "chilla".to_string());
 
     let mut verbose = false;
+    let mut file_open_options = FileOpenOptions::default();
     let mut normalized = Vec::with_capacity(args.len());
     for (index, argument) in args.into_iter().enumerate() {
         if index > 0 && argument == "--verbose" {
             verbose = true;
+        } else if index > 0
+            && argument
+                .to_string_lossy()
+                .starts_with("--csv-first-row-header")
+        {
+            match parse_csv_first_row_header_option(&argument, &binary_name) {
+                Ok(value) => file_open_options.csv_first_row_as_header = value,
+                Err(error) => return CliNormalizationOutcome::Error(error),
+            }
         } else {
             normalized.push(argument);
         }
@@ -82,7 +100,10 @@ where
     }
 
     CliNormalizationOutcome::Parse(NormalizedCli {
-        options: CliOptions { verbose },
+        options: CliOptions {
+            verbose,
+            file_open_options,
+        },
         arguments: normalized,
     })
 }
@@ -95,10 +116,12 @@ where
     match normalize_cli(args) {
         CliNormalizationOutcome::Information(outcome) => Ok(outcome),
         CliNormalizationOutcome::Parse(input) => parse_normalized_cli(input),
+        CliNormalizationOutcome::Error(error) => Err(error),
     }
 }
 
 pub fn parse_normalized_cli(input: NormalizedCli) -> AppResult<CliParseOutcome> {
+    let file_open_options = input.options.file_open_options;
     let mut args = input.arguments;
     let binary_name = args
         .first()
@@ -108,9 +131,10 @@ pub fn parse_normalized_cli(input: NormalizedCli) -> AppResult<CliParseOutcome> 
     if args.is_empty() {
         let current_directory = std::env::current_dir()
             .map_err(|source| AppError::io("resolve current directory", Path::new("."), source))?;
-        return Ok(CliParseOutcome::Run(StartupTarget::CurrentDirectory(
-            current_directory,
-        )));
+        return Ok(run_outcome(
+            StartupTarget::CurrentDirectory(current_directory),
+            file_open_options,
+        ));
     }
 
     args.remove(0); // discard binary path
@@ -121,15 +145,16 @@ pub fn parse_normalized_cli(input: NormalizedCli) -> AppResult<CliParseOutcome> 
             .is_some_and(|value| value.starts_with("github:"))
     }) {
         return parse_github_shorthand(&args)
-            .map(|target| CliParseOutcome::Run(StartupTarget::GitHubPr(target)));
+            .map(|target| run_outcome(StartupTarget::GitHubPr(target), file_open_options));
     }
 
     if args.is_empty() {
         let current_directory = std::env::current_dir()
             .map_err(|source| AppError::io("resolve current directory", Path::new("."), source))?;
-        return Ok(CliParseOutcome::Run(StartupTarget::CurrentDirectory(
-            current_directory,
-        )));
+        return Ok(run_outcome(
+            StartupTarget::CurrentDirectory(current_directory),
+            file_open_options,
+        ));
     }
 
     if args.len() == 1 {
@@ -153,12 +178,14 @@ pub fn parse_normalized_cli(input: NormalizedCli) -> AppResult<CliParseOutcome> 
                 format!("unsupported flag `{flag}`\n\n{}", help_text(&binary_name)),
                 2,
             )),
-            target if target.starts_with("https://") => Ok(CliParseOutcome::Run(
+            target if target.starts_with("https://") => Ok(run_outcome(
                 StartupTarget::GitHubPr(GitHubPrTarget::parse(target)?),
+                file_open_options,
             )),
-            file_name => Ok(CliParseOutcome::Run(validate_cli_path(Path::new(
-                file_name,
-            ))?)),
+            file_name => Ok(run_outcome(
+                validate_cli_path(Path::new(file_name))?,
+                file_open_options,
+            )),
         };
     }
 
@@ -194,11 +221,17 @@ pub fn parse_normalized_cli(input: NormalizedCli) -> AppResult<CliParseOutcome> 
 
             let mut target = GitHubPrTarget::parse(&target)?;
             target.use_cache = false;
-            return Ok(CliParseOutcome::Run(StartupTarget::GitHubPr(target)));
+            return Ok(run_outcome(
+                StartupTarget::GitHubPr(target),
+                file_open_options,
+            ));
         }
 
         if let Some(target) = parse_git_diff_startup_pair(&values)? {
-            return Ok(CliParseOutcome::Run(StartupTarget::GitDiff(target)));
+            return Ok(run_outcome(
+                StartupTarget::GitDiff(target),
+                file_open_options,
+            ));
         }
     }
 
@@ -229,7 +262,31 @@ pub fn parse_normalized_cli(input: NormalizedCli) -> AppResult<CliParseOutcome> 
         paths.push(PathBuf::from(raw));
     }
 
-    Ok(CliParseOutcome::Run(resolve_explicit_file_startup(&paths)?))
+    Ok(run_outcome(
+        resolve_explicit_file_startup(&paths)?,
+        file_open_options,
+    ))
+}
+
+fn run_outcome(target: StartupTarget, file_open_options: FileOpenOptions) -> CliParseOutcome {
+    CliParseOutcome::Run(StartupRequest {
+        target,
+        file_open_options,
+    })
+}
+
+fn parse_csv_first_row_header_option(argument: &OsString, binary_name: &str) -> AppResult<bool> {
+    match argument.to_str() {
+        Some("--csv-first-row-header=true") => Ok(true),
+        Some("--csv-first-row-header=false") => Ok(false),
+        _ => Err(AppError::cli_usage(
+            format!(
+                "--csv-first-row-header requires an exact `=true` or `=false` value.\n\n{}",
+                help_text(binary_name)
+            ),
+            2,
+        )),
+    }
 }
 
 fn validate_cli_path(path: &Path) -> AppResult<StartupTarget> {
@@ -389,7 +446,7 @@ fn is_no_github_diff_cache_flag(value: &str) -> bool {
 
 fn help_text(binary_name: &str) -> String {
     format!(
-        "Usage:\n  {binary_name} [--verbose] [path ...]\n  {binary_name} [--verbose] <github-diff-url>\n  {binary_name} [--verbose] --no-github-diff-cache <github-diff-url>\n  {binary_name} [--verbose] --no-pr-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--no-github-diff-cache] github:<owner>/<repo> <pr-id|sha|commit:sha|base...head>\n  {binary_name} [--verbose] <git-dir> <commit-or-range>\n  {binary_name} --help\n  {binary_name} --version\n\nIf no paths are provided, chilla opens the current working directory in file view mode.\nIf a GitHub pull request, commit, or compare URL is provided, chilla opens that GitHub diff in read-only mode.\nGitHub .diff and .patch URL forms are also supported.\nThe github: shorthand accepts a positive decimal PR number, a 4-40 character hexadecimal SHA, commit:<sha>, or <base>...<head> (slash refs supported). Use commit:<sha> for all-numeric SHAs.\nIf a Git directory plus commit or range is provided, chilla opens that local Git diff in read-only mode.\nGitHub diffs are cached under the system temp directory and refreshed when GitHub reports a newer updated marker.\n--no-pr-diff-cache remains supported as a compatibility alias for --no-github-diff-cache.\nIf two or more file paths are provided, chilla opens file view mode with the left pane limited to those files.\n\nOptions:\n  --verbose  Write startup and file-I/O diagnostics to {} and mirror them to an attached terminal.\n  --help     Show this help text.\n  --version  Show the application version.",
+        "Usage:\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] [path ...]\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] --no-github-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] --no-pr-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] [--no-github-diff-cache] github:<owner>/<repo> <pr-id|sha|commit:sha|base...head>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] <git-dir> <commit-or-range>\n  {binary_name} --help\n  {binary_name} --version\n\nIf no paths are provided, chilla opens the current working directory in file view mode.\nIf a GitHub pull request, commit, or compare URL is provided, chilla opens that GitHub diff in read-only mode.\nGitHub .diff and .patch URL forms are also supported.\nThe github: shorthand accepts a positive decimal PR number, a 4-40 character hexadecimal SHA, commit:<sha>, or <base>...<head> (slash refs supported). Use commit:<sha> for all-numeric SHAs.\nIf a Git directory plus commit or range is provided, chilla opens that local Git diff in read-only mode.\nGitHub diffs are cached under the system temp directory and refreshed when GitHub reports a newer updated marker.\n--no-pr-diff-cache remains supported as a compatibility alias for --no-github-diff-cache.\nIf two or more file paths are provided, chilla opens file view mode with the left pane limited to those files.\n\nCSV header option:\n  --csv-first-row-header=true|false  Set the launch-wide default for every CSV preview (default: false). For example: {binary_name} --csv-first-row-header=true report.csv\n\nOptions:\n  --verbose  Write startup and file-I/O diagnostics to {} and mirror them to an attached terminal.\n  --help     Show this help text.\n  --version  Show the application version.",
         verbose_log::VERBOSE_LOG_PATH_PATTERN,
     )
 }

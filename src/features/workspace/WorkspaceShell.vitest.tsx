@@ -22,6 +22,7 @@ const documentMocks = vi.hoisted(() => ({
   listenDocumentRefreshed: vi.fn(),
   stopDocumentWatch: vi.fn(),
 }));
+const dialogMocks = vi.hoisted(() => ({ open: vi.fn() }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   async invoke() {
@@ -68,7 +69,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
-  open: vi.fn().mockResolvedValue(null),
+  open: dialogMocks.open,
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -133,6 +134,7 @@ function directoryStartupContext(
 ): StartupContext {
   return {
     initial_mode: "file_view",
+    file_open_options: { csv_first_row_as_header: false },
     browser_root: {
       kind: "directory",
       current_directory_path: "/workspace",
@@ -144,6 +146,7 @@ function directoryStartupContext(
 function explicitFileSetStartupContext(): StartupContext {
   return {
     initial_mode: "file_view",
+    file_open_options: { csv_first_row_as_header: false },
     browser_root: {
       kind: "explicit_file_set",
       file_count: 2,
@@ -250,6 +253,7 @@ function csvPreview(
     truncated: false,
     formatted_available: true,
     parse_error: null,
+    first_row_as_header: false,
     size_bytes: 24,
     last_modified: "2026-06-04T00:00:00Z",
     ...overrides,
@@ -306,6 +310,8 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     documentMocks.reloadDocument.mockReset();
     documentMocks.listenDocumentRefreshed.mockReset();
     documentMocks.stopDocumentWatch.mockReset();
+    dialogMocks.open.mockReset();
+    dialogMocks.open.mockResolvedValue(null);
     documentMocks.listenDocumentRefreshed.mockResolvedValue(() => {});
     documentMocks.stopDocumentWatch.mockResolvedValue(undefined);
   });
@@ -475,6 +481,15 @@ describe("WorkspaceShell numeric view shortcuts", () => {
         expect(button.getAttribute("aria-label")).toBe(
           visible ? "Collapse left pane" : "Expand left pane",
         );
+        const expandTab = document.querySelector<HTMLButtonElement>(
+          ".workspace__expand-tab",
+        );
+        expect(expandTab !== null).toBe(!visible);
+        if (expandTab !== null) {
+          expect(expandTab.getAttribute("aria-label")).toBe("Expand left pane");
+          expect(expandTab.getAttribute("aria-expanded")).toBe("false");
+          expect(expandTab.closest(".workspace__body")).not.toBeNull();
+        }
         if (kind !== "directory") {
           expect(document.querySelector(".pr-diff-pane")).toBe(diffPane);
           expect(
@@ -495,7 +510,9 @@ describe("WorkspaceShell numeric view shortcuts", () => {
           ),
         ),
       );
-      button.click();
+      document
+        .querySelector<HTMLButtonElement>(".workspace__expand-tab")
+        ?.click();
       expectVisibility(true);
       await waitFor(() =>
         expect(
@@ -767,6 +784,7 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       await waitFor(() =>
         expect(documentMocks.openFilePreview).toHaveBeenCalledExactlyOnceWith(
           target.path,
+          { csv_first_row_as_header: false },
         ),
       );
       await waitFor(() =>
@@ -837,6 +855,7 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       await waitFor(() =>
         expect(documentMocks.openFilePreview).toHaveBeenCalledExactlyOnceWith(
           "/workspace/sub/second.txt",
+          { csv_first_row_as_header: false },
         ),
       );
       await waitFor(() =>
@@ -855,6 +874,7 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       await waitFor(() =>
         expect(documentMocks.openFilePreview).toHaveBeenLastCalledWith(
           "/workspace/sub/first.txt",
+          { csv_first_row_as_header: false },
         ),
       );
       expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2);
@@ -1367,6 +1387,344 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     });
   });
 
+  it("uses the launch default and retains a later checkbox choice during reload", async () => {
+    let resolveReload: (preview: FilePreview) => void = () => {
+      throw new Error("reload resolver was not initialized");
+    };
+    documentMocks.getStartupContext.mockResolvedValue({
+      ...directoryStartupContext("/workspace/data.csv"),
+      file_open_options: { csv_first_row_as_header: true },
+    });
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/data.csv"),
+    );
+    documentMocks.openFilePreview
+      .mockResolvedValueOnce(csvPreview({ first_row_as_header: true }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<FilePreview>((resolve) => {
+            resolveReload = resolve;
+          }),
+      );
+
+    dispose = renderWorkspace();
+    const checkbox = await waitForElement<HTMLInputElement>(
+      '[aria-label="Use first row as header"]',
+    );
+    expect(checkbox.checked).toBe(true);
+    expect(documentMocks.openFilePreview).toHaveBeenLastCalledWith(
+      "/workspace/data.csv",
+      { csv_first_row_as_header: true },
+    );
+
+    modeButton("Refresh workspace").click();
+    await waitFor(() =>
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2),
+    );
+    checkbox.click();
+    expect(checkbox.checked).toBe(false);
+    expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2);
+
+    resolveReload(
+      csvPreview({
+        rows: [
+          ["response-name", "response-count"],
+          ["reload-response", "2"],
+        ],
+        displayed_row_count: 2,
+        total_row_count: 2,
+        first_row_as_header: true,
+      }),
+    );
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("reload-response"),
+    );
+    const currentCheckbox = await waitForElement<HTMLInputElement>(
+      '[aria-label="Use first row as header"]',
+    );
+    expect(currentCheckbox.isConnected).toBe(true);
+    expect(currentCheckbox.checked).toBe(false);
+    expect(
+      Array.from(
+        document.querySelectorAll(".csv-preview-table__col-head"),
+        (header) => header.textContent,
+      ),
+    ).toEqual(["1", "2"]);
+    expect(
+      Array.from(
+        document.querySelectorAll(".csv-preview-table__row-head"),
+        (gutter) => gutter.textContent,
+      ),
+    ).toEqual(["1", "2"]);
+  });
+
+  it("uses an accepted explicit false response over a true launch default", async () => {
+    documentMocks.getStartupContext.mockResolvedValue({
+      ...directoryStartupContext("/workspace/data.csv"),
+      file_open_options: { csv_first_row_as_header: true },
+    });
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/data.csv"),
+    );
+    documentMocks.openFilePreview.mockResolvedValue(
+      csvPreview({ first_row_as_header: false }),
+    );
+
+    dispose = renderWorkspace();
+    const checkbox = await waitForElement<HTMLInputElement>(
+      '[aria-label="Use first row as header"]',
+    );
+    expect(documentMocks.openFilePreview).toHaveBeenCalledWith(
+      "/workspace/data.csv",
+      { csv_first_row_as_header: true },
+    );
+    expect(checkbox.checked).toBe(false);
+  });
+
+  it("defaults empty launch options to false", async () => {
+    documentMocks.getStartupContext.mockResolvedValue({
+      ...directoryStartupContext("/workspace/data.csv"),
+      file_open_options: {},
+    });
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/data.csv"),
+    );
+    documentMocks.openFilePreview.mockResolvedValue(csvPreview());
+
+    dispose = renderWorkspace();
+    const checkbox = await waitForElement<HTMLInputElement>(
+      '[aria-label="Use first row as header"]',
+    );
+    expect(documentMocks.openFilePreview).toHaveBeenCalledWith(
+      "/workspace/data.csv",
+      { csv_first_row_as_header: false },
+    );
+    expect(checkbox.checked).toBe(false);
+  });
+
+  it("preserves CSV header state through view changes and theme refresh", async () => {
+    let resolveThemeRefresh: (preview: FilePreview) => void = () => {
+      throw new Error("theme refresh resolver was not initialized");
+    };
+    documentMocks.getStartupContext.mockResolvedValue({
+      ...directoryStartupContext("/workspace/data.csv"),
+      file_open_options: { csv_first_row_as_header: true },
+    });
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/data.csv"),
+    );
+    documentMocks.openFilePreview
+      .mockResolvedValueOnce(csvPreview({ first_row_as_header: true }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<FilePreview>((resolve) => {
+            resolveThemeRefresh = resolve;
+          }),
+      );
+
+    dispose = renderWorkspace();
+    const checkbox = await waitForElement<HTMLInputElement>(
+      '[aria-label="Use first row as header"]',
+    );
+    checkbox.click();
+    expect(checkbox.checked).toBe(false);
+    modeButton("Raw CSV source").click();
+    modeButton("Formatted CSV table").click();
+    expect(checkbox.checked).toBe(false);
+
+    modeButton("Switch to light theme").click();
+    await waitFor(() =>
+      expect(documentMocks.openFilePreview).toHaveBeenLastCalledWith(
+        "/workspace/data.csv",
+        { csv_first_row_as_header: false },
+      ),
+    );
+    resolveThemeRefresh(
+      csvPreview({
+        rows: [
+          ["theme-name", "theme-count"],
+          ["theme-response", "3"],
+        ],
+        displayed_row_count: 2,
+        total_row_count: 2,
+        first_row_as_header: true,
+      }),
+    );
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("theme-response"),
+    );
+    const currentCheckbox = await waitForElement<HTMLInputElement>(
+      '[aria-label="Use first row as header"]',
+    );
+    expect(currentCheckbox.isConnected).toBe(true);
+    expect(currentCheckbox.checked).toBe(false);
+    expect(
+      Array.from(
+        document.querySelectorAll(".csv-preview-table__col-head"),
+        (header) => header.textContent,
+      ),
+    ).toEqual(["1", "2"]);
+    expect(
+      Array.from(
+        document.querySelectorAll(".csv-preview-table__row-head"),
+        (gutter) => gutter.textContent,
+      ),
+    ).toEqual(["1", "2"]);
+  });
+
+  it("retains launch defaults for picker navigation and resets returning CSV previews", async () => {
+    const originalPath = "/workspace/original.csv";
+    const pickedPath = "/picked/new.csv";
+    documentMocks.getStartupContext.mockResolvedValue({
+      ...directoryStartupContext(originalPath),
+      file_open_options: { csv_first_row_as_header: true },
+    });
+    documentMocks.listDirectory
+      .mockResolvedValueOnce(directoryPage(originalPath))
+      .mockResolvedValueOnce(
+        directoryPageWithPaths([pickedPath, originalPath]),
+      );
+    documentMocks.openFilePreview
+      .mockResolvedValueOnce(
+        csvPreview({ path: originalPath, first_row_as_header: true }),
+      )
+      .mockResolvedValueOnce(
+        csvPreview({
+          path: pickedPath,
+          file_name: "new.csv",
+          first_row_as_header: true,
+        }),
+      )
+      .mockResolvedValueOnce(
+        csvPreview({ path: originalPath, first_row_as_header: true }),
+      );
+    dialogMocks.open.mockResolvedValue(pickedPath);
+
+    dispose = renderWorkspace();
+    const checkbox = await waitForElement<HTMLInputElement>(
+      '[aria-label="Use first row as header"]',
+    );
+    checkbox.click();
+    expect(checkbox.checked).toBe(false);
+    modeButton("Open one or more files").click();
+    await waitFor(() =>
+      expect(documentMocks.openFilePreview).toHaveBeenLastCalledWith(
+        pickedPath,
+        { csv_first_row_as_header: true },
+      ),
+    );
+    const pickedCheckbox = await waitForElement<HTMLInputElement>(
+      '[aria-label="Use first row as header"]',
+    );
+    await waitFor(() => expect(pickedCheckbox.checked).toBe(true));
+    pickedCheckbox.click();
+    expect(pickedCheckbox.checked).toBe(false);
+
+    modeButton("Expand left pane").click();
+    (
+      await waitForElement<HTMLButtonElement>(`[data-path="${originalPath}"]`)
+    ).click();
+    await waitFor(() =>
+      expect(documentMocks.openFilePreview).toHaveBeenLastCalledWith(
+        originalPath,
+        { csv_first_row_as_header: true },
+      ),
+    );
+    const returnedCheckbox = await waitForElement<HTMLInputElement>(
+      '[aria-label="Use first row as header"]',
+    );
+    await waitFor(() => expect(returnedCheckbox.checked).toBe(true));
+  });
+
+  it("retains the active CSV header choice after a failed reload", async () => {
+    documentMocks.getStartupContext.mockResolvedValue({
+      ...directoryStartupContext("/workspace/data.csv"),
+      file_open_options: { csv_first_row_as_header: true },
+    });
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/data.csv"),
+    );
+    documentMocks.openFilePreview
+      .mockResolvedValueOnce(csvPreview({ first_row_as_header: true }))
+      .mockRejectedValueOnce(new Error("reload failed"));
+
+    dispose = renderWorkspace();
+    const checkbox = await waitForElement<HTMLInputElement>(
+      '[aria-label="Use first row as header"]',
+    );
+    checkbox.click();
+    expect(checkbox.checked).toBe(false);
+
+    modeButton("Refresh workspace").click();
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("reload failed");
+      expect(checkbox.checked).toBe(false);
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("keeps the latest selected CSV preview when an older request resolves last", async () => {
+    let resolveFirst: (preview: FilePreview) => void = () => {
+      throw new Error("first resolver was not initialized");
+    };
+    let resolveSecond: (preview: FilePreview) => void = () => {
+      throw new Error("second resolver was not initialized");
+    };
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPageWithPaths(["/workspace/first.csv", "/workspace/second.csv"]),
+    );
+    documentMocks.openFilePreview.mockImplementation(
+      (path: string) =>
+        new Promise<FilePreview>((resolve) => {
+          if (path === "/workspace/first.csv") resolveFirst = resolve;
+          else resolveSecond = resolve;
+        }),
+    );
+
+    dispose = renderWorkspace();
+    const first = await waitForElement<HTMLButtonElement>(
+      '[data-path="/workspace/first.csv"]',
+    );
+    first.click();
+    await waitFor(() =>
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(1),
+    );
+    (
+      await waitForElement<HTMLButtonElement>(
+        '[data-path="/workspace/second.csv"]',
+      )
+    ).click();
+    await waitFor(() =>
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2),
+    );
+
+    resolveSecond(
+      csvPreview({
+        path: "/workspace/second.csv",
+        file_name: "second.csv",
+        first_row_as_header: true,
+      }),
+    );
+    const checkbox = await waitForElement<HTMLInputElement>(
+      '[aria-label="Use first row as header"]',
+    );
+    expect(checkbox.checked).toBe(true);
+    resolveFirst(
+      csvPreview({
+        path: "/workspace/first.csv",
+        file_name: "first.csv",
+        first_row_as_header: false,
+      }),
+    );
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("second.csv");
+      expect(checkbox.checked).toBe(true);
+    });
+  });
+
   it("leaves unavailable CSV formatted mode unchanged when 2 is pressed", async () => {
     documentMocks.getStartupContext.mockResolvedValue(
       directoryStartupContext("/workspace/data.csv"),
@@ -1435,7 +1793,8 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       expect(document.body.textContent).toContain(
         "Select Preview view (Markdown) or Formatted view (CSV)",
       );
-      expect(document.body.textContent).toContain(", then s/S");
+      expect(document.body.textContent).toContain(", s/S");
+      expect(document.body.textContent).not.toContain(", then s");
       expect(document.body.textContent).toContain(
         "Search file contents recursively",
       );

@@ -12,6 +12,8 @@ This directory contains implementation plans that translate design documents int
 - [Startup Window Bounds](completed/startup-window-bounds.md): completed startup sizing and positioning fix.
 - [Window Tiling](completed/window-tiling.md): completed AeroSpace classification and compact window sizing fix.
 - [Left Pane Toggle](completed/left-pane-toggle.md): completed toolbar icon and shared file/diff sidebar toggle.
+- [Collapsed Pane and SVG Refresh](completed/collapsed-pane-svg-refresh.md): compact expand tab and revision-aware direct image refresh.
+- [Local Resource Refresh Audit](completed/local-resource-refresh-audit.md): cache invalidation for local preview resources on explicit refresh.
 - [Left Pane Folding and Focus](completed/left-pane-folding-focus.md): preview focus, hidden-browser shortcut isolation, and collapsed file startup.
 
 - [Shortcut Collisions and Search Return Flow](completed/shortcut-collisions.md): distinct theme/search defaults, retained search queries, first-result keyboard focus, and right-arrow reveal action.

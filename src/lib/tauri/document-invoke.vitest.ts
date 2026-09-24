@@ -17,6 +17,7 @@ import {
   loadGitDiffFileText,
   loadPrDiff,
   loadPrDiffFileText,
+  openFilePreview,
   saveDocument,
 } from "./document";
 import type { DirectoryPage, DirectoryListSort } from "./document";
@@ -70,6 +71,55 @@ describe("listDirectory", () => {
     );
 
     expect(invokeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("openFilePreview", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("preserves the path-only invoke shape and normalizes legacy CSV responses", async () => {
+    invokeMock.mockResolvedValue({ kind: "csv", path: "/workspace/data.csv" });
+
+    await expect(openFilePreview("/workspace/data.csv")).resolves.toMatchObject(
+      {
+        kind: "csv",
+        first_row_as_header: false,
+      },
+    );
+    expect(invokeMock).toHaveBeenCalledWith("open_file_preview", {
+      path: "/workspace/data.csv",
+    });
+  });
+
+  it("sends the snake_case CSV option and accepts a boolean response field", async () => {
+    invokeMock.mockResolvedValue({
+      kind: "csv",
+      path: "/workspace/data.csv",
+      first_row_as_header: true,
+    });
+
+    await expect(
+      openFilePreview("/workspace/data.csv", {
+        csv_first_row_as_header: true,
+      }),
+    ).resolves.toMatchObject({ first_row_as_header: true });
+    expect(invokeMock).toHaveBeenCalledWith("open_file_preview", {
+      path: "/workspace/data.csv",
+      options: { csv_first_row_as_header: true },
+    });
+  });
+
+  it("rejects a present non-boolean CSV response field", async () => {
+    invokeMock.mockResolvedValue({
+      kind: "csv",
+      first_row_as_header: "yes",
+    });
+
+    await expect(openFilePreview("/workspace/data.csv")).rejects.toThrow(
+      "CSV preview first_row_as_header must be a boolean",
+    );
   });
 });
 

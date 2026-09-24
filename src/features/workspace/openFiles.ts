@@ -1,5 +1,6 @@
 import {
   inferDirectoryPath,
+  type FileOpenOptions,
   type StartupContext,
 } from "../../lib/tauri/document";
 
@@ -85,10 +86,12 @@ export function classifyDialogSelection(
 
 export function startupContextForPickedTarget(
   target: PickedOpenTarget,
+  fileOpenOptions: FileOpenOptions,
 ): StartupContext {
   if (target.kind === "single_file") {
     return {
       initial_mode: "file_view",
+      file_open_options: fileOpenOptions,
       browser_root: {
         kind: "directory",
         current_directory_path: target.directoryPath,
@@ -99,6 +102,7 @@ export function startupContextForPickedTarget(
 
   return {
     initial_mode: "file_view",
+    file_open_options: fileOpenOptions,
     browser_root: {
       kind: "explicit_file_set",
       file_count: target.filePaths.length,

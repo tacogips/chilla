@@ -90,8 +90,8 @@ const headers = await readFile(new URL("_headers", dist), "utf8");
 const assets = await readdir(new URL("assets/", dist));
 
 const productRequirements = [
-  [english, "English", ["Fast file browsing.", "Download for Mac", "Yazi-like", "Fast and responsive", "Built-in Git diffs", "brew install --cask chilla", "/screenshots/browse-fresh.jpg", "/screenshots/diff-fresh.jpg", 'href="/privacy/"']],
-  [japanese, "Japanese", ["ターミナルのように、", "Mac版をダウンロード", "Yaziライク", "キーボード中心", "Git diffを標準搭載", "brew install --cask chilla", "/screenshots/browse-fresh.jpg", "/screenshots/diff-fresh.jpg", 'href="/ja/privacy/"']],
+  [english, "English", ["Fast file browsing.", "Download for Mac", "Yazi-like", "Fast and responsive", "Built-in Git diffs", "Parent / collapse", "Enter / expand", "Switch List / Tree", "<kbd>Tab</kbd> cycle", "<kbd>4</kbd> SVG image", "brew install --cask chilla", "/screenshots/browse-fresh.jpg", "/screenshots/diff-fresh.jpg", 'href="/privacy/"']],
+  [japanese, "Japanese", ["ターミナルのように、", "Mac版をダウンロード", "Yaziライク", "キーボード中心", "Git diffを標準搭載", "親へ移動／折りたたむ", "開く／展開する", "リスト／ツリーを切り替え", "<kbd>Tab</kbd> 表示を循環", "<kbd>4</kbd> SVG画像", "brew install --cask chilla", "/screenshots/browse-fresh.jpg", "/screenshots/diff-fresh.jpg", 'href="/ja/privacy/"']],
 ];
 for (const [source, label, required] of productRequirements) {
   for (const content of required) {

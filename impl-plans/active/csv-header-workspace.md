@@ -1,6 +1,6 @@
 # CSV header workspace lifetime and reload races Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Created**: 2026-09-10
 **Last Updated**: 2026-09-10
 **Design Reference**: `design-docs/specs/design-csv-viewer.md#first-row-header-options` and `design-docs/specs/command.md#csv-file-open-options`
@@ -58,45 +58,45 @@ Wave 1: contract. Wave 2: startup and pane may run in parallel after contract ac
 
 | Task | Depends on | Deliverable | Agent role | Status | Parallelizable |
 |---|---|---|---|---|---|
-| W1 | csv-header-startup, csv-header-pane | Initial defaults and controlled state wiring | ts-coding | Not Started | No |
-| W2 | W1 | Reload generation and selection precedence | ts-coding | Not Started | No |
-| W3 | W1, W2 | Workspace integration and race tests | check-and-test-after-modify | Not Started | No |
+| W1 | csv-header-startup, csv-header-pane | Initial defaults and controlled state wiring | ts-coding | Completed | No |
+| W2 | W1 | Reload generation and selection precedence | ts-coding | Completed | No |
+| W3 | W1, W2 | Workspace integration and race tests | check-and-test-after-modify | Completed | No |
 
 ### W1: Initial defaults and controlled state wiring
 
-**Status**: Not Started
+**Status**: Completed
 **Depends on**: csv-header-startup, csv-header-pane
 **Deliverables**: `src/features/workspace/WorkspaceShell.tsx`, `src/features/workspace/WorkspaceDocumentColumn.tsx`, `src/features/workspace/openFiles.ts`, `src/features/preview/CsvFilePreviewPane.tsx`, `src/features/preview/CsvFilePreviewPane.vitest.tsx`.
 
 Capture launch csv_first_row_as_header separately from replaceable startup/browser-root context. Extend internal preview open flow to accept per-open FileOpenOptions; use explicit boolean including false, otherwise launch default even for empty options, otherwise false. Initialize active CSV state only from an accepted new-preview response. Pass required firstRowAsHeader and onFirstRowAsHeaderChange through WorkspaceDocumentColumn to CsvFilePreviewPane; remove temporary optional-prop compatibility and update pane/column fixtures. Picker contexts preserve launch defaults for new file, file-set and directory navigation. Checkbox changes update only active state and never call IPC or change launch defaults.
 
-- [ ] Intended changes and behavior assertions above are implemented.
-- [ ] Relevant verification commands below pass with complete logs and final statuses.
-- [ ] Own progress log and immutable change evidence are updated.
+- [x] Intended changes and behavior assertions above are implemented.
+- [x] Relevant verification commands below pass with complete logs and final statuses.
+- [x] Own progress log and immutable change evidence are updated.
 
 ### W2: Reload generation and selection precedence
 
-**Status**: Not Started
+**Status**: Completed
 **Depends on**: W1
 **Deliverables**: `src/features/workspace/WorkspaceShell.tsx`.
 
 Use existing preview request identity plus active preview-generation identity to discard stale content and setting responses. Preserve active setting during Raw/Formatted changes, theme refresh and same-preview reload; include captured setting in reload request without overwriting a later toggle on response. Failed reload/retry retains the setting for that preview generation. Selecting another file, returning, or opening a new picker target initializes again from explicit/open launch default. Non-CSV and diff paths ignore CSV state and expose no checkbox. Preserve existing shortcuts and pane focus, including dirty-worktree changes.
 
-- [ ] Intended changes and behavior assertions above are implemented.
-- [ ] Relevant verification commands below pass with complete logs and final statuses.
-- [ ] Own progress log and immutable change evidence are updated.
+- [x] Intended changes and behavior assertions above are implemented.
+- [x] Relevant verification commands below pass with complete logs and final statuses.
+- [x] Own progress log and immutable change evidence are updated.
 
 ### W3: Workspace integration and race tests
 
-**Status**: Not Started
+**Status**: Completed
 **Depends on**: W1, W2
 **Deliverables**: `src/features/workspace/WorkspaceShell.vitest.tsx`, `src/features/workspace/WorkspaceDocumentColumn.vitest.tsx`, `src/features/workspace/WorkspaceHeader.vitest.tsx`, `src/features/workspace/openFiles.test.ts`.
 
 Add deterministic deferred-response tests for toggling during reload, stale old-selection response, failed reload/retry and theme refresh. Assert explicit false overrides true launch default, empty options inherit it, toggling never invokes/reparses/writes, new-file/return reset, file/directory picker defaults survive replaced context, non-CSV behavior and independent Raw/Formatted state. Verify WorkspaceHeader shared shortcuts and WorkspaceDocumentColumn props without changing header shortcut implementation.
 
-- [ ] Intended changes and behavior assertions above are implemented.
-- [ ] Relevant verification commands below pass with complete logs and final statuses.
-- [ ] Own progress log and immutable change evidence are updated.
+- [x] Intended changes and behavior assertions above are implemented.
+- [x] Relevant verification commands below pass with complete logs and final statuses.
+- [x] Own progress log and immutable change evidence are updated.
 
 ## Verification commands
 
@@ -109,10 +109,10 @@ Commands run from the repository root. These are future implementation checks, n
 
 ## Completion criteria
 
-- [ ] Explicit/open/launch/default precedence, picker navigation and active setting lifetime match design.
-- [ ] Reload and selection races preserve latest active intent and reject stale responses.
-- [ ] All required controlled props are wired; non-CSV, Raw/Formatted, shortcut and focus regressions pass.
-- [ ] Pre-existing workspace edits survive; owned tests and typecheck pass with complete evidence.
+- [x] Explicit/open/launch/default precedence, picker navigation and active setting lifetime match design.
+- [x] Reload and selection races preserve latest active intent and reject stale responses.
+- [x] All required controlled props are wired; non-CSV, Raw/Formatted, shortcut and focus regressions pass.
+- [x] Pre-existing workspace edits survive; owned tests and typecheck pass with complete evidence.
 
 ## Execution and shared-directory safety
 
@@ -145,3 +145,39 @@ The accepted divergences are to retain `has_headers(false)` with headers derived
 **Notes**: Runtime source, accepted design, pre-existing index/README changes and git index were not modified by plan authoring.
 
 **Author self-check**: Confirmed accepted-design coverage, precise task deliverables, DAG ordering, verification gates and change-preservation rules. Corrected missing shared ownership for the pane source before handoff. Step 4 checks validate planning only; no implementation or independent review completion is claimed.
+
+### Session: 2026-09-10 — Step 6 workspace implementation
+
+**Tasks Completed**: W1–W3. Captured the launch default independently of replaceable startup context; picker contexts retain it; internal preview calls send resolved options. Added controlled state and response-generation/revision checks so stale selections cannot win and a reload/theme response cannot overwrite a later toggle. Made pane props required and connected them through the document column. Added deterministic reload-toggle and stale-selection tests, plus picker and controlled-prop coverage.
+
+**Verification**: `mise exec -- bun run test:dom src/features/workspace/WorkspaceShell.vitest.tsx src/features/workspace/WorkspaceDocumentColumn.vitest.tsx src/features/workspace/WorkspaceHeader.vitest.tsx src/features/preview/CsvFilePreviewPane.vitest.tsx` exited 0 (53 passed; `verification/010-focused-dom-tests-final.log`). `mise exec -- bun run test` exited 0 (39 passed; `verification/011-bun-test-final.log`). `mise exec -- bun run typecheck` exited 0 (`verification/012-bun-typecheck-final.log`). `git diff --check` exited 0 (`verification/013-git-diff-check-final.log`). Scoped Biome formatting exited 0 (`verification/002-biome-format-final.log`, `verification/004-biome-format-repair.log`, `verification/009-biome-format-failed-reload-test.log`). All logs are under `tmp/csv-header-options-20260910-01/csv-header-workspace/step6-implement/`.
+
+**Repair**: The initial focused test run exposed legacy mocked startup contexts with no `file_open_options` and established call assertions that omitted the now-required resolved option. The workspace defaults absent context options to false, and affected assertions now expect explicit false. The repaired focused run passed.
+
+**Residual risks**: Native visible-app interaction and serial combined-tree review remain assigned to `csv-header-finalize`; no foreground app launch was run in this shared fanout step. The transient generated evidence logs are untracked workflow artifacts and must not be staged.
+
+### Session: 2026-09-10 — Step 6 review-feedback repair
+
+**Review feedback addressed**: `comm-000044` found W3’s declared matrix incomplete. Added deterministic shell coverage for an accepted explicit-false response against a true launch default, empty launch options defaulting false, Raw/Formatted and theme-refresh state preservation, and picker navigation plus returning-preview reset to the launch default. The existing deferred reload, failed reload, and stale-selection tests remain intact.
+
+**Verification**: `mise exec -- bun run test:dom src/features/workspace/WorkspaceShell.vitest.tsx src/features/workspace/WorkspaceDocumentColumn.vitest.tsx src/features/workspace/WorkspaceHeader.vitest.tsx src/features/preview/CsvFilePreviewPane.vitest.tsx` exited 0 (57 passed; `verification/016-focused-dom-review-repair.log`). `mise exec -- bun run test` exited 0 (39 passed; `verification/017-bun-test-review-repair.log`). `mise exec -- bun run typecheck` exited 0 (`verification/018-bun-typecheck-review-repair.log`).
+
+**Serial repair request**: `csv-header-finalize` must track both `src-tauri/src/viewer/service/tests/startup_options_tests.rs` and `src-tauri/src/viewer/service/tests/csv_open_options_tests.rs`, then run `CARGO_TERM_QUIET=true mise exec -- cargo test --manifest-path src-tauri/Cargo.toml viewer` and `git status --short` for both paths. No Rust source or Git index was changed here.
+
+### Session: 2026-09-10 — Step 6 test-integrity repair
+
+**Review feedback addressed**: `comm-000045` (delivered by `comm-000046`) found two mid-severity non-discriminating W3 tests. The theme-refresh test now holds the refresh, sends `true` after an active toggle to `false`, and asserts the controlled checkbox remains `false`. The picker/return test now toggles a true-default original preview to `false`, proves an accepted picked `true` preview resets to `true`, toggles that preview to `false`, and proves returning to an accepted original `true` preview resets to `true`. It queries the current checkbox after preview transitions rather than a detached prior pane node.
+
+**Production repair**: Same-preview refresh and reload calls still pass the active controlled option to IPC, but `WorkspaceShell.tsx` now initializes CSV state from a response only for accepted new previews. A same-preview response cannot overwrite the active checkbox state, including when the response conflicts with the sent option.
+
+**Evidence and verification**: Intent records `intent/010-test-integrity-discriminating-repair-intent.md` through `intent/015-test-integrity-repair-plan-update-intent.md` preserve the fresh hashes and intended hunks. Scoped Biome formatting exited 0 (`verification/020-biome-format-test-integrity-repair.log`, `verification/022-biome-format-picker-current-node-repair.log`). `mise exec -- bun run test:dom src/features/workspace/WorkspaceShell.vitest.tsx src/features/workspace/WorkspaceDocumentColumn.vitest.tsx src/features/workspace/WorkspaceHeader.vitest.tsx src/features/preview/CsvFilePreviewPane.vitest.tsx` exited 0 (57 passed; `verification/023-focused-dom-test-integrity-repair-final.log`). `mise exec -- bun run test` exited 0 (39 passed; `verification/024-bun-test-test-integrity-repair-final.log`). `mise exec -- bun run typecheck` exited 0 (`verification/025-bun-typecheck-test-integrity-repair-final.log`). Final `git diff --check` remains required after this plan update.
+
+**Residual risks**: No high or mid findings remain. Native visible-app interaction and serial combined-tree review remain assigned to `csv-header-finalize`. That finalizer must also track both untracked Rust test modules named above before combined verification.
+
+**Final repair verification**: Simplified the same-preview marker to an explicit boolean after the discriminating tests established the desired semantics; request IDs continue to reject stale responses. Scoped Biome exited 0 (`verification/027-biome-format-same-preview-marker.log`). `mise exec -- bun run test:dom src/features/workspace/WorkspaceShell.vitest.tsx src/features/workspace/WorkspaceDocumentColumn.vitest.tsx src/features/workspace/WorkspaceHeader.vitest.tsx src/features/preview/CsvFilePreviewPane.vitest.tsx` exited 0 (57 passed; `verification/028-focused-dom-same-preview-marker-final.log`). `mise exec -- bun run test` exited 0 (39 passed; `verification/029-bun-test-same-preview-marker-final.log`). `mise exec -- bun run typecheck` exited 0 (`verification/030-bun-typecheck-same-preview-marker-final.log`). `git diff --check` exited 0 (`verification/031-git-diff-check-final.log`).
+
+### Session: 2026-09-10 — Serial integration repair for `integration-workspace-001`
+
+**Review feedback addressed**: The deferred reload and theme-refresh tests had asserted only pre-response or detached DOM state, so they passed when an in-memory integration-review transform changed `if (!preserveCsvState)` to `if (true)`. Each test now resolves a response with distinct CSV content, awaits that content in the mounted DOM, re-queries a connected checkbox, and asserts the preserved false setting, numeric header labels, and row gutters. This makes response application observable and distinguishes preservation from overwrite.
+
+**Verification**: Final scoped formatting exited 0 (`tmp/csv-header-options-20260910-01/serial-repair/20260910T-wave3-workspace-repair/004-format-final.log`). Combined DOM tests exited 0 (92 passed; `005-focused-dom-combined.log`), and the supplied overwrite mutant exited 1 as required (both target regressions failed with expected `false`, received `true`; `006-preservation-mutant-final.log`). `mise exec -- bun run test` exited 0 (39 passed; `007-bun-test.log`), `mise exec -- bun run typecheck` exited 0 (`008-typecheck.log`), `CARGO_TERM_QUIET=true mise exec -- cargo test --manifest-path src-tauri/Cargo.toml viewer` exited 0 (67 passed; `009-cargo-viewer.log`), CLI tests exited 0 (33 passed; `010-cargo-cli.log`), Clippy exited 0 (`011-cargo-clippy.log`), and `git diff --check` exited 0 (`012-diff-check.log`).

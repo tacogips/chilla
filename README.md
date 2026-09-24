@@ -181,7 +181,7 @@ Markdown source can be edited in the raw pane and saved back to disk. If the fil
 - GitHub diff URL viewer for pull requests, commits, and compares with changed-file browsing, GitHub jump action, cached diff loading, text modes for left/right, stack, and full-file review, plus rendered SVG image review
 - Local Git diff viewer for uncommitted repository changes and commit/range startup diffs using the same review modes
 - Automatic refresh of opened Markdown documents when the file changes on disk, including common atomic-replace save patterns
-- Revision-aware workspace refresh that re-reads the current directory or explicit file set and active local preview, including image and PDF cache invalidation
+- Workspace refresh that re-reads the current directory or explicit file set and active local preview, and renews local image, PDF, media, and Markdown-embedded asset URLs even when file timestamps are unchanged
 - Direct CSV view selection with `1` for raw source and `2` for formatted table when available
 - Theme toggle with frontend CSS variables and backend syntax-theme synchronization
 - Custom desktop toolbar, with a native macOS title bar for window-manager compatibility
@@ -230,7 +230,7 @@ Default global shortcuts:
 - `Ctrl+U`: page the active file view up; in Git diff mode, page the selected diff file view rather than the changed-file sidebar
 - `j` or `ArrowDown`: scroll the active file view down one line when the file tree is hidden
 - `k` or `ArrowUp`: scroll the active file view up one line when the file tree is hidden
-- `Shift+L`: collapse or expand the left pane; the sidebar icon in the main toolbar provides the same action, including in Git diff mode
+- `Shift+L`: collapse or expand the left pane; the sidebar icon in the main toolbar provides the same action, including in Git diff mode. When folded, a small tab at the left edge of the content area also expands it with the mouse.
 - Collapsing the left pane moves keyboard focus to the preview and disables hidden browser controls and shortcuts. Expanding restores browser focus and navigation. Starting chilla with file arguments opens the preview with the left pane collapsed; opening a directory keeps it expanded.
 - `g`: toggle local Git diff for the opened repository
 - `y`: copy the selected file or directory absolute path

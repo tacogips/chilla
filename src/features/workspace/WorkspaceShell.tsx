@@ -15,6 +15,7 @@ import type {
   DiffWorkspaceTarget,
   DocumentPresentationMode,
   DocumentSnapshot,
+  FileOpenOptions,
   FilePreview,
   StartupContext,
 } from "../../lib/tauri/document";
@@ -101,6 +102,7 @@ export function WorkspaceShell() {
   const appWindow = resolveCurrentWindow();
   let directoryRequestId = 0;
   let previewRequestId = 0;
+  let launchCsvFirstRowAsHeader = false;
   let selectionPreviewDebounceTimer: number | undefined;
   const [startupContext, setStartupContext] =
     createSignal<StartupContext | null>(null);
@@ -122,6 +124,7 @@ export function WorkspaceShell() {
   const [isLoadingMoreDirectoryEntries, setLoadingMoreDirectoryEntries] =
     createSignal(false);
   const [filePreview, setFilePreview] = createSignal<FilePreview | null>(null);
+  const [localResourceGeneration, setLocalResourceGeneration] = createSignal(0);
   const [videoAutoplayRequestId, setVideoAutoplayRequestId] = createSignal(0);
   const [markdownDoc, setMarkdownDoc] = createSignal<DocumentSnapshot | null>(
     null,
@@ -132,6 +135,7 @@ export function WorkspaceShell() {
   const [markdownPane, setMarkdownPane] = createSignal<MarkdownPane>("preview");
   const [csvPaneMode, setCsvPaneMode] =
     createSignal<DocumentPresentationMode>("formatted");
+  const [csvFirstRowAsHeader, setCsvFirstRowAsHeader] = createSignal(false);
   const [isTocOpen, setTocOpen] = createSignal(false);
   const [isFileTreeOpen, setFileTreeOpen] = createSignal(true);
   const [fileTreeWidthPx, setFileTreeWidthPx] = createSignal<number | null>(
@@ -535,8 +539,14 @@ export function WorkspaceShell() {
   const previewSelectedFile = async (
     path: string,
     clearOnFailure = false,
+    fileOpenOptions?: FileOpenOptions,
+    preserveCsvState = false,
   ): Promise<string | null> => {
     const requestId = ++previewRequestId;
+    const resolvedFileOpenOptions: FileOpenOptions = {
+      csv_first_row_as_header:
+        fileOpenOptions?.csv_first_row_as_header ?? launchCsvFirstRowAsHeader,
+    };
 
     try {
       if (isMarkdownPath(path)) {
@@ -563,7 +573,10 @@ export function WorkspaceShell() {
           // Not running under Tauri or watcher already idle
         }
 
-        const nextPreview = await openFilePreview(path);
+        const nextPreview = await openFilePreview(
+          path,
+          resolvedFileOpenOptions,
+        );
 
         if (requestId !== previewRequestId) {
           return null;
@@ -578,6 +591,9 @@ export function WorkspaceShell() {
             setCsvPaneMode(
               nextPreview.formatted_available ? "formatted" : "raw",
             );
+            if (!preserveCsvState) {
+              setCsvFirstRowAsHeader(nextPreview.first_row_as_header);
+            }
           }
           setSelection({
             anchorId: null,
@@ -645,7 +661,12 @@ export function WorkspaceShell() {
 
     if (path !== null) {
       clearSelectionPreviewDebounce();
-      await previewSelectedFile(path);
+      await previewSelectedFile(
+        path,
+        false,
+        { csv_first_row_as_header: csvFirstRowAsHeader() },
+        true,
+      );
     }
   };
 
@@ -690,6 +711,8 @@ export function WorkspaceShell() {
 
     try {
       const nextStartupContext = await getStartupContext();
+      launchCsvFirstRowAsHeader =
+        nextStartupContext.file_open_options?.csv_first_row_as_header ?? false;
       setStartupContext(nextStartupContext);
 
       const browserRoot = nextStartupContext.browser_root;
@@ -792,13 +815,19 @@ export function WorkspaceShell() {
 
       if (path !== null) {
         clearSelectionPreviewDebounce();
-        const previewError = await previewSelectedFile(path, true);
+        const previewError = await previewSelectedFile(
+          path,
+          false,
+          { csv_first_row_as_header: csvFirstRowAsHeader() },
+          true,
+        );
         if (previewError !== null) {
           errors.push(previewError);
         }
       }
     }
 
+    setLocalResourceGeneration((generation) => generation + 1);
     setErrorMessage(errors.length > 0 ? errors.join(" ") : null);
   };
 
@@ -825,7 +854,11 @@ export function WorkspaceShell() {
       stopWatchingCurrentDocument();
       clearDocumentArea();
       setActiveGitDiffTarget(null);
-      setStartupContext(startupContextForPickedTarget(target));
+      setStartupContext(
+        startupContextForPickedTarget(target, {
+          csv_first_row_as_header: launchCsvFirstRowAsHeader,
+        }),
+      );
 
       if (target.kind === "single_file") {
         setFileTreeOpen(false);
@@ -1504,6 +1537,18 @@ export function WorkspaceShell() {
           />
 
           <div class={viewerGridClassName()} style={viewerGridStyle()}>
+            <Show when={!isFileTreeOpen()}>
+              <button
+                type="button"
+                class="workspace__expand-tab"
+                aria-label="Expand left pane"
+                aria-expanded={false}
+                title="Expand left pane"
+                onClick={handleToggleFileTree}
+              >
+                ›
+              </button>
+            </Show>
             <Show when={diffTarget()} keyed>
               {(target) => (
                 <PrDiffWorkspace
@@ -1622,6 +1667,7 @@ export function WorkspaceShell() {
 
                 <WorkspaceDocumentColumn
                   colorScheme={colorScheme()}
+                  csvFirstRowAsHeader={csvFirstRowAsHeader()}
                   csvPaneMode={csvPaneMode()}
                   csvPreview={csvPreview()}
                   epubToc={epubPreview()?.toc ?? []}
@@ -1633,6 +1679,8 @@ export function WorkspaceShell() {
                   markdownPane={markdownPane()}
                   selection={selection()}
                   videoAutoplayRequestId={videoAutoplayRequestId()}
+                  localResourceGeneration={localResourceGeneration()}
+                  onCsvFirstRowAsHeaderChange={setCsvFirstRowAsHeader}
                   onMarkdownEditorInput={setMarkdownEditorBuffer}
                   onRelocateEpub={(anchorId) => {
                     setSelection({

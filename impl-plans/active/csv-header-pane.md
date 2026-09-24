@@ -1,6 +1,6 @@
 # CSV first-row header presentation Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Created**: 2026-09-10
 **Last Updated**: 2026-09-10
 **Design Reference**: `design-docs/specs/design-csv-viewer.md#first-row-header-options` and `design-docs/specs/command.md#csv-file-open-options`
@@ -48,45 +48,45 @@ Wave 1: contract. Wave 2: startup and pane may run in parallel after contract ac
 
 | Task | Depends on | Deliverable | Agent role | Status | Parallelizable |
 |---|---|---|---|---|---|
-| P1 | csv-header-contract | Controlled pane and semantic table | ts-coding | Not Started | Across startup/pane plans only |
-| P2 | P1 | Checkbox, empty/failure/count states and styling | ts-coding | Not Started | Across startup/pane plans only |
-| P3 | P1, P2 | DOM and safety regression cases | check-and-test-after-modify | Not Started | Across startup/pane plans only |
+| P1 | csv-header-contract | Controlled pane and semantic table | ts-coding | Implemented; re-review pending | Across startup/pane plans only |
+| P2 | P1 | Checkbox, empty/failure/count states and styling | ts-coding | Implemented; re-review pending | Across startup/pane plans only |
+| P3 | P1, P2 | DOM and safety regression cases | check-and-test-after-modify | Implemented; re-review pending | Across startup/pane plans only |
 
 ### P1: Controlled pane and semantic table
 
-**Status**: Not Started
+**Status**: Implemented; pending independent review
 **Depends on**: csv-header-contract
 **Deliverables**: `src/features/preview/CsvFilePreviewPane.tsx`.
 
 Extend CsvFilePreviewPane props with firstRowAsHeader and onFirstRowAsHeaderChange(value: boolean): void, alongside existing preview/presentationMode. Keep these props optional only until workspace integration supplies them, with response/default-false fallback and a disabled control if no callback; final integrated application always passes both. Derive H = 1 only for enabled state and nonempty retained rows; render header from record 1 and body from record H onward, without mutating payload. Off mode keeps numeric columns and every body record. Preserve source-record gutters starting at 2 with headers, 1 otherwise. Empty/missing labels fall back to numeric column index and accessible Column N names; preserve whitespace, duplicate labels and multiline text as text nodes, never markup. Pad body/header to existing column_count without adding columns.
 
-- [ ] Intended changes and behavior assertions above are implemented.
-- [ ] Relevant verification commands below pass with complete logs and final statuses.
-- [ ] Own progress log and immutable change evidence are updated.
+- [x] Intended changes and behavior assertions above are implemented.
+- [x] Relevant verification commands below pass with complete logs and final statuses.
+- [x] Own progress log and immutable change evidence are updated.
 
 ### P2: Checkbox, empty/failure/count states and styling
 
-**Status**: Not Started
+**Status**: Implemented; pending independent review
 **Depends on**: P1
 **Deliverables**: `src/features/preview/CsvFilePreviewPane.tsx`, `src/app/App.css`.
 
 Add native Use first row as header checkbox in formatted pane header, keyboard focusable with Space and visible focus styling in App.css; no global shortcut. Keep it usable for empty CSV; disable it when formatted_available is false and suppress the table in direct failure-pane rendering. Raw mode keeps exact raw content. Empty source shows No CSV records; one retained header shows headers, empty body and No data rows. Display body count N-H; transform a known positive source total by one in header mode, preserve unknown totals, or label unchanged counts explicitly as source records. Keep truncation/error notices and dimensions independent of the toggle.
 
-- [ ] Intended changes and behavior assertions above are implemented.
-- [ ] Relevant verification commands below pass with complete logs and final statuses.
-- [ ] Own progress log and immutable change evidence are updated.
+- [x] Intended changes and behavior assertions above are implemented.
+- [x] Relevant verification commands below pass with complete logs and final statuses.
+- [x] Own progress log and immutable change evidence are updated.
 
 ### P3: DOM and safety regression cases
 
-**Status**: Not Started
+**Status**: Implemented; pending independent review
 **Depends on**: P1, P2
 **Deliverables**: `src/features/preview/CsvFilePreviewPane.vitest.tsx`.
 
 Use a controlled reactive test harness to prove checkbox changes are reflected without IPC; assert label/checked/disabled/focus semantics, callback values and Space in a real app where jsdom lacks native default actions. Test both modes, no double removal, gutters, empty/header-only, blank/duplicate/ragged labels, multiline/HTML-like text rendered safely, known/unknown counts, truncation, shortened first record and wide-row dimensions. Raw and unavailable formatted cases must remain safe.
 
-- [ ] Intended changes and behavior assertions above are implemented.
-- [ ] Relevant verification commands below pass with complete logs and final statuses.
-- [ ] Own progress log and immutable change evidence are updated.
+- [x] Intended changes and behavior assertions above are implemented.
+- [x] Relevant verification commands below pass with complete logs and final statuses.
+- [x] Own progress log and immutable change evidence are updated.
 
 ## Verification commands
 
@@ -98,9 +98,9 @@ Commands run from the repository root. These are future implementation checks, n
 
 ## Completion criteria
 
-- [ ] Header-on/off renders the correct records, labels, gutters and count semantics without payload changes.
-- [ ] Checkbox is accessible; empty, header-only, unavailable formatted and raw cases match design.
-- [ ] Focused DOM tests and typecheck pass; real keyboard/UI confirmation remains assigned to finalization.
+- [x] Header-on/off renders the correct records, labels, gutters and count semantics without payload changes.
+- [x] Checkbox is accessible; empty, header-only, unavailable formatted and raw cases match design.
+- [x] Focused DOM tests and typecheck pass; real keyboard/UI confirmation remains assigned to finalization.
 
 ## Execution and shared-directory safety
 
@@ -123,6 +123,43 @@ Codex process references: `AGENTS.md`, `.agents/agents/rust-coding.md`, `.agents
 The accepted divergences are to retain `has_headers(false)` with headers derived in presentation, and use Riela-owned foreground app verification instead of the launch skill's background example. No Cursor behavior applies; future Cursor integration remains behind a separate adapter. No CSV editing, automatic inference, new delimiter support, global preference, parser-budget change or padded-DOM optimization is included.
 
 ## Progress Log
+
+### Session: 2026-09-10 — serial integration repair
+
+**Review Input**: `comm-000039` (`integration-pane-001`) found that `ShowCsvTable` and formatted notices evaluated preview availability and empty-state branches only at mount; same-instance empty/populated and available/unavailable updates failed.
+**Repair**: Replaced mount-time branches with Solid `Show` control flow in `src/features/preview/CsvFilePreviewPane.tsx`, including reactive formatted notices. Added four isolated same-instance preview-update regressions in `src/features/preview/CsvFilePreviewPane.vitest.tsx` for empty-to-populated, populated-to-empty, available-to-unavailable, and unavailable-to-available transitions.
+**Evidence**: `tmp/csv-header-options-20260910-01/serial-reconciliation/20260910T080000Z-pane-reactivity-repair-04/001-intent.md`, `008-repair-decision.json`, and `009-post-repair-hashes.json`.
+**Verification**: focused pane DOM test exit 0 (13 passed; `verification/004-pane-dom-passing.log`); reviewer reactivity suite exit 0 (4 passed; `verification/005-integration-reactivity.log`); `CARGO_TERM_QUIET=true mise run verify` exit 0 (39 Bun, 387 DOM, and 228 Rust tests; `verification/006-mise-verify.log`); independent `.agents/agents/check-and-test-after-modify.md` verification passed; `git diff --check` exit 0 (`verification/007-diff-check.log`).
+**Status**: `integration-pane-001` is repaired and awaits independent integration review. `csv-header-workspace` and `csv-header-finalize` remain expected dependency-pending work; no finalization-owned launch/UI verification was performed.
+
+### Session: 2026-09-10 — Step 6 integrity repair
+
+**Review Input**: `comm-000029` found missing P3 assertions for duplicate labels and header-enabled truncation despite the task being marked implemented.
+**Repair**: Added a header-enabled DOM regression asserting unchanged duplicate labels, numeric fallback, source gutters 2/3, retained body rows, transformed `2 data rows (4 total)` count, and visible truncation notice.
+**Evidence**: `tmp/csv-header-options-20260910-01/csv-header-pane/step6-implement-rerun-2/intents/001-duplicate-truncation-regression.md` through `003-plan-integrity-repair-log.md`; post-format test hash `0a5e11483ad5edcce0444831c3b5d2f537afaf2d4e6bcbc3b14f100ef432adb9`.
+**Verification**: `mise exec -- bun run test:dom src/features/preview/CsvFilePreviewPane.vitest.tsx` exit 0 (9 passed; `verification/001-bun-test-dom-csv-pane.log`); `mise exec -- bun run typecheck` exit 0 (`verification/002-bun-typecheck.log`); `git diff --check` exit 0 (`verification/003-git-diff-check.log`).
+**Status**: The integrity finding is resolved; independent review, workspace integration, and finalization-owned browser/UI confirmation remain pending.
+
+### Session: 2026-09-10 — Step 6 review repair
+
+**Review Input**: `comm-000025` requested revision for two mid findings: sticky column headers inherited `white-space: nowrap`, and cell text used non-wrapping `pre`.
+**Repair**: Preserved gutter/corner rules; `src/app/App.css` now applies `white-space: pre-wrap` and `overflow-wrap: anywhere` only to `.csv-preview-table__col-head` and `.csv-preview-table__cell-text`.
+**Regression Coverage**: Added a DOM test that injects the production CSV table stylesheet fragment and verifies text preservation plus computed `pre-wrap`/`anywhere` wrapping for multiline headers and cells.
+**Evidence**: `tmp/csv-header-options-20260910-01/csv-header-pane/step6-implement-rerun-1/intents/001-whitespace-wrap-repair.md` through `004-plan-review-repair-log.md`.
+**Hashes**: `src/app/App.css` `8f48f1dbdfa00b1de9616ff93a6091ff37f12fb3f91f3da704fc2b622499fcf9`; `src/features/preview/CsvFilePreviewPane.vitest.tsx` `a22d26ab5620ef2df833866bef7727ee80c58e56bcdfcebf2250f7cadca2bb8c`.
+**Verification**: `mise exec -- bun run test:dom src/features/preview/CsvFilePreviewPane.vitest.tsx` exit 0 (8 passed; `verification/001-bun-test-dom-csv-pane.log`); `mise exec -- bun run typecheck` exit 0 (`verification/002-bun-typecheck.log`); `git diff --check` exit 0 (`verification/003-git-diff-check.log`).
+**Status**: Both review findings are resolved; retain pending independent review, workspace integration, and finalization-owned visible UI confirmation.
+
+### Session: 2026-09-10 — Step 6 implementation
+
+**Tasks Completed**: P1 controlled presentation, P2 checkbox/states/styles, and P3 focused DOM regressions; all remain pending independent review and serial workspace integration.
+**Dependencies**: `csv-header-contract` accepted. `csv-header-workspace` owns required callers and active state; no workspace source was changed.
+**Changed Files**: `src/features/preview/CsvFilePreviewPane.tsx`, `src/features/preview/CsvFilePreviewPane.vitest.tsx`, `src/app/App.css`, and this plan.
+**Evidence**: Intent snapshots `tmp/csv-header-options-20260910-01/csv-header-pane/step6-implement-attempt-1/intents/001-pane-and-tests.md` through `009-final-verification-paths.md`; current complete verification summary `tmp/csv-header-options-20260910-01/csv-header-pane/step6-implement-attempt-1/verification/results.md`.
+**Source hashes after formatting**: `CsvFilePreviewPane.tsx` `f100adcb893b4bb830005ddc9bd8e9960dc8b9a5c4bdd7a90d001683b60a268c`; `CsvFilePreviewPane.vitest.tsx` `9d4986b429ca04aa0fbc542aa716eff93ac0444049854e99405ee6458a08944a`; `App.css` `b63627bc88e0175c668453f7803917d67c43b9be9b7400cc472c4f193417e85f`.
+**Verification**: `mise exec -- bun run test:dom src/features/preview/CsvFilePreviewPane.vitest.tsx` exit 0 (7 passed; `verification/004-final-bun-test-dom-csv-pane.log`); `mise exec -- bun run typecheck` exit 0 (`verification/005-final-bun-typecheck.log`); `git diff --check` exit 0 (`verification/006-final-git-diff-check.log`).
+**Post-modification agent**: `.agents/agents/check-and-test-after-modify.md` initially found the count text was non-reactive; repaired with derived accessors, then all final assigned commands passed. `.agents/agents/ts-coding.md` review confirmed the controlled contract and workspace handoff boundary.
+**Residual Risks**: The pane props are intentionally optional until `csv-header-workspace` passes controlled state. Real Space behavior, UI interaction, Raw/Formatted switching, reload, and multi-file confirmation remain assigned to `csv-header-finalize`; no detached launch was performed.
 
 ### Session: 2026-09-10 — Step 4 plan authoring
 

@@ -5,7 +5,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+mod csv_open_options_tests;
 mod source_footer;
+mod startup_options_tests;
 
 use super::test_epub::{write_test_epub, write_test_epub_with_toc_mode, EpubFixtureTocMode};
 use super::{fallback_media_mime_type, ViewerService};
@@ -15,8 +17,8 @@ use crate::{
     syntax_highlight::SyntaxUiTheme,
     verbose_log,
     viewer::types::{
-        BrowserRoot, CsvRowCountStatus, DirectoryListSort, DirectorySortDirection,
-        DirectorySortField, FilePreview, WorkspaceMode,
+        BrowserRoot, DirectoryListSort, DirectorySortDirection, DirectorySortField,
+        FileOpenOptions, FilePreview, WorkspaceMode,
     },
 };
 
@@ -103,6 +105,27 @@ fn startup_context_is_file_view_for_opening_markdown_file() {
         .expect("startup context");
 
     assert_eq!(context.initial_mode, WorkspaceMode::FileView);
+    assert_eq!(context.file_open_options, FileOpenOptions::default());
+    assert_eq!(
+        serde_json::to_value(&context).expect("serialize default startup context")
+            ["file_open_options"]["csv_first_row_as_header"],
+        false
+    );
+    let explicit_options = FileOpenOptions {
+        csv_first_row_as_header: true,
+    };
+    let explicit_context = ViewerService::new()
+        .startup_context_with_options(
+            &StartupTarget::File(markdown_path.canonicalize().expect("canonical path")),
+            explicit_options,
+        )
+        .expect("explicit startup context");
+    assert_eq!(explicit_context.file_open_options, explicit_options);
+    assert_eq!(
+        serde_json::to_value(&explicit_context).expect("serialize explicit startup context")
+            ["file_open_options"]["csv_first_row_as_header"],
+        true
+    );
     match &context.browser_root {
         BrowserRoot::Directory {
             selected_file_path, ..
@@ -571,39 +594,41 @@ fn open_file_preview_treats_heic_and_heif_paths_as_images() {
 }
 
 #[test]
-fn open_file_preview_treats_csv_as_structured_preview() {
-    let test_dir = TestDir::new();
-    let csv_path = test_dir.path().join("data.csv");
-    fs::write(&csv_path, "a,b\n\"c,d\",e\n").expect("write csv");
-
-    match ViewerService::new()
-        .open_file_preview(&csv_path, SyntaxUiTheme::Dark)
-        .expect("csv preview")
-    {
-        FilePreview::Csv {
-            mime_type,
-            rows,
-            column_count,
-            row_count_status,
-            formatted_available,
-            parse_error,
-            raw_html,
-            ..
-        } => {
-            assert_eq!(mime_type, "text/csv");
-            assert!(formatted_available);
-            assert!(parse_error.is_none());
-            assert_eq!(row_count_status, CsvRowCountStatus::Complete);
-            assert_eq!(column_count, 2);
-            assert_eq!(rows.len(), 2);
-            assert_eq!(rows[0], vec!["a", "b"]);
-            assert_eq!(rows[1], vec!["c,d", "e"]);
-            assert!(
-                raw_html.contains("file-preview") && raw_html.contains("<pre"),
-                "expected highlighted raw HTML wrapper, got: {raw_html}"
-            );
+fn file_open_options_default_to_false_and_reject_invalid_wire_values() {
+    assert_eq!(
+        serde_json::from_str::<FileOpenOptions>("{}").expect("default options"),
+        FileOpenOptions::default()
+    );
+    assert_eq!(
+        serde_json::from_str::<Option<FileOpenOptions>>("null").expect("null outer options"),
+        None
+    );
+    assert_eq!(
+        serde_json::from_str::<FileOpenOptions>(r#"{"csv_first_row_as_header":true}"#)
+            .expect("true options"),
+        FileOpenOptions {
+            csv_first_row_as_header: true,
         }
-        _ => panic!("expected CSV preview"),
+    );
+    assert_eq!(
+        serde_json::to_value(FileOpenOptions {
+            csv_first_row_as_header: true,
+        })
+        .expect("serialize options"),
+        serde_json::json!({ "csv_first_row_as_header": true })
+    );
+
+    for invalid in [
+        r#"{"csv_first_row_as_header":null}"#,
+        r#"{"csv_first_row_as_header":"true"}"#,
+        r#"{"csv_first_row_as_header":1}"#,
+        r#"{"csvFirstRowAsHeader":true}"#,
+        r#"{"csv_first_row_as_header":true,"unexpected":false}"#,
+    ] {
+        assert!(
+            serde_json::from_str::<FileOpenOptions>(invalid).is_err(),
+            "expected invalid options to fail: {invalid}"
+        );
     }
 }
 

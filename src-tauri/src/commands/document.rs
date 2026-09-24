@@ -14,7 +14,8 @@ use crate::{
     syntax_highlight::SyntaxUiTheme,
     verbose_log,
     viewer::types::{
-        DirectoryListSort, DirectoryPage, ExplicitFileSetPage, FilePreview, StartupContext,
+        DirectoryListSort, DirectoryPage, ExplicitFileSetPage, FileOpenOptions, FilePreview,
+        StartupContext,
     },
 };
 
@@ -247,6 +248,7 @@ pub fn list_explicit_file_set(
 #[tauri::command]
 pub async fn open_file_preview(
     path: String,
+    options: Option<FileOpenOptions>,
     state: State<'_, AppState>,
 ) -> Result<FilePreview, String> {
     let command_started_at = verbose_log::is_enabled().then(Instant::now);
@@ -254,9 +256,10 @@ pub async fn open_file_preview(
     let theme = state.syntax_ui_theme();
     let viewer_service = state.viewer_service();
     let task_path = path.clone();
+    let options = options.unwrap_or_default();
 
     let preview_result = match tauri::async_runtime::spawn_blocking(move || {
-        viewer_service.open_file_preview(Path::new(&task_path), theme)
+        viewer_service.open_file_preview_with_options(Path::new(&task_path), theme, options)
     })
     .await
     {

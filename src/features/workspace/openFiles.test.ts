@@ -47,13 +47,17 @@ describe("openFiles", () => {
 
   it("builds directory startup context from a single picked file", () => {
     expect(
-      startupContextForPickedTarget({
-        kind: "single_file",
-        filePath: "/workspace/notes.md",
-        directoryPath: "/workspace",
-      }),
+      startupContextForPickedTarget(
+        {
+          kind: "single_file",
+          filePath: "/workspace/notes.md",
+          directoryPath: "/workspace",
+        },
+        { csv_first_row_as_header: true },
+      ),
     ).toEqual({
       initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: true },
       browser_root: {
         kind: "directory",
         current_directory_path: "/workspace",
@@ -68,13 +72,17 @@ describe("openFiles", () => {
 
   it("builds explicit-file-set startup context from a picked target", () => {
     expect(
-      startupContextForPickedTarget({
-        kind: "file_set",
-        selectedFilePath: "/workspace/a.md",
-        filePaths: ["/workspace/a.md", "/workspace/b.md"],
-      }),
+      startupContextForPickedTarget(
+        {
+          kind: "file_set",
+          selectedFilePath: "/workspace/a.md",
+          filePaths: ["/workspace/a.md", "/workspace/b.md"],
+        },
+        { csv_first_row_as_header: false },
+      ),
     ).toEqual({
       initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
       browser_root: {
         kind: "explicit_file_set",
         file_count: 2,

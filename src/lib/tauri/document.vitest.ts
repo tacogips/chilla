@@ -6,6 +6,25 @@ import {
 } from "./document";
 
 describe("normalizeStartupContextPayload", () => {
+  function directoryPayload(
+    fileOpenOptions?: unknown,
+    useCamelAlias = false,
+  ): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      initial_mode: "file_view",
+      browser_root: {
+        kind: "directory",
+        current_directory_path: "/workspace",
+        selected_file_path: "/workspace/dummy.csv",
+      },
+    };
+    if (fileOpenOptions !== undefined) {
+      payload[useCamelAlias ? "fileOpenOptions" : "file_open_options"] =
+        fileOpenOptions;
+    }
+    return payload;
+  }
+
   it("accepts snake_case directory startup payloads", () => {
     expect(
       normalizeStartupContextPayload({
@@ -18,6 +37,7 @@ describe("normalizeStartupContextPayload", () => {
       }),
     ).toEqual({
       initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
       browser_root: {
         kind: "directory",
         current_directory_path: "/workspace",
@@ -38,12 +58,52 @@ describe("normalizeStartupContextPayload", () => {
       }),
     ).toEqual({
       initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
       browser_root: {
         kind: "directory",
         current_directory_path: "/workspace",
         selected_file_path: "/workspace/dummy.csv",
       },
     });
+  });
+
+  it("normalizes missing, null, and omitted CSV open options to false", () => {
+    expect(
+      normalizeStartupContextPayload(directoryPayload()).file_open_options,
+    ).toEqual({ csv_first_row_as_header: false });
+    expect(
+      normalizeStartupContextPayload(directoryPayload(null)).file_open_options,
+    ).toEqual({ csv_first_row_as_header: false });
+    expect(
+      normalizeStartupContextPayload(directoryPayload({})).file_open_options,
+    ).toEqual({ csv_first_row_as_header: false });
+  });
+
+  it("accepts the camel outer option alias but gives snake_case precedence", () => {
+    expect(
+      normalizeStartupContextPayload(
+        directoryPayload({ csv_first_row_as_header: true }, true),
+      ).file_open_options,
+    ).toEqual({ csv_first_row_as_header: true });
+
+    expect(
+      normalizeStartupContextPayload({
+        ...directoryPayload({ csv_first_row_as_header: true }, true),
+        file_open_options: null,
+      }).file_open_options,
+    ).toEqual({ csv_first_row_as_header: false });
+  });
+
+  it.each([
+    { csvFirstRowAsHeader: true },
+    { unexpected: true },
+    { csv_first_row_as_header: null },
+    { csv_first_row_as_header: "true" },
+    { csv_first_row_as_header: 1 },
+  ])("rejects malformed CSV open options: %o", (fileOpenOptions) => {
+    expect(() =>
+      normalizeStartupContextPayload(directoryPayload(fileOpenOptions)),
+    ).toThrow("Startup file open options");
   });
 
   it("accepts camelCase explicit file-set startup payloads", () => {
@@ -59,6 +119,7 @@ describe("normalizeStartupContextPayload", () => {
       }),
     ).toEqual({
       initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
       browser_root: {
         kind: "explicit_file_set",
         file_count: 2,
@@ -79,6 +140,7 @@ describe("normalizeStartupContextPayload", () => {
       }),
     ).toEqual({
       initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
       browser_root: {
         kind: "directory",
         current_directory_path: "/workspace",
@@ -98,6 +160,7 @@ describe("normalizeStartupContextPayload", () => {
       }),
     ).toEqual({
       initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
       browser_root: {
         kind: "directory",
         current_directory_path: "/workspace",
@@ -117,6 +180,7 @@ describe("normalizeStartupContextPayload", () => {
       }),
     ).toEqual({
       initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
       browser_root: {
         kind: "directory",
         current_directory_path: "C:/",
@@ -195,6 +259,7 @@ describe("normalizeStartupContextPayload", () => {
       }),
     ).toEqual({
       initial_mode: "pr_diff",
+      file_open_options: { csv_first_row_as_header: false },
       browser_root: {
         kind: "github_pr",
         target: {
@@ -259,6 +324,7 @@ describe("normalizeStartupContextPayload", () => {
       }),
     ).toEqual({
       initial_mode: "pr_diff",
+      file_open_options: { csv_first_row_as_header: false },
       browser_root: {
         kind: "github_pr",
         target: {
@@ -296,6 +362,7 @@ describe("normalizeStartupContextPayload", () => {
       }),
     ).toEqual({
       initial_mode: "pr_diff",
+      file_open_options: { csv_first_row_as_header: false },
       browser_root: {
         kind: "github_pr",
         target: {
@@ -332,6 +399,7 @@ describe("normalizeStartupContextPayload", () => {
       }),
     ).toEqual({
       initial_mode: "pr_diff",
+      file_open_options: { csv_first_row_as_header: false },
       browser_root: {
         kind: "git_diff",
         target: {

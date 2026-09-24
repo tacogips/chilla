@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "solid-js/web";
+import { createSignal } from "solid-js";
 import { MediaFilePreviewPane } from "./MediaFilePreviewPane";
 
 let linuxWebKitDesktop = false;
@@ -37,6 +38,35 @@ describe("MediaFilePreviewPane", () => {
     vi.restoreAllMocks();
     linuxWebKitDesktop = false;
     macDesktopWebView = false;
+  });
+
+  it("refreshes asset fallback URLs while preserving stream URLs", () => {
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing test root");
+    const [generation, setGeneration] = createSignal(0);
+    const [streamUrl, setStreamUrl] = createSignal<string | null>(null);
+    dispose = render(
+      () => (
+        <MediaFilePreviewPane
+          kind="audio"
+          path="/tmp/demo.mp3"
+          fileName="demo.mp3"
+          autoplayRequestId={0}
+          localResourceGeneration={generation()}
+          streamUrl={streamUrl()}
+        />
+      ),
+      root,
+    );
+    const media = root.querySelector<HTMLAudioElement>("audio");
+    const firstUrl = media?.src;
+    setGeneration(1);
+    expect(media?.src).not.toBe(firstUrl);
+    expect(new URL(media?.src ?? "").searchParams.get("chilla_refresh")).toBe(
+      "1",
+    );
+    setStreamUrl("http://127.0.0.1/stream/new-token");
+    expect(media?.src).toBe("http://127.0.0.1/stream/new-token");
   });
 
   it("seeks video playback with large shortcuts", () => {

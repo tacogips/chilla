@@ -60,19 +60,21 @@ brew upgrade --cask chilla</code></pre></details>
 </section>
 <section class="keyboard-section" id="keyboard" aria-labelledby="keyboard-title"><div class="section keyboard-layout">
 <div><p class="eyebrow">手は、ホームポジションのまま。</p><h2 id="keyboard-title">指が覚えている、<br />いつもの道順。</h2><p class="section-lede">Yaziライクな移動で、ファイル探しが自然に。マウスに持ち替えずに移動、絞り込み、Git diffの表示まで。</p><p class="keyboard-foot">矢印キー派も、そのままどうぞ。</p></div>
-<div class="keyboard-board"><div class="shortcuts"><div class="shortcut"><kbd>h</kbd><span>親フォルダへ</span></div>
-<div class="shortcut"><kbd>j</kbd><span>下へ移動</span></div>
-<div class="shortcut"><kbd>k</kbd><span>上へ移動</span></div>
-<div class="shortcut"><kbd>l</kbd><span>選択項目を開く</span></div>
-<div class="shortcut"><kbd>/</kbd><span>ファイルを絞り込む</span></div>
+<div class="keyboard-board"><div class="shortcuts"><div class="shortcut"><kbd>h / ←</kbd><span>親へ移動／折りたたむ</span></div>
+<div class="shortcut"><kbd>j / ↓</kbd><span>下へ移動</span></div>
+<div class="shortcut"><kbd>k / ↑</kbd><span>上へ移動</span></div>
+<div class="shortcut"><kbd>l / →</kbd><span>開く／展開する</span></div>
+<div class="shortcut"><kbd>Enter</kbd><span>開く／決定する</span></div>
+<div class="shortcut"><kbd>f or /</kbd><span>ファイルを絞り込む</span></div>
+<div class="shortcut"><kbd>t</kbd><span>リスト／ツリーを切り替え</span></div>
 <div class="shortcut"><kbd>g</kbd><span>Git diffを切り替え</span></div>
-<div class="shortcut"><kbd>Shift + L</kbd><span>ファイルツリーを表示／非表示</span></div>
+<div class="shortcut"><kbd>Shift + L</kbd><span>左ペインを表示／非表示</span></div>
 <div class="shortcut"><kbd>?</kbd><span>ヘルプを表示</span></div></div><p class="small-note">デフォルトのショートカットです。移動キーはファイルブラウザ内で有効です。入力欄では通常どおり文字を入力できます。</p></div>
 </div></section>
 <section class="section diff-section" id="git-diff" aria-labelledby="diff-title">
 <div class="section-intro"><div><p class="eyebrow">Git diffも、おまかせ。</p><h2 id="diff-title">小さな変更も、<br />くっきりと。</h2></div><div><p>ローカルの変更、コミット、範囲指定、GitHubのプルリクエストURLに対応。変更ファイルをたどりながら、何が変わったかを確認できます。ここでも操作はキーボード中心。</p><ul class="mode-pills"><li>左右比較</li><li>スタック表示</li><li>ファイル全体</li></ul></div></div>
 <figure class="app-shot diff-shot"><picture><source type="image/webp" srcset="/screenshots/diff-fresh.webp" /><img src="/screenshots/diff-fresh.jpg" width="1277" height="768" loading="lazy" alt="変更ファイルの一覧と赤と緑の差分を左右に表示したchillaのGit diff画面" /></picture><figcaption>撮り直した実際のアプリ画面 · リポジトリの変更を左右に並べて比較。</figcaption></figure>
-<p class="diff-shortcuts">diffモードでは： <kbd>1</kbd> 左右比較 <kbd>2</kbd> スタック <kbd>3</kbd> ファイル全体</p></section>
+<p class="diff-shortcuts">diffモードでは： <kbd>Tab</kbd> 表示を循環 <kbd>1</kbd> 左右比較 <kbd>2</kbd> スタック <kbd>3</kbd> ファイル全体 <kbd>4</kbd> SVG画像</p></section>
 </main>
 <footer class="site-footer"><a class="brand" href="/ja/"><img class="brand-icon" src="/favicon.png" data-app-icon alt="" width="44" height="44" /><span>chilla</span></a><p>好奇心いっぱいの、小さなファイル＆Gitビューア。</p><nav aria-label="フッター"><a href="/ja/privacy/">プライバシー</a><a href="https://github.com/tacogips/chilla/releases/latest">リリース</a><a href="https://github.com/tacogips/chilla">GitHub</a><a href="/" lang="en">English</a></nav><p class="copyright">© <span data-year>2026</span> chilla</p></footer>
 <script type="module" src="/src/main.js"></script>

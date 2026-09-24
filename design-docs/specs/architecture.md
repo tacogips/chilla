@@ -788,6 +788,14 @@ reordered entries can appear without navigating away and back.
   file revision supplied by the backend to invalidate WebView caches. Image HTML
   and PDF iframe URLs must therefore change when the source file modification
   marker changes.
+- A direct image preview, including SVG, applies its own revision to the
+  resolved image URL. Relative images embedded in Markdown continue to use
+  their own resource resolution without inheriting the document revision.
+- An explicit workspace refresh advances a local resource generation even if
+  the filesystem modification marker is unchanged. Direct images, PDF frames,
+  local assets embedded in Markdown, and asset-protocol audio/video fallbacks
+  receive a fresh URL. Remote links keep their existing URLs. Streamed audio
+  and video already receive newly registered URLs on each preview request.
 - Audio and video refresh continue to use newly registered stream URLs. Markdown,
   text, CSV, EPUB, and binary previews continue to rebuild their payloads from a
   fresh backend read.
@@ -904,6 +912,9 @@ file pane, including when the pane is hidden. It uses the same state and action
 as the default Shift+L shortcut. Its accessible label describes the next action,
 its expanded state reflects actual visibility, and its tooltip uses the effective
 configured shortcut. The control remains available in file and Git diff modes.
+When collapsed, a compact tab at the left edge of the content area also exposes
+the expand action for mouse users. It does not reserve a full sidebar column or
+obscure the document content beyond the tab itself.
 
 Collapsing transfers keyboard focus to the visible document or diff preview.
 Hidden browser controls cannot receive focus or execute browser shortcuts;

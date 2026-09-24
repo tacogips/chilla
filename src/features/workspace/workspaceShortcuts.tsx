@@ -152,23 +152,23 @@ export const SHORTCUT_SECTIONS: readonly {
         description: "Move selection up",
       },
       {
-        keys: [", then 0", "0"],
+        keys: [", 0", "0"],
         description: "Reset sort to default (name ascending)",
       },
       {
-        keys: [", then a/A"],
+        keys: [", a/A"],
         description: "Sort by name ascending / descending",
       },
       {
-        keys: [", then e/E"],
+        keys: [", e/E"],
         description: "Sort by extension ascending / descending",
       },
       {
-        keys: [", then m/M"],
+        keys: [", m/M"],
         description: "Sort by modified time ascending / descending",
       },
       {
-        keys: [", then s/S"],
+        keys: [", s/S"],
         description: "Sort by size ascending / descending",
       },
       {
@@ -233,7 +233,11 @@ export function ShortcutSectionList(
     if (map === undefined) return SHORTCUT_SECTIONS;
     const bindings = (entries: EffectiveKeymap["file"]) =>
       entries.map((binding) => ({
-        keys: [binding.keys.join(" then ")],
+        keys: [
+          binding.keys[0] === ","
+            ? binding.keys.join(" ")
+            : binding.keys.join(" then "),
+        ],
         description: binding.description,
       }));
     return [

@@ -1,6 +1,6 @@
 # CSV header CLI and startup propagation Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Created**: 2026-09-10
 **Last Updated**: 2026-09-10
 **Design Reference**: `design-docs/specs/design-csv-viewer.md#first-row-header-options` and `design-docs/specs/command.md#csv-file-open-options`
@@ -23,6 +23,7 @@
     "src-tauri/src/app_state.rs",
     "src-tauri/src/viewer/service.rs",
     "src-tauri/src/viewer/service/tests.rs",
+    "src-tauri/src/viewer/service/tests/startup_options_tests.rs",
     "impl-plans/active/csv-header-startup.md"
   ],
   "sharedPaths": [
@@ -52,45 +53,45 @@ Wave 1: contract. Wave 2: startup and pane may run in parallel after contract ac
 
 | Task | Depends on | Deliverable | Agent role | Status | Parallelizable |
 |---|---|---|---|---|---|
-| S1 | csv-header-contract | CLI request and normalization | rust-coding | Not Started | Across startup/pane plans only |
-| S2 | S1 | Executable, builder and startup context | rust-coding | Not Started | Across startup/pane plans only |
-| S3 | S1, S2 | CLI/startup regression and help | check-and-test-after-modify | Not Started | Across startup/pane plans only |
+| S1 | csv-header-contract | CLI request and normalization | rust-coding | Implemented — Review Pending | Across startup/pane plans only |
+| S2 | S1 | Executable, builder and startup context | rust-coding | Implemented — Review Pending | Across startup/pane plans only |
+| S3 | S1, S2 | CLI/startup regression and help | check-and-test-after-modify | Implemented — Review Pending | Across startup/pane plans only |
 
 ### S1: CLI request and normalization
 
-**Status**: Not Started
+**Status**: Implemented — Review Pending
 **Depends on**: csv-header-contract
 **Deliverables**: `src-tauri/src/cli/mod.rs`, `src-tauri/src/cli/tests.rs`.
 
 Introduce StartupRequest with target: StartupTarget and file_open_options: FileOpenOptions; make CliParseOutcome::Run carry the request and retain options in NormalizedCli. Accept only --csv-first-row-header=true|false, lowercase exact equals form, anywhere among positionals. Last valid repetition wins; any invalid occurrence fails with usage exit 2, including beside help/version. Reject bare, empty, space-separated and malformed values. Strip valid global flags before classification; retain existing verbose/cache/Git/GitHub semantics and path ordering/validation. A lone help/version after removal exits 0 without app start or verbose-log creation. Ensure invalid option validation cannot be bypassed by that information-only branch.
 
-- [ ] Intended changes and behavior assertions above are implemented.
-- [ ] Relevant verification commands below pass with complete logs and final statuses.
-- [ ] Own progress log and immutable change evidence are updated.
+- [x] Intended changes and behavior assertions above are implemented.
+- [x] Relevant verification commands below pass with complete logs and final statuses.
+- [x] Own progress log and immutable change evidence are updated.
 
 ### S2: Executable, builder and startup context
 
-**Status**: Not Started
+**Status**: Implemented — Review Pending
 **Depends on**: S1
 **Deliverables**: `src-tauri/src/main.rs`, `src-tauri/src/lib.rs`, `src-tauri/src/app_state.rs`, `src-tauri/src/viewer/service.rs`.
 
 Change run entry to accept StartupRequest, pass its target explicitly to target resolution and verbose arm_startup_load, and populate StartupContext.file_open_options before AppState retains it. Keep canonicalization in current target resolution; default Finder/no-option launch to false. Fresh-read app_state.rs and edit only if needed to preserve complete context. Preserve the existing default startup_context wrapper or adapt its internal construction safely; add option propagation in the startup path without changing direct path-only IPC defaults. Update affected internal CLI constructors and callers discovered by rg before editing.
 
-- [ ] Intended changes and behavior assertions above are implemented.
-- [ ] Relevant verification commands below pass with complete logs and final statuses.
-- [ ] Own progress log and immutable change evidence are updated.
+- [x] Intended changes and behavior assertions above are implemented.
+- [x] Relevant verification commands below pass with complete logs and final statuses.
+- [x] Own progress log and immutable change evidence are updated.
 
 ### S3: CLI/startup regression and help
 
-**Status**: Not Started
+**Status**: Implemented — Review Pending
 **Depends on**: S1, S2
 **Deliverables**: `src-tauri/src/cli/mod.rs`, `src-tauri/src/cli/tests.rs`, `src-tauri/src/viewer/service/tests.rs`.
 
 Update help text in cli/mod.rs with syntax, default, launch scope and examples. Test omitted/true/false, all malformed forms, invalid then valid duplicates, valid duplicates, interspersed arguments, no target/current directory, directory, single file, mixed file set, non-CSV, Git and GitHub targets, cache/verbose combinations and information exits. Verify request-to-StartupContext serialization retains true and explicit false; use executable checks in finalization for actual exit codes and information-only side effects.
 
-- [ ] Intended changes and behavior assertions above are implemented.
-- [ ] Relevant verification commands below pass with complete logs and final statuses.
-- [ ] Own progress log and immutable change evidence are updated.
+- [x] Intended changes and behavior assertions above are implemented.
+- [x] Relevant verification commands below pass with complete logs and final statuses.
+- [x] Own progress log and immutable change evidence are updated.
 
 ## Verification commands
 
@@ -103,9 +104,9 @@ Commands run from the repository root. These are future implementation checks, n
 
 ## Completion criteria
 
-- [ ] CLI accepts exactly the documented syntax and default/duplicate/invalid/information-exit precedence.
-- [ ] All startup target kinds retain typed options through main, run, context and AppState without altering target behavior.
-- [ ] CLI help and focused Rust checks pass; logging and process-exit validation is included in finalization.
+- [x] CLI accepts exactly the documented syntax and default/duplicate/invalid/information-exit precedence.
+- [x] All startup target kinds retain typed options through main, run, context and AppState without altering target behavior.
+- [x] CLI help and focused Rust checks pass; logging and process-exit validation remains assigned to finalization.
 
 ## Execution and shared-directory safety
 
@@ -138,3 +139,14 @@ The accepted divergences are to retain `has_headers(false)` with headers derived
 **Notes**: Runtime source, accepted design, pre-existing index/README changes and git index were not modified by plan authoring.
 
 **Author self-check**: Confirmed accepted-design coverage, precise task deliverables, DAG ordering, verification gates and change-preservation rules. Corrected missing shared ownership for the pane source before handoff. Step 4 checks validate planning only; no implementation or independent review completion is claimed.
+
+### Session: 2026-09-10 — Step 6 implementation
+
+**Tasks Completed**: S1, S2 and S3 implementation; independent integrity and implementation review remain pending.
+**Tasks In Progress**: Review handoff and serial reconciliation with the pane/workspace/finalization plans.
+**Dependencies**: `csv-header-contract` accepted. `app_state.rs` was fresh-read and required no edit because it already retains the complete `StartupContext` passed to `AppState::new`.
+**Changed files**: `src-tauri/src/cli/mod.rs`, `src-tauri/src/cli/tests.rs`, `src-tauri/src/main.rs`, `src-tauri/src/lib.rs`, `src-tauri/src/viewer/service.rs`, `src-tauri/src/viewer/service/tests.rs`, `src-tauri/src/viewer/service/tests/startup_options_tests.rs`, and this plan. Existing contract-worker changes in the shared viewer files were preserved.
+**Intent evidence**: `tmp/csv-header-options-20260910-01/csv-header-startup/step6-implement/intent/001-cli-startup-intent.md` through `012-integrity-repair-plan-intent.md` preserve pre-edit hashes and narrow intent for each edit.
+**Verification**: after repairing `comm-000026`, final-tree foreground commands completed with exit 0. `cargo test ... cli` passed 33 tests (`029-cargo-test-cli-revision-final.log`); `cargo test ... viewer` passed 67 tests (`030-cargo-test-viewer-revision-final.log`); `cargo fmt`, `cargo check`, `cargo clippy --all-targets -- -D warnings`, and `git diff --check` also passed (`028-cargo-fmt-revision-final.log`, `031-cargo-check-revision-final.log`, `032-cargo-clippy-revision-final.log`, and `033-git-diff-check-revision-final.log`).
+**Integrity repair**: S3 now asserts option-bearing directory, single non-CSV file, file-set, local-Git/verbose, GitHub/cache, and information routes. The dedicated startup-context test verifies true and explicit false serialization for every `StartupTarget` variant without weakening pre-existing CSV tests.
+**Residual risks**: Runtime launch, actual process-exit codes, and verbose-log side effects are deliberately deferred to `csv-header-finalize`. The shared working tree changed in unrelated pane/UI files while this plan ran; no overlapping source hunk was overwritten, but serial reconciliation must compare the recorded intents before final acceptance.

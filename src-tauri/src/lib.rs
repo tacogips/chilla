@@ -21,14 +21,14 @@ use std::time::Instant;
 use tauri::Manager;
 
 use app_state::AppState;
-use cli::StartupTarget;
+use cli::StartupRequest;
 use document::service::DocumentService;
 use media_stream::MediaStreamService;
 use viewer::service::ViewerService;
 use watcher::service::WatcherService;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run(startup_target: StartupTarget) -> Result<(), String> {
+pub fn run(startup_request: StartupRequest) -> Result<(), String> {
     verbose_log::record_event("application_run_entry", "success");
     let context = tauri::generate_context!();
     #[cfg(target_os = "macos")]
@@ -77,7 +77,10 @@ pub fn run(startup_target: StartupTarget) -> Result<(), String> {
                     return Err(error.into());
                 }
             };
-            let startup_context = match viewer_service.startup_context(&startup_target) {
+            let startup_context = match viewer_service.startup_context_with_options(
+                &startup_request.target,
+                startup_request.file_open_options,
+            ) {
                 Ok(context) => context,
                 Err(error) => {
                     if let Some(started_at) = setup_started_at {

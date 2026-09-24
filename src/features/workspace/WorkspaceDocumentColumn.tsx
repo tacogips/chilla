@@ -38,10 +38,13 @@ interface WorkspaceDocumentColumnProps {
   readonly filePreview: FilePreview | null;
   readonly epubToc: readonly EpubNavigationItem[];
   readonly csvPreview: CsvPreview | null;
+  readonly csvFirstRowAsHeader: boolean;
   readonly csvPaneMode: DocumentPresentationMode;
   readonly videoAutoplayRequestId: number;
+  readonly localResourceGeneration?: number;
   readonly hasOpenDocument: boolean;
   readonly onMarkdownEditorInput: (value: string) => void;
+  readonly onCsvFirstRowAsHeaderChange: (value: boolean) => void;
   readonly onRelocateEpub: (anchorId: string | null) => void;
 }
 
@@ -87,6 +90,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
           documentPath={props.markdownDoc?.path ?? null}
           fileName={props.markdownDoc?.file_name ?? ""}
           html={props.markdownDoc?.html ?? ""}
+          localResourceGeneration={props.localResourceGeneration}
           selectedAnchorId={props.selection.anchorId}
           {...(props.markdownIsDirty
             ? {
@@ -121,6 +125,8 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
         {(getCsv) => (
           <CsvFilePreviewPane
             colorScheme={props.colorScheme}
+            firstRowAsHeader={props.csvFirstRowAsHeader}
+            onFirstRowAsHeaderChange={props.onCsvFirstRowAsHeaderChange}
             presentationMode={props.csvPaneMode}
             preview={getCsv()}
             subtitle={previewSubtitle(props.filePreview)}
@@ -144,6 +150,12 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
           dragPanEnabled={props.filePreview?.kind === "image"}
           layout={props.filePreview?.kind === "text" ? "source" : "rendered"}
           html={previewHtml(props.filePreview)}
+          imageRevision={
+            props.filePreview?.kind === "image"
+              ? props.filePreview.last_modified
+              : undefined
+          }
+          localResourceGeneration={props.localResourceGeneration}
           selectedAnchorId={null}
           subtitle={previewSubtitle(props.filePreview)}
           visible={true}
@@ -155,6 +167,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
           path={pdfPreview()?.path ?? ""}
           fileName={pdfPreview()?.file_name ?? ""}
           revision={pdfPreview()?.last_modified ?? ""}
+          localResourceGeneration={props.localResourceGeneration}
         />
       </Show>
 
@@ -163,6 +176,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
           kind={mediaKind() ?? "audio"}
           path={mediaPreview()?.path ?? ""}
           streamUrl={mediaStreamUrl(props.filePreview)}
+          localResourceGeneration={props.localResourceGeneration}
           fileName={mediaPreview()?.file_name ?? ""}
           autoplayRequestId={
             mediaKind() === "video" ? props.videoAutoplayRequestId : 0

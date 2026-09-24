@@ -8,10 +8,11 @@ use std::{
 
 use super::{
     normalize_cli, parse_cli, parse_normalized_cli, CliNormalizationOutcome, CliParseOutcome,
-    StartupTarget,
+    StartupRequest, StartupTarget,
 };
 use crate::{
     git_diff::GitDiffSource as LocalGitDiffSource, github_pr_diff::GitHubDiffSource, verbose_log,
+    viewer::types::FileOpenOptions,
 };
 
 #[test]
@@ -26,8 +27,10 @@ fn parses_github_shorthand_with_interspersed_options() {
             "--verbose",
         ],
     ] {
-        let CliParseOutcome::Run(StartupTarget::GitHubPr(target)) =
-            parse_cli(arguments).expect("shorthand")
+        let CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::GitHubPr(target),
+            ..
+        }) = parse_cli(arguments).expect("shorthand")
         else {
             panic!("expected GitHub target");
         };
@@ -47,8 +50,10 @@ fn parses_github_shorthand_with_interspersed_options() {
             ],
             vec!["chilla", "github:octocat/Hello-World", "42", flag],
         ] {
-            let CliParseOutcome::Run(StartupTarget::GitHubPr(target)) =
-                parse_cli(arguments).expect("cache flag")
+            let CliParseOutcome::Run(StartupRequest {
+                target: StartupTarget::GitHubPr(target),
+                ..
+            }) = parse_cli(arguments).expect("cache flag")
             else {
                 panic!("expected GitHub target");
             };
@@ -96,15 +101,42 @@ fn rejects_missing_malformed_and_extra_shorthand_arguments() {
 fn parses_transport_urls_with_cache_flag() {
     for suffix in ["diff", "patch"] {
         let url = format!("https://github.com/octocat/Hello-World/pull/42.{suffix}");
-        let CliParseOutcome::Run(StartupTarget::GitHubPr(target)) =
-            parse_cli(["chilla", "--verbose", "--no-github-diff-cache", &url])
-                .expect("transport URL")
+        let CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::GitHubPr(target),
+            ..
+        }) = parse_cli(["chilla", "--verbose", "--no-github-diff-cache", &url])
+            .expect("transport URL")
         else {
             panic!("expected GitHub target");
         };
         assert_eq!(target.url, "https://github.com/octocat/Hello-World/pull/42");
         assert!(!target.use_cache);
     }
+}
+
+#[test]
+fn csv_first_row_header_option_composes_with_github_cache_bypass() {
+    let CliParseOutcome::Run(StartupRequest {
+        target: StartupTarget::GitHubPr(target),
+        file_open_options,
+    }) = parse_cli([
+        "chilla",
+        "--csv-first-row-header=false",
+        "--no-github-diff-cache",
+        "https://github.com/octocat/Hello-World/pull/42",
+    ])
+    .expect("GitHub startup with CSV header option")
+    else {
+        panic!("expected GitHub startup request");
+    };
+
+    assert!(!target.use_cache);
+    assert_eq!(
+        file_open_options,
+        FileOpenOptions {
+            csv_first_row_as_header: false,
+        }
+    );
 }
 
 #[test]
@@ -142,8 +174,10 @@ fn parses_commit_and_branch_shorthand_with_global_options() {
                     flag,
                 ],
             ] {
-                let CliParseOutcome::Run(StartupTarget::GitHubPr(target)) =
-                    parse_cli(arguments).expect("diff shorthand")
+                let CliParseOutcome::Run(StartupRequest {
+                    target: StartupTarget::GitHubPr(target),
+                    ..
+                }) = parse_cli(arguments).expect("diff shorthand")
                 else {
                     panic!("expected GitHub target");
                 };
@@ -214,7 +248,10 @@ fn parses_bare_startup_as_current_directory() {
     let outcome = parse_cli(["chilla"]).expect("parse bare startup");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::CurrentDirectory(path)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::CurrentDirectory(path),
+            ..
+        }) => {
             assert_eq!(path, current_directory);
         }
         _ => panic!("unexpected parse outcome"),
@@ -246,6 +283,195 @@ fn verbose_help_is_information_only_and_documents_log_path() {
     assert!(help.contains("~/Library/Logs/chilla/chilla-verbose-<pid>[-<collision>].log"));
 }
 
+fn startup_request(outcome: CliParseOutcome) -> StartupRequest {
+    let CliParseOutcome::Run(request) = outcome else {
+        panic!("expected startup request");
+    };
+    request
+}
+
+#[test]
+fn csv_first_row_header_option_defaults_and_last_valid_value_wins() {
+    let default_request = startup_request(parse_cli(["chilla"]).expect("default startup"));
+    assert_eq!(
+        default_request.file_open_options,
+        FileOpenOptions::default()
+    );
+
+    for (arguments, expected) in [
+        (
+            vec!["chilla", "--csv-first-row-header=true"],
+            FileOpenOptions {
+                csv_first_row_as_header: true,
+            },
+        ),
+        (
+            vec![
+                "chilla",
+                "--csv-first-row-header=true",
+                "--csv-first-row-header=false",
+            ],
+            FileOpenOptions {
+                csv_first_row_as_header: false,
+            },
+        ),
+        (
+            vec![
+                "chilla",
+                "--csv-first-row-header=false",
+                "--csv-first-row-header=true",
+            ],
+            FileOpenOptions {
+                csv_first_row_as_header: true,
+            },
+        ),
+    ] {
+        let request = startup_request(parse_cli(arguments).expect("valid CSV header option"));
+        assert_eq!(request.file_open_options, expected);
+        assert!(matches!(request.target, StartupTarget::CurrentDirectory(_)));
+    }
+}
+
+#[test]
+fn csv_first_row_header_option_is_removed_before_target_classification() {
+    let test_dir = TestDir::new();
+    let file_path = test_dir.path().join("report.csv");
+    fs::write(&file_path, "first,second\n1,2\n").expect("write CSV fixture");
+
+    let request = startup_request(
+        parse_cli([
+            "chilla",
+            "--verbose",
+            file_path.to_str().expect("UTF-8 path"),
+            "--csv-first-row-header=true",
+        ])
+        .expect("interspersed CSV header option"),
+    );
+
+    assert_eq!(
+        request.file_open_options,
+        FileOpenOptions {
+            csv_first_row_as_header: true,
+        }
+    );
+    assert!(matches!(request.target, StartupTarget::File(_)));
+}
+
+#[test]
+fn csv_first_row_header_option_survives_startup_target_matrix() {
+    let test_dir = TestDir::new();
+    let text_path = test_dir.path().join("report.txt");
+    let first_path = test_dir.path().join("first.csv");
+    let second_path = test_dir.path().join("second.csv");
+    fs::write(&text_path, "plain text").expect("write non-CSV fixture");
+    fs::write(&first_path, "first\n").expect("write first fixture");
+    fs::write(&second_path, "second\n").expect("write second fixture");
+
+    let directory = startup_request(
+        parse_cli([
+            "chilla",
+            "--csv-first-row-header=true",
+            test_dir.path().to_str().expect("directory path"),
+        ])
+        .expect("directory startup"),
+    );
+    assert!(directory.file_open_options.csv_first_row_as_header);
+    assert!(matches!(directory.target, StartupTarget::Directory(_)));
+
+    let non_csv_file = startup_request(
+        parse_cli([
+            "chilla",
+            text_path.to_str().expect("text path"),
+            "--csv-first-row-header=false",
+        ])
+        .expect("non-CSV file startup"),
+    );
+    assert!(!non_csv_file.file_open_options.csv_first_row_as_header);
+    assert!(matches!(non_csv_file.target, StartupTarget::File(_)));
+
+    let file_set = startup_request(
+        parse_cli([
+            "chilla",
+            "--csv-first-row-header=true",
+            first_path.to_str().expect("first path"),
+            second_path.to_str().expect("second path"),
+        ])
+        .expect("file-set startup"),
+    );
+    assert!(file_set.file_open_options.csv_first_row_as_header);
+    assert!(matches!(file_set.target, StartupTarget::FileSet(_)));
+
+    run_git(test_dir.path(), &["init"]);
+    run_git(
+        test_dir.path(),
+        &["config", "user.email", "test@example.invalid"],
+    );
+    run_git(test_dir.path(), &["config", "user.name", "Test User"]);
+    run_git(test_dir.path(), &["add", "."]);
+    run_git(test_dir.path(), &["commit", "-m", "initial"]);
+    let commit = git_output(test_dir.path(), &["rev-parse", "HEAD"])
+        .trim()
+        .to_string();
+    let local_git = startup_request(
+        parse_cli([
+            "chilla",
+            "--verbose",
+            "--csv-first-row-header=false",
+            test_dir.path().to_str().expect("repository path"),
+            &commit,
+        ])
+        .expect("local Git startup"),
+    );
+    assert!(!local_git.file_open_options.csv_first_row_as_header);
+    assert!(matches!(local_git.target, StartupTarget::GitDiff(_)));
+
+    let github = startup_request(
+        parse_cli([
+            "chilla",
+            "--verbose",
+            "--no-github-diff-cache",
+            "https://github.com/octocat/Hello-World/pull/42",
+            "--csv-first-row-header=true",
+        ])
+        .expect("GitHub startup"),
+    );
+    assert!(github.file_open_options.csv_first_row_as_header);
+    let StartupTarget::GitHubPr(target) = github.target else {
+        panic!("expected GitHub startup target");
+    };
+    assert!(!target.use_cache);
+}
+
+#[test]
+fn csv_first_row_header_option_rejects_malformed_values_before_information_exit() {
+    for arguments in [
+        vec!["chilla", "--csv-first-row-header"],
+        vec!["chilla", "--csv-first-row-header="],
+        vec!["chilla", "--csv-first-row-header=True"],
+        vec!["chilla", "--csv-first-row-header=TRUE"],
+        vec!["chilla", "--csv-first-row-header=1"],
+        vec!["chilla", "--csv-first-row-header=false=true"],
+        vec!["chilla", "--csv-first-row-header", "true"],
+        vec!["chilla", "--csv-first-row-header=invalid", "--help"],
+        vec![
+            "chilla",
+            "--csv-first-row-header=true",
+            "--csv-first-row-header=bad",
+        ],
+    ] {
+        let error = parse_cli(arguments.clone()).expect_err("malformed CSV header option");
+        assert_eq!(error.exit_code(), 2, "unexpected exit for {arguments:?}");
+        assert!(error.to_string().contains("--csv-first-row-header"));
+    }
+
+    for information_flag in ["--help", "--version"] {
+        assert!(matches!(
+            normalize_cli(["chilla", "--csv-first-row-header=true", information_flag]),
+            CliNormalizationOutcome::Information(_)
+        ));
+    }
+}
+
 #[test]
 fn verbose_parse_failure_retains_enabled_option_and_exit_code() {
     let outcome = normalize_cli(["chilla", "--verbose", "--unknown"]);
@@ -265,7 +491,10 @@ fn verbose_composes_with_bare_startup() {
     let outcome = parse_cli(["chilla", "--verbose"]).expect("parse verbose bare startup");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::CurrentDirectory(path)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::CurrentDirectory(path),
+            ..
+        }) => {
             assert_eq!(path, current_directory);
         }
         _ => panic!("unexpected parse outcome"),
@@ -280,7 +509,10 @@ fn parses_directory_startup_targets() {
         .expect("parse directory");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::Directory(path)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::Directory(path),
+            ..
+        }) => {
             assert_eq!(
                 path,
                 test_dir.path().canonicalize().expect("canonical path")
@@ -302,7 +534,10 @@ fn verbose_composes_with_directory_startup() {
 
     assert!(matches!(
         outcome,
-        CliParseOutcome::Run(StartupTarget::Directory(_))
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::Directory(_),
+            ..
+        })
     ));
 }
 
@@ -316,7 +551,10 @@ fn parses_file_startup_targets() {
         parse_cli(["chilla", file_path.to_str().expect("utf-8 path")]).expect("parse file");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::File(path)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::File(path),
+            ..
+        }) => {
             assert_eq!(path, file_path.canonicalize().expect("canonical path"));
         }
         _ => panic!("unexpected parse outcome"),
@@ -338,7 +576,10 @@ fn verbose_composes_with_file_startup() {
 
     assert!(matches!(
         outcome,
-        CliParseOutcome::Run(StartupTarget::File(_))
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::File(_),
+            ..
+        })
     ));
 }
 
@@ -351,7 +592,10 @@ fn parses_github_pr_files_tab_startup_target() {
     .expect("parse GitHub PR files tab URL");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::GitHubPr(target),
+            ..
+        }) => {
             assert_eq!(target.owner, "tacogips");
             assert_eq!(target.repo, "rielflow");
             assert_eq!(target.source, GitHubDiffSource::PullRequest { number: 44 });
@@ -368,7 +612,10 @@ fn parses_github_pr_trailing_slash_startup_target() {
         .expect("parse GitHub PR URL with trailing slash");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::GitHubPr(target),
+            ..
+        }) => {
             assert_eq!(target.owner, "tacogips");
             assert_eq!(target.repo, "rielflow");
             assert_eq!(target.source, GitHubDiffSource::PullRequest { number: 44 });
@@ -389,7 +636,10 @@ fn parses_no_pr_diff_cache_startup_option() {
     .expect("parse GitHub PR no-cache startup");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::GitHubPr(target),
+            ..
+        }) => {
             assert_eq!(target.owner, "tacogips");
             assert_eq!(target.repo, "rielflow");
             assert_eq!(target.source, GitHubDiffSource::PullRequest { number: 44 });
@@ -411,7 +661,10 @@ fn verbose_composes_with_github_cache_bypass() {
     .expect("parse verbose GitHub no-cache startup");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::GitHubPr(target),
+            ..
+        }) => {
             assert!(!target.use_cache);
         }
         _ => panic!("unexpected parse outcome"),
@@ -427,7 +680,10 @@ fn parses_github_commit_startup_target() {
     .expect("parse GitHub commit URL");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::GitHubPr(target),
+            ..
+        }) => {
             assert_eq!(target.owner, "tacogips");
             assert_eq!(target.repo, "chilla");
             assert_eq!(
@@ -456,7 +712,10 @@ fn parses_github_compare_startup_target_with_slash_refs() {
     .expect("parse GitHub compare URL");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::GitHubPr(target)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::GitHubPr(target),
+            ..
+        }) => {
             assert_eq!(target.owner, "tacogips");
             assert_eq!(target.repo, "chilla");
             assert_eq!(
@@ -501,8 +760,12 @@ fn parses_git_commit_startup_pair() {
     .expect("parse verbose Git commit startup");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::GitDiff(target)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::GitDiff(target),
+            file_open_options,
+        }) => {
             assert_eq!(target.source, LocalGitDiffSource::Commit { commit });
+            assert_eq!(file_open_options, FileOpenOptions::default());
         }
         _ => panic!("unexpected parse outcome"),
     }
@@ -529,7 +792,10 @@ fn parses_git_range_startup_pair() {
     .expect("parse Git range startup");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::GitDiff(target)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::GitDiff(target),
+            ..
+        }) => {
             assert_eq!(
                 target.source,
                 LocalGitDiffSource::Range {
@@ -561,7 +827,10 @@ fn parses_multi_file_startup_targets() {
     .expect("parse multi file startup");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::FileSet(paths)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::FileSet(paths),
+            ..
+        }) => {
             assert_eq!(paths, vec![first_canon, second_canon]);
         }
         _ => panic!("unexpected parse outcome"),
@@ -586,7 +855,10 @@ fn verbose_composes_with_multi_file_startup_when_interspersed() {
 
     assert!(matches!(
         outcome,
-        CliParseOutcome::Run(StartupTarget::FileSet(_))
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::FileSet(_),
+            ..
+        })
     ));
 }
 
@@ -618,7 +890,10 @@ fn verbose_multi_file_canonicalization_success_logs_canonical_paths() {
 
     assert!(matches!(
         outcome.expect("parse relative multi-file startup"),
-        CliParseOutcome::Run(StartupTarget::FileSet(_))
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::FileSet(_),
+            ..
+        })
     ));
     let canonicalization_lines = lines
         .iter()
@@ -676,7 +951,10 @@ fn multi_file_startup_duplicate_paths_fall_back_to_single_file() {
     .expect("duplicate paths");
 
     match outcome {
-        CliParseOutcome::Run(StartupTarget::File(path)) => {
+        CliParseOutcome::Run(StartupRequest {
+            target: StartupTarget::File(path),
+            ..
+        }) => {
             assert_eq!(path, single.canonicalize().expect("canonical"));
         }
         _ => panic!("unexpected parse outcome"),

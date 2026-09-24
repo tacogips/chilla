@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "solid-js/web";
+import { createSignal } from "solid-js";
 import { PdfFilePreviewPane } from "./PdfFilePreviewPane";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -45,6 +46,30 @@ describe("PdfFilePreviewPane", () => {
     );
     expect(new URL(frame?.src ?? "").searchParams.get("revision")).toBe(
       "2026-08-17T01:02:03Z",
+    );
+  });
+
+  it("refreshes the iframe when the modification marker is unchanged", () => {
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing test root");
+    const [generation, setGeneration] = createSignal(0);
+    dispose = render(
+      () => (
+        <PdfFilePreviewPane
+          fileName="report.pdf"
+          path="/workspace/report.pdf"
+          revision="unchanged"
+          localResourceGeneration={generation()}
+        />
+      ),
+      root,
+    );
+    const frame = root.querySelector<HTMLIFrameElement>("iframe");
+    const firstUrl = frame?.src;
+    setGeneration(1);
+    expect(frame?.src).not.toBe(firstUrl);
+    expect(new URL(frame?.src ?? "").searchParams.get("chilla_refresh")).toBe(
+      "1",
     );
   });
 });

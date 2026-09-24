@@ -29,6 +29,12 @@ export interface DocumentSnapshot {
 export interface StartupContext {
   readonly initial_mode: WorkspaceMode;
   readonly browser_root: BrowserRoot;
+  readonly file_open_options: FileOpenOptions;
+}
+
+/** Options that affect the initially requested representation of an opened file. */
+export interface FileOpenOptions {
+  readonly csv_first_row_as_header?: boolean;
 }
 
 export type GitHubDiffSource =
@@ -219,6 +225,7 @@ export type FilePreview =
       readonly truncated: boolean;
       readonly formatted_available: boolean;
       readonly parse_error: string | null;
+      readonly first_row_as_header: boolean;
       readonly size_bytes: number;
       readonly last_modified: string;
     }
@@ -432,6 +439,56 @@ function readBooleanProperty(
   return null;
 }
 
+function normalizeFileOpenOptions(
+  payload: unknown,
+  context: string,
+): FileOpenOptions {
+  if (payload === null || payload === undefined) {
+    return { csv_first_row_as_header: false };
+  }
+
+  const options = readStringRecord(payload);
+  if (options === null) {
+    throw new Error(`${context} must be an object or null`);
+  }
+
+  const optionKeys = Object.keys(options);
+  if (optionKeys.some((key) => key !== "csv_first_row_as_header")) {
+    throw new Error(`${context} contains an unknown option`);
+  }
+
+  const firstRowAsHeader = options["csv_first_row_as_header"];
+  if (firstRowAsHeader === undefined) {
+    return { csv_first_row_as_header: false };
+  }
+  if (typeof firstRowAsHeader !== "boolean") {
+    throw new Error(`${context}.csv_first_row_as_header must be a boolean`);
+  }
+
+  return { csv_first_row_as_header: firstRowAsHeader };
+}
+
+function normalizeFilePreviewPayload(payload: unknown): FilePreview {
+  const preview = readStringRecord(payload);
+  if (preview === null) {
+    throw new Error("Invalid file preview payload");
+  }
+
+  if (preview["kind"] !== "csv") {
+    return payload as FilePreview;
+  }
+
+  const firstRowAsHeader = preview["first_row_as_header"];
+  if (firstRowAsHeader !== undefined && typeof firstRowAsHeader !== "boolean") {
+    throw new Error("CSV preview first_row_as_header must be a boolean");
+  }
+
+  return {
+    ...preview,
+    first_row_as_header: firstRowAsHeader ?? false,
+  } as FilePreview;
+}
+
 function normalizeGitHubDiffSourcePayload(
   payload: unknown,
   context: string,
@@ -643,6 +700,13 @@ export function normalizeStartupContextPayload(
     throw new Error("Startup context is missing browser root");
   }
 
+  const fileOpenOptions = normalizeFileOpenOptions(
+    "file_open_options" in root
+      ? root["file_open_options"]
+      : root["fileOpenOptions"],
+    "Startup file open options",
+  );
+
   const kind = readStringProperty(browserRootRaw, "kind");
   if (kind === "directory") {
     const selectedFilePath = readOptionalStringProperty(
@@ -666,6 +730,7 @@ export function normalizeStartupContextPayload(
 
     return {
       initial_mode: initialMode,
+      file_open_options: fileOpenOptions,
       browser_root: {
         kind: "directory",
         current_directory_path: currentDirectoryPath,
@@ -689,6 +754,7 @@ export function normalizeStartupContextPayload(
 
     return {
       initial_mode: initialMode,
+      file_open_options: fileOpenOptions,
       browser_root: {
         kind: "directory",
         current_directory_path: currentDirectoryPath,
@@ -731,6 +797,7 @@ export function normalizeStartupContextPayload(
 
     return {
       initial_mode: initialMode,
+      file_open_options: fileOpenOptions,
       browser_root: {
         kind: "explicit_file_set",
         file_count: fileCount,
@@ -769,6 +836,7 @@ export function normalizeStartupContextPayload(
 
     return {
       initial_mode: initialMode,
+      file_open_options: fileOpenOptions,
       browser_root: {
         kind: "github_pr",
         target: {
@@ -800,6 +868,7 @@ export function normalizeStartupContextPayload(
 
     return {
       initial_mode: initialMode,
+      file_open_options: fileOpenOptions,
       browser_root: {
         kind: "git_diff",
         target: {
@@ -1223,9 +1292,15 @@ export async function listDirectory(
   }
 }
 
-export async function openFilePreview(path: string): Promise<FilePreview> {
+export async function openFilePreview(
+  path: string,
+  options?: FileOpenOptions,
+): Promise<FilePreview> {
   try {
-    return await invoke<FilePreview>("open_file_preview", { path });
+    const input = options === undefined ? { path } : { path, options };
+    return normalizeFilePreviewPayload(
+      await invoke<unknown>("open_file_preview", input),
+    );
   } catch (error: unknown) {
     throw new Error(toErrorMessage(error));
   }

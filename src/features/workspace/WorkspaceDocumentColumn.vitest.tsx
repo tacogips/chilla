@@ -36,10 +36,12 @@ describe("WorkspaceDocumentColumn source mode", () => {
           filePreview={preview()}
           epubToc={[]}
           csvPreview={null}
+          csvFirstRowAsHeader={false}
           csvPaneMode="raw"
           videoAutoplayRequestId={0}
           hasOpenDocument={true}
           onMarkdownEditorInput={() => undefined}
+          onCsvFirstRowAsHeaderChange={() => undefined}
           onRelocateEpub={() => undefined}
         />
       ),
@@ -73,5 +75,64 @@ describe("WorkspaceDocumentColumn source mode", () => {
     expect(
       root.querySelector(".preview__zoom-surface.markdown-body"),
     ).not.toBeNull();
+  });
+
+  it("forwards the controlled CSV header setting without affecting other previews", () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const [firstRowAsHeader, setFirstRowAsHeader] = createSignal(false);
+    const changes: boolean[] = [];
+    const csvPreview: Extract<FilePreview, { kind: "csv" }> = {
+      kind: "csv",
+      path: "/tmp/sample.csv",
+      file_name: "sample.csv",
+      mime_type: "text/csv",
+      raw_html: "<pre>name</pre>",
+      rows: [["name"], ["Ada"]],
+      column_count: 1,
+      displayed_row_count: 2,
+      total_row_count: 2,
+      row_count_status: "complete",
+      truncated: false,
+      formatted_available: true,
+      parse_error: null,
+      first_row_as_header: false,
+      size_bytes: 9,
+      last_modified: "now",
+    };
+    dispose = render(
+      () => (
+        <WorkspaceDocumentColumn
+          colorScheme="dark"
+          csvFirstRowAsHeader={firstRowAsHeader()}
+          csvPaneMode="formatted"
+          csvPreview={csvPreview}
+          epubToc={[]}
+          filePreview={csvPreview}
+          hasOpenDocument={true}
+          markdownDoc={null}
+          markdownEditorBuffer=""
+          markdownIsDirty={false}
+          markdownPane="preview"
+          selection={{ lineStart: null, anchorId: null }}
+          videoAutoplayRequestId={0}
+          onCsvFirstRowAsHeaderChange={(value) => {
+            changes.push(value);
+            setFirstRowAsHeader(value);
+          }}
+          onMarkdownEditorInput={() => undefined}
+          onRelocateEpub={() => undefined}
+        />
+      ),
+      root,
+    );
+
+    const checkbox = root.querySelector<HTMLInputElement>(
+      '[aria-label="Use first row as header"]',
+    );
+    if (checkbox === null) throw new Error("missing CSV header control");
+    checkbox.click();
+    expect(changes).toEqual([true]);
+    expect(checkbox.checked).toBe(true);
   });
 });
