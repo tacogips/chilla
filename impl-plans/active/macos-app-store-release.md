@@ -3,7 +3,7 @@
 **Status**: In Progress
 **Design Reference**: `design-docs/specs/design-macos-dmg-release.md#mac-app-store-distribution`
 **Created**: 2026-09-09
-**Last Updated**: 2026-09-09
+**Last Updated**: 2026-09-26
 
 ## Design Document Reference
 
@@ -215,3 +215,23 @@ submission validation.
 **Notes**: Screenshot source files remain local in Downloads and are not tracked
 in Git. A temporary capture that exposed unrelated desktop windows was deleted
 before upload; only Chilla-only captures were retained and uploaded.
+
+### Session: 2026-09-26 (0.3.4 Submission Attempt)
+
+**Tasks Completed**: Confirmed App Store Connect has macOS version 0.3.4 in
+Prepare for Submission, with processed build 3 marked valid and attached.
+Verified the listing has three desktop screenshots, description, support URL,
+and review contact fields. Confirmed build 3 has no outstanding export compliance
+declaration. Committed and pushed the matching App Store bundle version.
+
+**Tasks In Progress**: TASK-003 App Privacy disclosure and TASK-004 review
+submission.
+
+**Blockers**: Apple rejected the review submission because answers about data
+collection and use have not been published. The owner must provide the accurate
+App Privacy declaration. Brave computer control is unavailable in this session,
+so the required App Store Connect form cannot yet be completed through Brave.
+
+**Notes**: The redundant local package rebuild reached successful app signing
+but stalled during installer package creation and was stopped. The already
+processed App Store build 3 remains valid and attached; no new upload is needed.
