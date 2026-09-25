@@ -64,7 +64,7 @@ record, listing metadata, privacy answers, screenshots, review information
 - [x] review contact and notes are complete
 - [x] app record uses the exact bundle identifier and product identity
 - [x] one to ten compliant 16:10 macOS screenshots are uploaded
-- [ ] privacy and encryption answers match shipped behavior
+- [x] privacy and encryption answers match shipped behavior
 
 ### TASK-004: Upload, Processing, And Submission
 
@@ -77,8 +77,8 @@ record, listing metadata, privacy answers, screenshots, review information
 - [x] package validation and upload succeed
 - [x] build finishes processing without blocking issues
 - [x] processed build is attached to the 0.2.0 macOS version
-- [ ] final metadata validation passes
-- [ ] version is submitted with the owner-selected release mode
+- [x] final metadata validation passes
+- [x] version is submitted with the owner-selected release mode
 
 ## Module Status
 
@@ -104,7 +104,7 @@ record, listing metadata, privacy answers, screenshots, review information
 - [ ] no secret/profile material appears in Git history or release logs
 - [x] signed sandboxed 0.2.0 app and package pass local validation
 - [x] App Store Connect accepts and processes the build
-- [ ] macOS version is submitted to App Review
+- [x] macOS version is submitted to App Review
 
 ## Progress Log
 
@@ -235,3 +235,19 @@ so the required App Store Connect form cannot yet be completed through Brave.
 **Notes**: The redundant local package rebuild reached successful app signing
 but stalled during installer package creation and was stopped. The already
 processed App Store build 3 remains valid and attached; no new upload is needed.
+
+### Session: 2026-09-26 (0.3.4 Submitted For Review)
+
+**Tasks Completed**: Published the owner-approved `Data Not Collected` App
+Privacy response. Submitted macOS version 0.3.4 with valid build 3 to App Review
+and independently verified both the version and review submission are in
+`WAITING_FOR_REVIEW`.
+
+**Tasks In Progress**: TASK-002 installed-build runtime QA and monitoring the
+App Review result.
+
+**Blockers**: App Store publication now depends on Apple review approval. The
+configured release mode remains manual release after approval.
+
+**Notes**: No additional package upload was needed. The App Store Connect API
+confirmed build 3 remains valid and attached to version 0.3.4.
