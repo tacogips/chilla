@@ -119,14 +119,50 @@ fn shared_language_matrix_preserves_original_html_in_both_themes() {
 #[test]
 fn packed_syntaxes_preserve_multiline_and_embedded_contexts() {
     let mut builder = SyntaxSet::load_defaults_newlines().into_builder();
-    builder.add(
-        SyntaxDefinition::load_from_str(
+    for (source, name) in [
+        (
             include_str!("../../syntaxes/TOML.sublime-syntax"),
-            true,
-            Some("TOML.sublime-syntax"),
-        )
-        .unwrap(),
-    );
+            "TOML.sublime-syntax",
+        ),
+        (
+            include_str!("../../syntaxes/Nix.sublime-syntax"),
+            "Nix.sublime-syntax",
+        ),
+        (
+            include_str!("../../syntaxes/Swift.sublime-syntax"),
+            "Swift.sublime-syntax",
+        ),
+        (
+            include_str!("../../syntaxes/Dockerfile.sublime-syntax"),
+            "Dockerfile.sublime-syntax",
+        ),
+        (
+            include_str!("../../syntaxes/Zig.sublime-syntax"),
+            "Zig.sublime-syntax",
+        ),
+        (
+            include_str!("../../syntaxes/Protobuf.sublime-syntax"),
+            "Protobuf.sublime-syntax",
+        ),
+        (
+            include_str!("../../syntaxes/Kotlin.sublime-syntax"),
+            "Kotlin.sublime-syntax",
+        ),
+        (
+            include_str!("../../syntaxes/INI.sublime-syntax"),
+            "INI.sublime-syntax",
+        ),
+        (
+            include_str!("../../syntaxes/HCL.sublime-syntax"),
+            "HCL.sublime-syntax",
+        ),
+        (
+            include_str!("../../syntaxes/GraphQL.sublime-syntax"),
+            "GraphQL.sublime-syntax",
+        ),
+    ] {
+        builder.add(SyntaxDefinition::load_from_str(source, true, Some(name)).unwrap());
+    }
     let original = builder.build();
     assert_eq!(syntax_set().syntaxes().len(), original.syntaxes().len());
     let cases = [

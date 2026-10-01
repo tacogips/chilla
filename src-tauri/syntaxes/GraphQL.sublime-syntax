@@ -1,0 +1,72 @@
+%YAML 1.2
+---
+# http://www.sublimetext.com/docs/3/syntax.html
+name: GraphQL
+
+file_extensions:
+  - graphql
+  - gql
+  - graphqls
+
+scope: source.graphql
+
+contexts:
+  main:
+    - include: comments
+    - include: strings
+    - include: keywords
+    - include: constants
+    - include: variables
+    - include: directives
+    - include: numbers
+    - include: operators
+
+  comments:
+    - match: '#.*$'
+      scope: comment.line.number-sign.graphql
+
+  keywords:
+    - match: |-
+        (?x)\b(
+          query|mutation|subscription|fragment|on|type|interface|union|enum
+          |input|schema|scalar|directive|extend|implements|repeatable
+        )\b
+      scope: keyword.control.graphql
+
+  constants:
+    - match: '\b(true|false|null)\b'
+      scope: constant.language.graphql
+
+  variables:
+    - match: '\$[A-Za-z_][A-Za-z0-9_]*'
+      scope: variable.parameter.graphql
+
+  directives:
+    - match: '@[A-Za-z_][A-Za-z0-9_]*'
+      scope: entity.name.function.directive.graphql
+
+  numbers:
+    - match: '\b[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?\b'
+      scope: constant.numeric.graphql
+
+  operators:
+    - match: '\.\.\.|[!:=|&]'
+      scope: keyword.operator.graphql
+
+  strings:
+    - match: '"""'
+      scope: punctuation.definition.string.begin.graphql
+      push:
+        - meta_scope: string.quoted.triple.graphql
+        - match: '"""'
+          scope: punctuation.definition.string.end.graphql
+          pop: true
+    - match: '"'
+      scope: punctuation.definition.string.begin.graphql
+      push:
+        - meta_scope: string.quoted.double.graphql
+        - match: '\\.'
+          scope: constant.character.escape.graphql
+        - match: '"'
+          scope: punctuation.definition.string.end.graphql
+          pop: true

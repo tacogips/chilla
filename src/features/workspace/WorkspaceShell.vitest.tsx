@@ -29,7 +29,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     return undefined;
   },
   convertFileSrc(path: string) {
-    return `asset://${path}`;
+    return `asset://localhost/${path}`;
   },
 }));
 vi.mock("../../lib/tauri/directory-search", () => ({
@@ -270,6 +270,49 @@ function textPreview(): Extract<FilePreview, { kind: "text" }> {
     html: '<section class="file-preview"><pre>keep</pre></section>',
     size_bytes: 4,
     last_modified: "2026-08-17T00:00:00Z",
+    structured_format: null,
+    formatted_html: null,
+    format_notice: null,
+  };
+}
+
+function jsonTextPreview(
+  overrides: Partial<Extract<FilePreview, { kind: "text" }>> = {},
+): Extract<FilePreview, { kind: "text" }> {
+  return {
+    kind: "text",
+    path: "/workspace/data.json",
+    file_name: "data.json",
+    mime_type: "application/json",
+    file_type: "JSON",
+    html: '<section class="file-preview file-preview--text"><pre>{"a":1}</pre></section>',
+    size_bytes: 8,
+    last_modified: "2026-08-17T00:00:00Z",
+    structured_format: "json",
+    formatted_html:
+      '<section class="file-preview file-preview--text"><pre>{\n  "a": 1\n}</pre></section>',
+    format_notice: null,
+    ...overrides,
+  };
+}
+
+function htmlTextPreview(
+  overrides: Partial<Extract<FilePreview, { kind: "text" }>> = {},
+): Extract<FilePreview, { kind: "text" }> {
+  return {
+    kind: "text",
+    path: "/workspace/site/index.html",
+    file_name: "index.html",
+    mime_type: "text/html",
+    file_type: "HTML",
+    html: '<section class="file-preview file-preview--text"><pre>&lt;html&gt;&lt;/html&gt;</pre></section>',
+    size_bytes: 13,
+    last_modified: "2026-08-17T00:00:00Z",
+    structured_format: "html",
+    formatted_html:
+      '<section class="file-preview file-preview--text"><pre>&lt;html&gt;\n&lt;/html&gt;</pre></section>',
+    format_notice: null,
+    ...overrides,
   };
 }
 
@@ -1765,6 +1808,344 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     });
   });
 
+  it("switches available JSON raw and formatted modes with 1 and 2", async () => {
+    window.localStorage.clear();
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/data.json"),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/data.json"),
+    );
+    documentMocks.openFilePreview.mockResolvedValue(jsonTextPreview());
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expectActiveMode("Formatted JSON");
+      expect(document.body.textContent).toContain('{\n  "a": 1\n}');
+    });
+
+    expect(modeButton("Raw JSON source").title).toBe(
+      "Raw (1; Shift+P toggles; Shift+F toggles format)",
+    );
+    expect(modeButton("Formatted JSON").title).toBe(
+      "Formatted (2; Shift+P toggles; Shift+F toggles format)",
+    );
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "1" }));
+    await waitFor(() => {
+      expectActiveMode("Raw JSON source");
+      expect(document.body.textContent).toContain('{"a":1}');
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "2" }));
+    await waitFor(() => {
+      expectActiveMode("Formatted JSON");
+      expect(document.body.textContent).toContain('{\n  "a": 1\n}');
+    });
+  });
+
+  it("disables Formatted for structured data with no formatted output and shows the notice as its title", async () => {
+    window.localStorage.clear();
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/data.json"),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/data.json"),
+    );
+    documentMocks.openFilePreview.mockResolvedValue(
+      jsonTextPreview({
+        formatted_html: null,
+        format_notice: "Invalid JSON at line 1, column 3",
+      }),
+    );
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expectActiveMode("Raw JSON source");
+      const formattedButton = modeButton("Formatted JSON");
+      expect(formattedButton.disabled).toBe(true);
+      expect(formattedButton.title).toBe("Invalid JSON at line 1, column 3");
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "2" }));
+
+    await waitFor(() => {
+      expectActiveMode("Raw JSON source");
+      expect(document.body.textContent).toContain('{"a":1}');
+    });
+  });
+
+  it("persists the structured data presentation preference across a preview reload", async () => {
+    window.localStorage.clear();
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/data.json"),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/data.json"),
+    );
+    documentMocks.openFilePreview.mockResolvedValue(jsonTextPreview());
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expectActiveMode("Formatted JSON");
+    });
+
+    modeButton("Raw JSON source").click();
+    await waitFor(() => {
+      expectActiveMode("Raw JSON source");
+    });
+
+    modeButton("Refresh workspace").click();
+
+    await waitFor(() => {
+      expectActiveMode("Raw JSON source");
+    });
+
+    expect(
+      window.localStorage.getItem("chilla.structuredDataPresentationMode"),
+    ).toBe("raw");
+  });
+
+  it("flips JSON formatted/raw with Shift+F and persists the preference", async () => {
+    window.localStorage.clear();
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/data.json"),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/data.json"),
+    );
+    documentMocks.openFilePreview.mockResolvedValue(jsonTextPreview());
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expectActiveMode("Formatted JSON");
+    });
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "F", shiftKey: true }),
+    );
+
+    await waitFor(() => {
+      expectActiveMode("Raw JSON source");
+      expect(document.body.textContent).toContain('{"a":1}');
+    });
+
+    expect(
+      window.localStorage.getItem("chilla.structuredDataPresentationMode"),
+    ).toBe("raw");
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "F", shiftKey: true }),
+    );
+
+    await waitFor(() => {
+      expectActiveMode("Formatted JSON");
+    });
+    expect(
+      window.localStorage.getItem("chilla.structuredDataPresentationMode"),
+    ).toBe("formatted");
+  });
+
+  it("does not flip formatted/raw with Shift+F when no structured preview is active", async () => {
+    window.localStorage.clear();
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/note.md"),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/note.md"),
+    );
+    documentMocks.openDocument.mockResolvedValue(markdownSnapshot());
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expectActiveMode("Markdown preview");
+    });
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "F", shiftKey: true }),
+    );
+
+    await waitFor(() => {
+      expectActiveMode("Markdown preview");
+    });
+    expect(
+      window.localStorage.getItem("chilla.structuredDataPresentationMode"),
+    ).toBeNull();
+  });
+
+  it("toggles syntax highlighting with Shift+C, reflecting aria-pressed and persisting across preview switches", async () => {
+    window.localStorage.clear();
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/data.json"),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/data.json"),
+    );
+    documentMocks.openFilePreview.mockResolvedValue(jsonTextPreview());
+
+    dispose = renderWorkspace();
+
+    const toggle = await waitForElement<HTMLButtonElement>(
+      '[aria-label="Toggle syntax highlighting"]',
+    );
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(document.querySelector(".workspace")?.classList).not.toContain(
+      "workspace--syntax-off",
+    );
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "C", shiftKey: true }),
+    );
+
+    await waitFor(() => {
+      expect(toggle.getAttribute("aria-pressed")).toBe("false");
+      expect(document.querySelector(".workspace")?.classList).toContain(
+        "workspace--syntax-off",
+      );
+    });
+    expect(
+      window.localStorage.getItem("chilla.syntaxHighlightingEnabled"),
+    ).toBe("off");
+
+    modeButton("Refresh workspace").click();
+
+    await waitFor(() => {
+      expect(
+        document
+          .querySelector('[aria-label="Toggle syntax highlighting"]')
+          ?.getAttribute("aria-pressed"),
+      ).toBe("false");
+      expect(document.querySelector(".workspace")?.classList).toContain(
+        "workspace--syntax-off",
+      );
+    });
+  });
+
+  it("switches an HTML preview between Raw source and a sandboxed rendered iframe with 1 and 2", async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem("chilla.structuredDataPresentationMode", "raw");
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/site/index.html"),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/site/index.html"),
+    );
+    documentMocks.openFilePreview.mockResolvedValue(htmlTextPreview());
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expect(document.querySelector('[aria-label="Data view"]')).toBeNull();
+      expectActiveMode("Raw HTML source");
+      expect(document.body.textContent).toContain("<html></html>");
+      expect(document.querySelector("iframe.preview-html-frame")).toBeNull();
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "2" }));
+
+    await waitFor(() => {
+      expectActiveMode("HTML preview");
+      const iframe = document.querySelector<HTMLIFrameElement>(
+        "iframe.preview-html-frame",
+      );
+      expect(iframe).not.toBeNull();
+      expect(iframe?.getAttribute("sandbox")).toBe("");
+      expect(iframe?.src).toContain(
+        "asset://localhost/%2Fworkspace/site/index.html",
+      );
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "1" }));
+
+    await waitFor(() => {
+      expectActiveMode("Raw HTML source");
+      expect(document.querySelector("iframe.preview-html-frame")).toBeNull();
+      expect(document.body.textContent).toContain("<html></html>");
+    });
+  });
+
+  it("Shift+F formats the HTML source and switches back to Raw when currently in Preview", async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem("chilla.structuredDataPresentationMode", "raw");
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/site/index.html"),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/site/index.html"),
+    );
+    documentMocks.openFilePreview.mockResolvedValue(htmlTextPreview());
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expectActiveMode("Raw HTML source");
+      expect(
+        document
+          .querySelector('[aria-label="Format source"]')
+          ?.getAttribute("aria-pressed"),
+      ).toBe("false");
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "2" }));
+    await waitFor(() => {
+      expectActiveMode("HTML preview");
+    });
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "F", shiftKey: true }),
+    );
+
+    await waitFor(() => {
+      expectActiveMode("Raw HTML source");
+      expect(
+        document
+          .querySelector('[aria-label="Format source"]')
+          ?.getAttribute("aria-pressed"),
+      ).toBe("true");
+      expect(document.body.textContent).toContain("<html>\n</html>");
+    });
+  });
+
+  it("persists the HTML presentation mode across a reload", async () => {
+    window.localStorage.clear();
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext("/workspace/site/index.html"),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/site/index.html"),
+    );
+    documentMocks.openFilePreview.mockResolvedValue(htmlTextPreview());
+
+    dispose = renderWorkspace();
+
+    await waitFor(() => {
+      expectActiveMode("Raw HTML source");
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "2" }));
+    await waitFor(() => {
+      expectActiveMode("HTML preview");
+    });
+
+    expect(window.localStorage.getItem("chilla.htmlPresentationMode")).toBe(
+      "preview",
+    );
+
+    modeButton("Refresh workspace").click();
+
+    await waitFor(() => {
+      expectActiveMode("HTML preview");
+      expect(
+        document.querySelector("iframe.preview-html-frame"),
+      ).not.toBeNull();
+    });
+  });
+
   it("shows direct numeric selectors in shortcut help", async () => {
     documentMocks.getStartupContext.mockResolvedValue(
       directoryStartupContext(null),
@@ -1785,14 +2166,18 @@ describe("WorkspaceShell numeric view shortcuts", () => {
 
     await waitFor(() => {
       expect(document.body.textContent).toContain(
-        "Toggle Raw / Preview (Markdown) or Raw / Formatted (CSV)",
+        "Toggle Raw / Preview (Markdown, HTML) or Raw / Formatted (CSV, TSV, JSON, JSONL, XML, CSS, JS/TS)",
       );
       expect(document.body.textContent).toContain(
-        "Select Raw view (Markdown / CSV)",
+        "Select Raw view (Markdown / HTML / CSV / TSV / JSON / JSONL / XML / CSS / JS/TS)",
       );
       expect(document.body.textContent).toContain(
-        "Select Preview view (Markdown) or Formatted view (CSV)",
+        "Select Preview view (Markdown, HTML) or Formatted view (CSV, TSV, JSON, JSONL, XML, CSS, JS/TS)",
       );
+      expect(document.body.textContent).toContain(
+        "Toggle formatting (JSON, JSONL, XML, HTML, CSS, JS/TS)",
+      );
+      expect(document.body.textContent).toContain("Toggle syntax highlighting");
       expect(document.body.textContent).toContain(", s/S");
       expect(document.body.textContent).not.toContain(", then s");
       expect(document.body.textContent).toContain(
@@ -1821,6 +2206,264 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     });
   });
 
+  it.each(["video", "audio"] as const)(
+    "routes focused %s seeking through workspace keymaps and preserves file-tree J/K",
+    async (kind) => {
+      const path =
+        kind === "video" ? "/workspace/demo.mp4" : "/workspace/demo.mp3";
+      documentMocks.getStartupContext.mockResolvedValue(
+        directoryStartupContext(path),
+      );
+      documentMocks.listDirectory.mockResolvedValue(
+        directoryPageWithPaths([path, "/workspace/other.txt"]),
+      );
+      documentMocks.openFilePreview.mockResolvedValue({
+        kind,
+        path,
+        file_name: path.slice(path.lastIndexOf("/") + 1),
+        mime_type: kind === "video" ? "video/mp4" : "audio/mpeg",
+        stream_url: "chilla-media://localhost/media/test-token",
+        html: "",
+        last_modified: "2026-10-01T00:00:00Z",
+      });
+      const play = vi
+        .spyOn(HTMLMediaElement.prototype, "play")
+        .mockResolvedValue(undefined);
+      const pause = vi
+        .spyOn(HTMLMediaElement.prototype, "pause")
+        .mockImplementation(() => {});
+      try {
+        dispose = renderWorkspace();
+        await waitFor(() =>
+          expect(document.querySelector(kind)).not.toBeNull(),
+        );
+        const media = document.querySelector(kind);
+        if (!(media instanceof HTMLMediaElement))
+          throw new Error("missing media element");
+        media.tabIndex = 0;
+        media.focus();
+        Object.defineProperty(media, "duration", {
+          configurable: true,
+          value: 120,
+        });
+        media.currentTime = 10;
+        const down = new KeyboardEvent("keydown", {
+          key: "d",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        media.dispatchEvent(down);
+        expect(media.currentTime).toBe(25);
+        expect(down.defaultPrevented).toBe(true);
+        media.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "u",
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        expect(media.currentTime).toBe(10);
+        media.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "j",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        expect(media.currentTime).toBe(15);
+        media.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "k",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        expect(media.currentTime).toBe(10);
+        media.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: " ",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        expect(play).toHaveBeenCalledTimes(1);
+
+        modeButton("Expand left pane").click();
+        await waitFor(() =>
+          expect(document.querySelector(".file-browser")).not.toBeNull(),
+        );
+        const selected = document.querySelector<HTMLButtonElement>(
+          `button[data-path="${path}"]`,
+        );
+        if (selected === null) throw new Error("missing selected file row");
+        selected.focus();
+        selected.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "j",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        expect(media.currentTime).toBe(10);
+        expect(
+          document
+            .querySelector(".file-browser__button--active")
+            ?.getAttribute("data-path"),
+        ).toBe("/workspace/other.txt");
+        modeButton("Collapse left pane").click();
+        media.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "?",
+            shiftKey: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        await waitFor(() =>
+          expect(
+            document.querySelector(".shortcuts-help-layer"),
+          ).not.toBeNull(),
+        );
+        media.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "d",
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        expect(media.currentTime).toBe(10);
+      } finally {
+        play.mockRestore();
+        pause.mockRestore();
+      }
+    },
+  );
+
+  it.each(["noop", "scroll.up", "unbound"] as const)(
+    "respects configured Ctrl-D %s while native video controls are focused",
+    async (action) => {
+      documentMocks.getKeymapConfig.mockResolvedValue({
+        path: null,
+        error: null,
+        config: {
+          workspace: {
+            keymap: action === "unbound" ? [] : [{ on: "<C-d>", run: action }],
+          },
+        },
+      });
+      documentMocks.getStartupContext.mockResolvedValue(
+        directoryStartupContext("/workspace/demo.mp4"),
+      );
+      documentMocks.listDirectory.mockResolvedValue(
+        directoryPage("/workspace/demo.mp4"),
+      );
+      documentMocks.openFilePreview.mockResolvedValue({
+        kind: "video",
+        path: "/workspace/demo.mp4",
+        file_name: "demo.mp4",
+        mime_type: "video/mp4",
+        stream_url: "chilla-media://localhost/media/test-token",
+        html: "",
+        last_modified: "2026-10-01T00:00:00Z",
+      });
+      dispose = renderWorkspace();
+      await waitFor(() =>
+        expect(document.querySelector("video")).not.toBeNull(),
+      );
+      const media = document.querySelector("video");
+      if (!(media instanceof HTMLMediaElement))
+        throw new Error("missing video element");
+      media.tabIndex = 0;
+      media.focus();
+      Object.defineProperty(media, "duration", {
+        configurable: true,
+        value: 120,
+      });
+      media.currentTime = 30;
+      const event = new KeyboardEvent("keydown", {
+        key: "d",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      media.dispatchEvent(event);
+      expect(media.currentTime).toBe(action === "scroll.up" ? 15 : 30);
+      expect(event.defaultPrevented).toBe(action !== "unbound");
+    },
+  );
+
+  it.each(["workspace noop", "file-tree open"] as const)(
+    "preserves configured Space handling for %s with a video preview mounted",
+    async (context) => {
+      if (context === "workspace noop") {
+        documentMocks.getKeymapConfig.mockResolvedValue({
+          path: null,
+          error: null,
+          config: {
+            workspace: { prepend_keymap: [{ on: "<Space>", run: "noop" }] },
+          },
+        });
+      }
+      documentMocks.getStartupContext.mockResolvedValue(
+        directoryStartupContext("/workspace/demo.mp4"),
+      );
+      documentMocks.listDirectory.mockResolvedValue(
+        directoryPage("/workspace/demo.mp4"),
+      );
+      documentMocks.openFilePreview.mockResolvedValue({
+        kind: "video",
+        path: "/workspace/demo.mp4",
+        file_name: "demo.mp4",
+        mime_type: "video/mp4",
+        stream_url: "chilla-media://localhost/media/test-token",
+        html: "",
+        last_modified: "2026-10-01T00:00:00Z",
+      });
+      const play = vi
+        .spyOn(HTMLMediaElement.prototype, "play")
+        .mockResolvedValue(undefined);
+      try {
+        dispose = renderWorkspace();
+        await waitFor(() =>
+          expect(document.querySelector("video")).not.toBeNull(),
+        );
+        let target: HTMLElement | null = document.querySelector("video");
+        if (context === "file-tree open") {
+          modeButton("Expand left pane").click();
+          await waitFor(() =>
+            expect(document.querySelector(".file-browser")).not.toBeNull(),
+          );
+          target = document.querySelector(
+            'button[data-path="/workspace/demo.mp4"]',
+          );
+        }
+        if (target === null) throw new Error("missing Space target");
+        target.focus();
+        const event = new KeyboardEvent("keydown", {
+          key: " ",
+          bubbles: true,
+          cancelable: true,
+        });
+        target.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(true);
+        if (context === "workspace noop") {
+          expect(play).not.toHaveBeenCalled();
+          expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(1);
+        } else {
+          await waitFor(() =>
+            expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2),
+          );
+          await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+        }
+      } finally {
+        play.mockRestore();
+      }
+    },
+  );
+
   it("refreshes a directory when no file is open", async () => {
     documentMocks.getStartupContext.mockResolvedValue(
       directoryStartupContext(null),
@@ -1845,6 +2488,162 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       expect(documentMocks.listDirectory).toHaveBeenCalledTimes(2);
     });
   });
+
+  it("opens a picked file when its parent directory is denied and refreshes only that file", async () => {
+    const pickedPath = "/workspace/keep.txt";
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.listDirectory
+      .mockResolvedValueOnce(directoryPage("/workspace/old.txt"))
+      .mockRejectedValue(new Error("Operation not permitted (os error 1)"));
+    documentMocks.listExplicitFileSet.mockResolvedValue(
+      directoryPage(pickedPath),
+    );
+    documentMocks.openFilePreview.mockResolvedValue(textPreview());
+    dialogMocks.open.mockResolvedValue(pickedPath);
+    dispose = renderWorkspace();
+    await waitFor(() => expect(document.body.textContent).toContain("old.txt"));
+
+    modeButton("Open one or more files").click();
+    await waitFor(() => {
+      expect(documentMocks.openFilePreview).toHaveBeenCalledWith(pickedPath, {
+        csv_first_row_as_header: false,
+      });
+      expect(document.body.textContent).toContain("keep");
+      expect(document.querySelector(".workspace-notification")).toBeNull();
+    });
+    expect(documentMocks.listExplicitFileSet).toHaveBeenLastCalledWith(
+      [pickedPath],
+      { field: "name", direction: "asc" },
+      "",
+      0,
+      200,
+    );
+
+    modeButton("Refresh workspace").click();
+    await waitFor(() => {
+      expect(documentMocks.listExplicitFileSet).toHaveBeenCalledTimes(2);
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2);
+    });
+    expect(documentMocks.listDirectory).toHaveBeenCalledTimes(2);
+    expect(documentMocks.listExplicitFileSet).toHaveBeenLastCalledWith(
+      [pickedPath],
+      { field: "name", direction: "asc" },
+      "",
+      0,
+      200,
+    );
+
+    dialogMocks.open.mockResolvedValue(null);
+    modeButton("Open one or more files").click();
+    await waitFor(() => expect(dialogMocks.open).toHaveBeenCalledTimes(2));
+    expect(document.body.textContent).toContain("keep");
+    expect(documentMocks.listExplicitFileSet).toHaveBeenCalledTimes(2);
+    expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores a stale parent directory rejection after a newer picker workspace opens", async () => {
+    const stalePath = "/workspace/keep.txt";
+    const currentPath = "/workspace/new.txt";
+    let rejectDirectory: ((error: Error) => void) | undefined;
+    const pendingDirectory = new Promise<DirectoryPage>((_resolve, reject) => {
+      rejectDirectory = reject;
+    });
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.listDirectory
+      .mockResolvedValueOnce(directoryPage("/workspace/old.txt"))
+      .mockReturnValueOnce(pendingDirectory);
+    documentMocks.listExplicitFileSet.mockResolvedValue(
+      directoryPage(currentPath),
+    );
+    documentMocks.openFilePreview.mockResolvedValue({
+      ...textPreview(),
+      path: currentPath,
+      file_name: "new.txt",
+      html: '<section class="file-preview"><pre>new preview</pre></section>',
+    });
+    dialogMocks.open
+      .mockResolvedValueOnce(stalePath)
+      .mockResolvedValueOnce([currentPath, "/workspace/another.txt"]);
+    dispose = renderWorkspace();
+    await waitFor(() => expect(document.body.textContent).toContain("old.txt"));
+    modeButton("Open one or more files").click();
+    await waitFor(() =>
+      expect(documentMocks.listDirectory).toHaveBeenCalledTimes(2),
+    );
+    modeButton("Open one or more files").click();
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("new preview"),
+    );
+
+    if (rejectDirectory === undefined)
+      throw new Error("Missing deferred directory rejection");
+    rejectDirectory(new Error("Operation not permitted (os error 1)"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(documentMocks.listExplicitFileSet).toHaveBeenCalledTimes(1);
+    expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).toContain("new preview");
+    expect(document.querySelector(".workspace-notification")).toBeNull();
+
+    modeButton("Refresh workspace").click();
+    await waitFor(() =>
+      expect(documentMocks.listExplicitFileSet).toHaveBeenCalledTimes(2),
+    );
+    expect(documentMocks.listExplicitFileSet).toHaveBeenLastCalledWith(
+      [currentPath, "/workspace/another.txt"],
+      { field: "name", direction: "asc" },
+      "",
+      0,
+      200,
+    );
+  });
+
+  it.each(["listing", "preview"] as const)(
+    "reports selected-file %s failures after parent directory access is denied",
+    async (failure) => {
+      const pickedPath = "/workspace/keep.txt";
+      documentMocks.getStartupContext.mockResolvedValue(
+        directoryStartupContext(null),
+      );
+      documentMocks.listDirectory
+        .mockResolvedValueOnce(directoryPage("/workspace/old.txt"))
+        .mockRejectedValue(new Error("Operation not permitted (os error 1)"));
+      documentMocks.listExplicitFileSet.mockResolvedValue(
+        directoryPage(pickedPath),
+      );
+      documentMocks.openFilePreview.mockResolvedValue(textPreview());
+      if (failure === "listing") {
+        documentMocks.listExplicitFileSet.mockRejectedValue(
+          new Error("Selected file access denied"),
+        );
+      } else {
+        documentMocks.openFilePreview.mockRejectedValue(
+          new Error("Selected file preview failed"),
+        );
+      }
+      dialogMocks.open.mockResolvedValue(pickedPath);
+      dispose = renderWorkspace();
+      await waitFor(() =>
+        expect(document.body.textContent).toContain("old.txt"),
+      );
+      modeButton("Open one or more files").click();
+      await waitFor(() => {
+        expect(
+          document.querySelector(".workspace-notification")?.textContent,
+        ).toContain(
+          failure === "listing"
+            ? "Selected file access denied"
+            : "Selected file preview failed",
+        );
+      });
+      if (failure === "listing") {
+        expect(documentMocks.openFilePreview).not.toHaveBeenCalled();
+      }
+    },
+  );
 
   it("refreshes an explicit file-set listing and its active preview", async () => {
     documentMocks.getStartupContext.mockResolvedValue(

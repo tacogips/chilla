@@ -126,6 +126,20 @@ pub enum CsvRowCountStatus {
     ParseError,
 }
 
+/// Structured data family a text preview's path belongs to, used to offer a
+/// raw/formatted toggle. See `viewer::data_format` for the formatters.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StructuredDataFormat {
+    Json,
+    JsonLines,
+    Xml,
+    Html,
+    Css,
+    #[serde(rename = "javascript")]
+    JavaScript,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FilePreview {
@@ -180,6 +194,9 @@ pub enum FilePreview {
         html: String,
         size_bytes: u64,
         last_modified: String,
+        structured_format: Option<StructuredDataFormat>,
+        formatted_html: Option<String>,
+        format_notice: Option<String>,
     },
     Csv {
         path: String,

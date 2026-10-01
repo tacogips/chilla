@@ -3,6 +3,7 @@ import type {
   DocumentPresentationMode,
   FilePreview,
 } from "../../lib/tauri/document";
+import { isTsvMimeType } from "../../lib/tauri/document";
 import type { ColorScheme } from "../../lib/theme";
 import { PreviewHeader } from "./PreviewHeader";
 import { PreviewPane, previewThemeStyle } from "./PreviewPane";
@@ -56,7 +57,11 @@ export function CsvFilePreviewPane(props: CsvFilePreviewPaneProps) {
       <Match when={props.presentationMode === "formatted"}>
         <section class="pane">
           <PreviewHeader fileName={props.preview.file_name}>
-            <span>Formatted CSV</span>
+            <span>
+              {isTsvMimeType(props.preview.mime_type)
+                ? "Formatted TSV"
+                : "Formatted CSV"}
+            </span>
             <label class="csv-preview-header-option">
               <input
                 aria-label="Use first row as header"

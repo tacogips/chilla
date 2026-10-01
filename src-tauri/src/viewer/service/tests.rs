@@ -8,6 +8,7 @@ use std::{
 mod csv_open_options_tests;
 mod source_footer;
 mod startup_options_tests;
+mod structured_format_tests;
 
 use super::test_epub::{write_test_epub, write_test_epub_with_toc_mode, EpubFixtureTocMode};
 use super::{fallback_media_mime_type, ViewerService};

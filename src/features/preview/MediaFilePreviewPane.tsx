@@ -1,8 +1,16 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import {
+  Show,
+  createEffect,
+  createSignal,
+  onCleanup,
+  onMount,
+  useContext,
+} from "solid-js";
 import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import { isLinuxWebKitDesktop } from "../../lib/platform";
+import { KeymapContextProvider } from "../keymap/KeymapProvider";
 import { PreviewHeader } from "./PreviewHeader";
 
 interface MediaFilePreviewPaneProps {
@@ -14,7 +22,7 @@ interface MediaFilePreviewPaneProps {
   readonly localResourceGeneration?: number | undefined;
 }
 
-const LARGE_MEDIA_SEEK_SECONDS = 15;
+export const LARGE_MEDIA_SEEK_SECONDS = 15;
 
 function PlayGlyph() {
   return (
@@ -62,18 +70,8 @@ function matchesShortcut(
   );
 }
 
-function eventTargetsMediaElement(
-  target: EventTarget | null,
-  media: HTMLMediaElement | undefined,
-): boolean {
-  if (media === undefined || !(target instanceof Node)) {
-    return false;
-  }
-
-  return target === media || media.contains(target);
-}
-
 export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
+  const keymap = useContext(KeymapContextProvider);
   const isVideo = () => props.kind === "video";
   const usesLinuxVideoBlobFallback = isLinuxWebKitDesktop() && isVideo();
   const isLinuxVideoLayout = usesLinuxVideoBlobFallback && isVideo();
@@ -195,50 +193,61 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
 
   onMount(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isEditableKeyboardTarget(event.target)) {
-        return;
-      }
-
-      if (event.repeat) {
-        return;
-      }
-
-      const target = event.target;
-
+      const media = mediaElement;
       if (
-        target instanceof Element &&
-        target.closest(".shortcuts-help-layer")
+        event.defaultPrevented ||
+        event.repeat ||
+        event.isComposing ||
+        media === undefined ||
+        media.closest(".pane--hidden, [hidden], [aria-hidden='true']") !==
+          null ||
+        document.querySelector(".shortcuts-help-layer") !== null
+      ) {
+        return;
+      }
+      const path = event.composedPath();
+      const targetsMedia = path.includes(media);
+      if (
+        path.some(
+          (target) =>
+            target instanceof Element &&
+            target.closest(
+              '[role="dialog"], .workspace-notification, .pr-diff-retry',
+            ) !== null,
+        ) ||
+        path.some(
+          (target) => target instanceof HTMLMediaElement && target !== media,
+        ) ||
+        (!targetsMedia &&
+          path.some((target) => isEditableKeyboardTarget(target ?? null)))
       ) {
         return;
       }
 
-      if (eventTargetsMediaElement(target, mediaElement)) {
-        return;
-      }
-
-      if (matchesShortcut(event, "d", { ctrl: true })) {
+      // Workspace seek actions are configurable; use fixed keys only standalone.
+      if (keymap === undefined && matchesShortcut(event, "d", { ctrl: true })) {
         event.preventDefault();
+        event.stopImmediatePropagation();
         seekBy(LARGE_MEDIA_SEEK_SECONDS);
         return;
       }
 
-      if (matchesShortcut(event, "u", { ctrl: true })) {
+      if (keymap === undefined && matchesShortcut(event, "u", { ctrl: true })) {
         event.preventDefault();
+        event.stopImmediatePropagation();
         seekBy(-LARGE_MEDIA_SEEK_SECONDS);
         return;
       }
 
-      if (event.key !== " " && event.code !== "Space") {
+      if (
+        (event.key !== " " && event.code !== "Space") ||
+        !hasExactModifiers(event)
+      ) {
         return;
       }
 
       event.preventDefault();
-
-      const media = mediaElement;
-
-      if (media === undefined) {
-        return;
-      }
+      event.stopImmediatePropagation();
 
       if (media.paused) {
         requestPlayback();
@@ -248,20 +257,17 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
 
     onCleanup(() => {
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown, true);
     });
   });
 
   return (
     <section class="pane">
       <PreviewHeader fileName={props.fileName}>
-        <span>
-          {isVideo() ? "Video" : "Audio"} (Space: play / pause, J/K: +/-5s when
-          the file tree is hidden, Ctrl-D/Ctrl-U: +/-15s)
-        </span>
+        <span>{isVideo() ? "Video" : "Audio"}</span>
       </PreviewHeader>
       <div
         class={`pane__body preview ${isVideo() ? "preview--embedded-video" : "preview--embedded-audio"}${isLinuxVideoLayout ? " preview--video-external-linux" : ""}`}

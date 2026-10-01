@@ -1,0 +1,90 @@
+%YAML 1.2
+---
+# http://www.sublimetext.com/docs/3/syntax.html
+name: HCL
+
+file_extensions:
+  - hcl
+  - tf
+  - tfvars
+  - nomad
+
+scope: source.hcl
+
+contexts:
+  main:
+    - include: comments
+    - include: strings
+    - include: keywords
+    - include: constants
+    - include: numbers
+    - include: block-label
+    - include: attribute-name
+    - include: operators
+
+  comments:
+    - match: '#.*$'
+      scope: comment.line.number-sign.hcl
+    - match: '//.*$'
+      scope: comment.line.double-slash.hcl
+    - match: '/\*'
+      scope: punctuation.definition.comment.begin.hcl
+      push:
+        - meta_scope: comment.block.hcl
+        - match: '\*/'
+          scope: punctuation.definition.comment.end.hcl
+          pop: true
+
+  keywords:
+    - match: '\b(resource|variable|output|module|provider|data|locals|terraform|for_each|count|for|in|if)\b'
+      scope: keyword.control.hcl
+
+  constants:
+    - match: '\b(true|false|null)\b'
+      scope: constant.language.hcl
+
+  numbers:
+    - match: '\b[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?\b'
+      scope: constant.numeric.hcl
+
+  block-label:
+    - match: '\b(resource|data|variable|output|module|provider)\s+("[^"]*")'
+      captures:
+        1: keyword.control.hcl
+        2: entity.name.type.hcl
+
+  attribute-name:
+    - match: '\b([A-Za-z_][A-Za-z0-9_-]*)\s*(?==(?!=))'
+      captures:
+        1: entity.other.attribute-name.hcl
+
+  operators:
+    - match: '&&|\|\||==|!=|<=|>=|\.\.\.|=>|->|[+\-*/%<>!?:=]'
+      scope: keyword.operator.hcl
+
+  strings:
+    - match: '<<-?[A-Za-z_]+'
+      scope: punctuation.definition.string.begin.hcl
+      push:
+        - meta_scope: string.unquoted.heredoc.hcl
+        - match: '^\s*[A-Za-z_]+\s*$'
+          pop: true
+    - match: '"'
+      scope: punctuation.definition.string.begin.hcl
+      push: double-quoted-string
+
+  double-quoted-string:
+    - meta_scope: string.quoted.double.hcl
+    - match: '\\.'
+      scope: constant.character.escape.hcl
+    - match: '\$\{'
+      scope: punctuation.section.interpolation.begin.hcl
+      push:
+        - meta_content_scope: meta.embedded.line.hcl
+        - match: '\}'
+          scope: punctuation.section.interpolation.end.hcl
+          pop: true
+        - include: main
+    - match: '"'
+      scope: punctuation.definition.string.end.hcl
+      pop: true

@@ -52,6 +52,8 @@ export const WORKSPACE_ACTIONS = [
   "presentation.toggle",
   "presentation.raw",
   "presentation.rendered",
+  "format.toggle",
+  "syntax.toggle",
   "theme.toggle",
   "scroll.up",
   "scroll.down",
@@ -158,14 +160,24 @@ export const DEFAULT_KEYMAP_INPUT: Readonly<
     b(
       "P",
       "presentation.toggle",
-      "Toggle Raw / Preview (Markdown) or Raw / Formatted (CSV)",
+      "Toggle Raw / Preview (Markdown, HTML) or Raw / Formatted (CSV, TSV, JSON, JSONL, XML, CSS, JS/TS)",
     ),
-    b("1", "presentation.raw", "Select Raw view (Markdown / CSV)"),
+    b(
+      "1",
+      "presentation.raw",
+      "Select Raw view (Markdown / HTML / CSV / TSV / JSON / JSONL / XML / CSS / JS/TS)",
+    ),
     b(
       "2",
       "presentation.rendered",
-      "Select Preview view (Markdown) or Formatted view (CSV)",
+      "Select Preview view (Markdown, HTML) or Formatted view (CSV, TSV, JSON, JSONL, XML, CSS, JS/TS)",
     ),
+    b(
+      "F",
+      "format.toggle",
+      "Toggle formatting (JSON, JSONL, XML, HTML, CSS, JS/TS)",
+    ),
+    b("C", "syntax.toggle", "Toggle syntax highlighting"),
     b("D", "theme.toggle", "Toggle light / dark theme"),
   ],
 };

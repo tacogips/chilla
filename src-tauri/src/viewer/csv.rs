@@ -28,7 +28,18 @@ pub struct ParsedCsvPreview {
 }
 
 pub fn parse_csv_preview(source: &str, limits: CsvPreviewLimits) -> ParsedCsvPreview {
+    parse_csv_preview_with_delimiter(source, limits, b',')
+}
+
+/// Same as [`parse_csv_preview`], but with a configurable field delimiter
+/// (e.g. `b'\t'` for TSV).
+pub fn parse_csv_preview_with_delimiter(
+    source: &str,
+    limits: CsvPreviewLimits,
+    delimiter: u8,
+) -> ParsedCsvPreview {
     let mut reader = csv::ReaderBuilder::new()
+        .delimiter(delimiter)
         .flexible(true)
         .has_headers(false)
         .comment(None)
@@ -124,7 +135,17 @@ fn csv_record_to_owned(record: &StringRecord) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_csv_preview, CsvPreviewLimits};
+    use super::{parse_csv_preview, parse_csv_preview_with_delimiter, CsvPreviewLimits};
+
+    #[test]
+    fn parse_with_tab_delimiter_splits_on_tabs_not_commas() {
+        let src = "a,b\tc,d\n1,2\t3,4\n";
+        let parsed = parse_csv_preview_with_delimiter(src, CsvPreviewLimits::default(), b'\t');
+        assert!(parsed.parse_error.is_none());
+        assert_eq!(parsed.rows[0], vec!["a,b".to_string(), "c,d".to_string()]);
+        assert_eq!(parsed.rows[1], vec!["1,2".to_string(), "3,4".to_string()]);
+        assert_eq!(parsed.column_count, 2);
+    }
 
     #[test]
     fn parse_preserves_commas_inside_quotes() {

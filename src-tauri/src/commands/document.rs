@@ -45,15 +45,17 @@ fn handle_open_file_preview_join_error(
 fn register_media_stream_url(
     path: &str,
     mime_type: &str,
-    state: &AppState,
+    service: &crate::media_stream::MediaStreamService,
 ) -> Result<String, String> {
-    state
-        .media_stream_service()
+    service
         .register_media_stream(Path::new(path), mime_type)
         .map_err(format_command_error)
 }
 
-fn attach_media_stream_url(preview: FilePreview, state: &AppState) -> Result<FilePreview, String> {
+fn attach_media_stream_url(
+    preview: FilePreview,
+    service: &crate::media_stream::MediaStreamService,
+) -> Result<FilePreview, String> {
     match preview {
         FilePreview::Audio {
             path,
@@ -63,7 +65,7 @@ fn attach_media_stream_url(preview: FilePreview, state: &AppState) -> Result<Fil
             last_modified,
             ..
         } => {
-            let stream_url = register_media_stream_url(&path, &mime_type, state)?;
+            let stream_url = register_media_stream_url(&path, &mime_type, service)?;
 
             Ok(FilePreview::Audio {
                 path,
@@ -82,7 +84,7 @@ fn attach_media_stream_url(preview: FilePreview, state: &AppState) -> Result<Fil
             last_modified,
             ..
         } => {
-            let stream_url = register_media_stream_url(&path, &mime_type, state)?;
+            let stream_url = register_media_stream_url(&path, &mime_type, service)?;
 
             Ok(FilePreview::Video {
                 path,
@@ -290,7 +292,20 @@ pub async fn open_file_preview(
         }
     };
 
-    match attach_media_stream_url(preview, &state) {
+    let media_service = state.media_stream_service();
+    let attached = tauri::async_runtime::spawn_blocking(move || {
+        attach_media_stream_url(preview, &media_service)
+    })
+    .await
+    .map_err(|error| {
+        handle_open_file_preview_join_error(
+            Path::new(&path),
+            command_started_at,
+            startup_started_at,
+            error,
+        )
+    })?;
+    match attached {
         Ok(preview) => {
             if let Some(started_at) = command_started_at {
                 verbose_log::record_phase("open_file_preview_command", started_at, "success");

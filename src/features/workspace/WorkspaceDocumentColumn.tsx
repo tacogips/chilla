@@ -8,10 +8,12 @@ import type {
 import type { ColorScheme } from "../../lib/theme";
 import { CsvFilePreviewPane } from "../preview/CsvFilePreviewPane";
 import { EpubPreviewPane } from "../preview/EpubPreviewPane";
+import { HtmlRenderedPreviewPane } from "../preview/HtmlRenderedPreviewPane";
 import { MediaFilePreviewPane } from "../preview/MediaFilePreviewPane";
 import { PdfFilePreviewPane } from "../preview/PdfFilePreviewPane";
 import { PreviewPane } from "../preview/PreviewPane";
 import type { WorkspaceSelection } from "./state";
+import type { HtmlPresentationMode } from "./workspacePreviewModel";
 import {
   inferPreviewKind,
   isMediaFilePreview,
@@ -40,6 +42,8 @@ interface WorkspaceDocumentColumnProps {
   readonly csvPreview: CsvPreview | null;
   readonly csvFirstRowAsHeader: boolean;
   readonly csvPaneMode: DocumentPresentationMode;
+  readonly structuredDataMode: DocumentPresentationMode;
+  readonly htmlPresentationMode: HtmlPresentationMode;
   readonly videoAutoplayRequestId: number;
   readonly localResourceGeneration?: number;
   readonly hasOpenDocument: boolean;
@@ -60,6 +64,15 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
       : null,
   );
   const mediaKind = createMemo(() => mediaPreviewKind(mediaPreview()));
+  const htmlRenderedPreview = createMemo(() => {
+    const preview = props.filePreview;
+    return props.markdownDoc === null &&
+      preview?.kind === "text" &&
+      preview.structured_format === "html" &&
+      props.htmlPresentationMode === "preview"
+      ? preview
+      : null;
+  });
 
   return (
     <div class="workspace__document-column" tabIndex={-1}>
@@ -140,7 +153,8 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
           props.filePreview !== null &&
           inferPreviewKind(props.filePreview) === "default" &&
           props.filePreview.kind !== "epub" &&
-          props.filePreview.kind !== "csv"
+          props.filePreview.kind !== "csv" &&
+          htmlRenderedPreview() === null
         }
       >
         <PreviewPane
@@ -149,7 +163,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
           fileName={props.filePreview?.file_name ?? ""}
           dragPanEnabled={props.filePreview?.kind === "image"}
           layout={props.filePreview?.kind === "text" ? "source" : "rendered"}
-          html={previewHtml(props.filePreview)}
+          html={previewHtml(props.filePreview, props.structuredDataMode)}
           imageRevision={
             props.filePreview?.kind === "image"
               ? props.filePreview.last_modified
@@ -160,6 +174,20 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
           subtitle={previewSubtitle(props.filePreview)}
           visible={true}
         />
+      </Show>
+
+      <Show when={htmlRenderedPreview()}>
+        {(getPreview) => {
+          const preview = getPreview();
+          return (
+            <HtmlRenderedPreviewPane
+              path={preview.path}
+              fileName={preview.file_name}
+              revision={preview.last_modified}
+              localResourceGeneration={props.localResourceGeneration}
+            />
+          );
+        }}
       </Show>
 
       <Show when={pdfPreview()}>

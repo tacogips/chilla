@@ -15,6 +15,9 @@ Additional variables for upload:
   APPLE_ID                      Apple account email
   APPLE_PASSWORD                Apple app-specific password
 
+Optional packaging-only correction:
+  CHILLA_APP_STORE_SOURCE_APP    Previously shipped .app with the same version
+
 The local keychain must contain one Apple Distribution identity and one Mac
 Installer Distribution identity. Generated entitlements and copied provisioning
 material remain in an isolated temporary directory and are deleted on exit.
@@ -67,7 +70,7 @@ esac
 
 [ "$(uname -s)" = "Darwin" ] || fail "Mac App Store packaging must run on macOS"
 
-for command_name in awk bun codesign date git jq openssl pkgutil plutil productbuild security sed shasum xcrun; do
+for command_name in awk bun cmp codesign date ditto git jq openssl pkgutil plutil productbuild security sed shasum xcrun; do
   require_command "$command_name"
 done
 
@@ -176,15 +179,40 @@ jq -s \
   }' \
   src-tauri/tauri.appstore.conf.json >"$runtime_config"
 
-env -u APPLE_ID -u APPLE_PASSWORD -u APPLE_API_KEY -u APPLE_API_ISSUER -u APPLE_API_KEY_PATH bun install --frozen-lockfile
-env -u APPLE_ID -u APPLE_PASSWORD -u APPLE_API_KEY -u APPLE_API_ISSUER -u APPLE_API_KEY_PATH bun run build
-env -u APPLE_ID -u APPLE_PASSWORD -u APPLE_API_KEY -u APPLE_API_ISSUER -u APPLE_API_KEY_PATH \
-  -u CARGO_BUILD_TARGET -u CARGO_TARGET_DIR \
-  CARGO_TERM_QUIET=true APPLE_SIGNING_IDENTITY="$app_identity" bun run tauri build \
-  --config "$runtime_config" \
-  --bundles app
+if [ -n "${CHILLA_APP_STORE_SOURCE_APP:-}" ]; then
+  source_app="$CHILLA_APP_STORE_SOURCE_APP"
+  [ -d "$source_app" ] || fail "source app is not a directory"
+  codesign --verify --deep --strict "$source_app"
+  source_plist="$source_app/Contents/Info.plist"
+  [ "$(plist_value CFBundleIdentifier "$source_plist")" = "$bundle_id" ] || fail "source app identifier differs"
+  [ "$(plist_value CFBundleShortVersionString "$source_plist")" = "$product_version" ] || fail "source app marketing version differs"
+  app_path="$work_dir/chilla.app"
+  ditto "$source_app" "$app_path"
+  cp "$runtime_profile" "$app_path/Contents/embedded.provisionprofile"
+  bundle_version="$(jq -er '.bundle.macOS.bundleVersion' "$runtime_config")"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $bundle_version" "$app_path/Contents/Info.plist"
+  codesign --force --sign "$app_identity" --entitlements "$runtime_entitlements" "$app_path"
+  cmp "$source_app/Contents/MacOS/chilla" "$app_path/Contents/MacOS/chilla" >/dev/null || {
+    # Signing changes the executable's signature, so compare its unsigned content.
+    source_unsigned="$work_dir/source-unsigned"
+    packaged_unsigned="$work_dir/packaged-unsigned"
+    cp "$source_app/Contents/MacOS/chilla" "$source_unsigned"
+    cp "$app_path/Contents/MacOS/chilla" "$packaged_unsigned"
+    codesign --remove-signature "$source_unsigned"
+    codesign --remove-signature "$packaged_unsigned"
+    cmp "$source_unsigned" "$packaged_unsigned" >/dev/null || fail "packaging changed executable content"
+  }
+else
+  env -u APPLE_ID -u APPLE_PASSWORD -u APPLE_API_KEY -u APPLE_API_ISSUER -u APPLE_API_KEY_PATH bun install --frozen-lockfile
+  env -u APPLE_ID -u APPLE_PASSWORD -u APPLE_API_KEY -u APPLE_API_ISSUER -u APPLE_API_KEY_PATH bun run build
+  env -u APPLE_ID -u APPLE_PASSWORD -u APPLE_API_KEY -u APPLE_API_ISSUER -u APPLE_API_KEY_PATH \
+    -u CARGO_BUILD_TARGET -u CARGO_TARGET_DIR \
+    CARGO_TERM_QUIET=true APPLE_SIGNING_IDENTITY="$app_identity" bun run tauri build \
+    --config "$runtime_config" \
+    --bundles app
 
-app_path="target/release/bundle/macos/chilla.app"
+  app_path="target/release/bundle/macos/chilla.app"
+fi
 [ -d "$app_path" ] || fail "Tauri did not produce the macOS app bundle"
 [ -f "$app_path/Contents/embedded.provisionprofile" ] || fail "built app does not embed the provisioning profile"
 
@@ -199,6 +227,7 @@ plutil -convert json -o "$effective_entitlements_json" "$effective_entitlements"
 [ "$(jq -r '.["com.apple.security.app-sandbox"] // false' "$effective_entitlements_json")" = "true" ] || fail "built app is not sandboxed"
 [ "$(jq -r '.["com.apple.security.files.user-selected.read-write"] // false' "$effective_entitlements_json")" = "true" ] || fail "built app lacks user-selected file access"
 [ "$(jq -r '.["com.apple.security.network.client"] // false' "$effective_entitlements_json")" = "true" ] || fail "built app lacks outbound network access"
+[ "$(jq -r '.["com.apple.security.network.server"] // false' "$effective_entitlements_json")" = "false" ] || fail "built app unexpectedly enables a network server entitlement"
 [ "$(jq -er '.["com.apple.application-identifier"]' "$effective_entitlements_json")" = "$APPLE_TEAM_ID.$bundle_id" ] || fail "signed app identifier is inconsistent"
 
 output_dir="${CHILLA_APP_STORE_OUTPUT_DIR:-$repo_root/target/app-store}"

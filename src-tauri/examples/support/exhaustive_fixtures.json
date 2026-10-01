@@ -74,5 +74,14 @@
   "text.html.textile": "h1. Heading\n\nA *bold* and _italic_ paragraph with \"a link\":https://example.com.\n\n* First item\n* Second item\n\nbc. print('hello')\n",
   "text.xml": "<!-- A comment -->\n<items xmlns:x=\"urn:example\"><item x:id=\"42\">日本語 &amp; text</item><![CDATA[<>&]]></items>\n",
   "source.yaml": "# A comment\napplication:\n  name: \"日本語 <>&\"\n  enabled: true\n  values: [1, 2, null]\n  description: |\n    First line\n    Second line\n",
-  "source.toml": "# A comment\n[application]\nname = \"日本語 <>&\"\nenabled = true\ncount = 42\nvalues = [1, 2, 3]\ndescription = \"\"\"First line\nSecond line\"\"\"\n"
+  "source.toml": "# A comment\n[application]\nname = \"日本語 <>&\"\nenabled = true\ncount = 42\nvalues = [1, 2, 3]\ndescription = \"\"\"First line\nSecond line\"\"\"\n",
+  "source.nix": "# comment\nlet\n  greeting = \"日本語 <>& ${name}\";\n  name = \"world\";\nin rec {\n  enabled = true;\n  value = if enabled then 1 else 0;\n  path = ./relative/path.nix;\n  homepage = \"https://example.com\";\n  indented = ''\n    multi line ${name}\n  '';\n}\n",
+  "source.swift": "// comment\nimport Foundation\n\nstruct App {\n    let title = \"日本語 <>&\"\n    var count: Int = 0\n\n    func greet(name: String) -> String {\n        return \"Hello, \\(name)!\"\n    }\n}\n",
+  "source.dockerfile": "# comment\nFROM alpine:3.19 AS build\nLABEL maintainer=\"日本語 <>&\"\nENV APP_HOME=/app\nWORKDIR ${APP_HOME}\nCOPY . .\nRUN echo \"building\" && make\nEXPOSE 8080\nCMD [\"./app\"]\n",
+  "source.zig": "// comment\nconst std = @import(\"std\");\n\npub fn main() !void {\n    const name = \"日本語 <>&\";\n    var count: u32 = 0;\n    while (count < 10) : (count += 1) {\n        std.debug.print(\"{s}\\n\", .{name});\n    }\n}\n",
+  "source.proto": "// comment\nsyntax = \"proto3\";\n\npackage example;\n\nmessage Greeting {\n  string message = 1; // 日本語 <>&\n  repeated int32 counts = 2;\n  bool enabled = 3;\n}\n",
+  "source.kotlin": "// comment\npackage example\n\ndata class Greeting(val name: String) {\n    fun message(): String {\n        val text = \"日本語 <>& ${name}\"\n        return text\n    }\n}\n",
+  "source.ini": "; comment\n[application]\nname = \"日本語 <>&\"\nenabled = true\ncount = 42\n\n[server]\nhost = localhost\nport = 8080\n",
+  "source.hcl": "# comment\nresource \"example_thing\" \"main\" {\n  name    = \"日本語 <>&\"\n  enabled = true\n  count   = 3\n\n  tags = {\n    env = \"${var.environment}\"\n  }\n}\n",
+  "source.graphql": "# comment\nquery Greeting($name: String!) {\n  greet(name: $name) @include(if: true) {\n    message\n    ok\n  }\n}\n\n# 日本語 <>&\ntype Query {\n  greet(name: String!): Greeting\n}\n"
 }

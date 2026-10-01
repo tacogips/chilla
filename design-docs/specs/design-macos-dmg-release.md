@@ -183,11 +183,26 @@ The sandbox entitlement set is intentionally narrow:
 - App Sandbox enabled
 - user-selected files and directories readable and writable
 - outbound network connections allowed for GitHub diff retrieval
+- no network server entitlement: media uses the internal Tauri URI protocol
+  described in [Internal Media Protocol](design-media-protocol.md)
 - application and team identifiers derived from the release environment
+
+For a packaging-only correction, the release task may reuse a verified signed
+app with the same bundle identifier and marketing version. It updates the build
+number, provisioning profile, and signature, then compares executable content
+with signatures removed to ensure unrelated development is not shipped. The
+normal path continues to build from source.
 
 Paths supplied by shell arguments do not pass through the macOS Powerbox and
 therefore are not a supported App Store access mechanism. The App Store listing
 and QA evidence must describe and exercise the in-app file/folder picker flow.
+
+A file selected through Powerbox grants access to that file, not automatically
+to its parent directory. For a single-file selection, directory browsing may
+be used when readable; if directory loading fails, the workspace must instead
+use an explicit file set containing the selected file and open its preview.
+Refresh must continue to use that explicit set. File preview failures must still
+be reported, and canceling the picker must preserve the current workspace.
 The direct DMG and Homebrew variants continue to support `chilla .`.
 
 The release pipeline follows the evidence discipline used by Konjac while

@@ -1,0 +1,96 @@
+%YAML 1.2
+---
+# http://www.sublimetext.com/docs/3/syntax.html
+name: Swift
+
+file_extensions:
+  - swift
+
+scope: source.swift
+
+contexts:
+  main:
+    - include: comments
+    - include: strings
+    - include: attributes
+    - include: keywords
+    - include: constants
+    - include: numbers
+    - include: operators
+
+  comments:
+    - match: '//.*$'
+      scope: comment.line.double-slash.swift
+    - match: '/\*'
+      scope: punctuation.definition.comment.begin.swift
+      push:
+        - meta_scope: comment.block.swift
+        - match: '\*/'
+          scope: punctuation.definition.comment.end.swift
+          pop: true
+
+  attributes:
+    - match: '@[A-Za-z_][A-Za-z0-9_]*'
+      scope: storage.type.attribute.swift
+
+  keywords:
+    - match: |-
+        (?x)\b(
+          class|struct|enum|protocol|extension|func|init|deinit|subscript
+          |let|var|if|else|guard|for|while|repeat|switch|case|default
+          |return|break|continue|fallthrough|throw|throws|rethrows|try|catch|do|defer
+          |import|public|private|internal|fileprivate|open|static|final|mutating|nonmutating
+          |self|Self|super|in|is|as|where|typealias|associatedtype|inout|lazy|weak|unowned
+          |indirect|convenience|required|override|operator|precedencegroup|some|any|actor
+        )\b
+      scope: keyword.control.swift
+
+  constants:
+    - match: '\b(true|false|nil)\b'
+      scope: constant.language.swift
+
+  numbers:
+    - match: '\b0x[0-9A-Fa-f_]+\b'
+      scope: constant.numeric.hex.swift
+    - match: '\b0b[01_]+\b'
+      scope: constant.numeric.binary.swift
+    - match: '\b0o[0-7_]+\b'
+      scope: constant.numeric.octal.swift
+    - match: '\b[0-9][0-9_]*(\.[0-9_]+)?([eE][+-]?[0-9_]+)?\b'
+      scope: constant.numeric.swift
+
+  operators:
+    - match: '\.\.<|\.\.\.|&&|\|\||==|!=|<=|>=|->|\?\?|[+\-*/%<>!?:&|^~=]'
+      scope: keyword.operator.swift
+
+  strings:
+    - match: '"""'
+      scope: punctuation.definition.string.begin.swift
+      push:
+        - meta_scope: string.quoted.triple.swift
+        - match: '"""'
+          scope: punctuation.definition.string.end.swift
+          pop: true
+        - include: string-body
+    - match: '"'
+      scope: punctuation.definition.string.begin.swift
+      push: double-quoted-string
+
+  double-quoted-string:
+    - meta_scope: string.quoted.double.swift
+    - include: string-body
+    - match: '"'
+      scope: punctuation.definition.string.end.swift
+      pop: true
+
+  string-body:
+    - match: '\\\('
+      scope: punctuation.section.interpolation.begin.swift
+      push:
+        - meta_content_scope: meta.embedded.line.swift
+        - match: '\)'
+          scope: punctuation.section.interpolation.end.swift
+          pop: true
+        - include: main
+    - match: '\\.'
+      scope: constant.character.escape.swift

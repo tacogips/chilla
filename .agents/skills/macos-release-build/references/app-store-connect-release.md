@@ -20,6 +20,12 @@ App Review submission as one release workflow rather than ending at upload.
 
 4. Verify the app signature, installer signature, embedded profile, effective
    sandbox entitlements, version, architecture, and absence of secret material.
+   Require the network client entitlement for existing outbound features and
+   reject the network server entitlement. Media uses an internal Tauri protocol;
+   verify playback/seek/refresh of a file larger than the protocol response cap
+   and confirm that the app process has no TCP listener.
+   Exercise a file selected through Powerbox when its parent directory is not
+   accessible; selection must open its preview without requiring a parent listing.
 5. Create or update the App Store Connect macOS app and version record. Use the
    exact shipped bundle identifier and version; do not create duplicate records
    to work around a metadata error.

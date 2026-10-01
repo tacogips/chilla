@@ -14,6 +14,8 @@ export const SHORTCUT_LABELS = {
   toggleMarkdownPane: "Shift+P",
   rawView: "1",
   secondaryView: "2",
+  toggleFormat: "Shift+F",
+  toggleSyntax: "Shift+C",
   toggleTheme: "Shift+D",
   toggleFileTree: "Shift+L",
 } as const;
@@ -80,15 +82,27 @@ export const SHORTCUT_SECTIONS: readonly {
       },
       {
         keys: ["Shift", "P"],
-        description: "Toggle Raw / Preview (Markdown) or Raw / Formatted (CSV)",
+        description:
+          "Toggle Raw / Preview (Markdown, HTML) or Raw / Formatted (CSV, TSV, JSON, JSONL, XML, CSS, JS/TS)",
       },
       {
         keys: ["1"],
-        description: "Select Raw view (Markdown / CSV)",
+        description:
+          "Select Raw view (Markdown / HTML / CSV / TSV / JSON / JSONL / XML / CSS / JS/TS)",
       },
       {
         keys: ["2"],
-        description: "Select Preview view (Markdown) or Formatted view (CSV)",
+        description:
+          "Select Preview view (Markdown, HTML) or Formatted view (CSV, TSV, JSON, JSONL, XML, CSS, JS/TS)",
+      },
+      {
+        keys: ["Shift", "F"],
+        description:
+          "Toggle formatting (JSON, JSONL, XML, HTML, CSS, JS/TS); no effect elsewhere",
+      },
+      {
+        keys: ["Shift", "C"],
+        description: "Toggle syntax highlighting",
       },
       {
         keys: ["Shift", "D"],
@@ -186,8 +200,7 @@ export const SHORTCUT_SECTIONS: readonly {
     shortcuts: [
       {
         keys: ["Space"],
-        description:
-          "Play / pause (macOS/Windows when focus is outside the player), or open in default player (Linux)",
+        description: "Play / pause the active media preview",
       },
       {
         keys: ["J", "K"],

@@ -3,9 +3,23 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type RevisionToken = string;
 export type WorkspaceMode = "markdown" | "file_view" | "pr_diff";
-/** Raw vs formatted/rendered presentation (Markdown and CSV file preview). */
+/** Raw vs formatted/rendered presentation (Markdown, CSV, and structured text file preview). */
 export type DocumentPresentationMode = "raw" | "formatted";
 export type CsvRowCountStatus = "complete" | "truncated" | "parse_error";
+/** Structured data family a text preview's source belongs to, if any. */
+export type StructuredDataFormat =
+  | "json"
+  | "json_lines"
+  | "xml"
+  | "html"
+  | "css"
+  | "javascript";
+/** MIME type reported for TSV files, which reuse the CSV preview with a tab delimiter. */
+export const TSV_MIME_TYPE = "text/tab-separated-values";
+
+export function isTsvMimeType(mimeType: string): boolean {
+  return mimeType === TSV_MIME_TYPE;
+}
 
 export interface HeadingNode {
   readonly level: number;
@@ -238,6 +252,9 @@ export type FilePreview =
       readonly html: string;
       readonly size_bytes: number;
       readonly last_modified: string;
+      readonly structured_format: StructuredDataFormat | null;
+      readonly formatted_html: string | null;
+      readonly format_notice: string | null;
     }
   | {
       readonly kind: "binary";
@@ -468,25 +485,75 @@ function normalizeFileOpenOptions(
   return { csv_first_row_as_header: firstRowAsHeader };
 }
 
+function isStructuredDataFormat(value: unknown): value is StructuredDataFormat {
+  return (
+    value === "json" ||
+    value === "json_lines" ||
+    value === "xml" ||
+    value === "html" ||
+    value === "css" ||
+    value === "javascript"
+  );
+}
+
 function normalizeFilePreviewPayload(payload: unknown): FilePreview {
   const preview = readStringRecord(payload);
   if (preview === null) {
     throw new Error("Invalid file preview payload");
   }
 
-  if (preview["kind"] !== "csv") {
-    return payload as FilePreview;
+  if (preview["kind"] === "csv") {
+    const firstRowAsHeader = preview["first_row_as_header"];
+    if (
+      firstRowAsHeader !== undefined &&
+      typeof firstRowAsHeader !== "boolean"
+    ) {
+      throw new Error("CSV preview first_row_as_header must be a boolean");
+    }
+
+    return {
+      ...preview,
+      first_row_as_header: firstRowAsHeader ?? false,
+    } as FilePreview;
   }
 
-  const firstRowAsHeader = preview["first_row_as_header"];
-  if (firstRowAsHeader !== undefined && typeof firstRowAsHeader !== "boolean") {
-    throw new Error("CSV preview first_row_as_header must be a boolean");
+  if (preview["kind"] === "text") {
+    const structuredFormat = preview["structured_format"];
+    if (
+      structuredFormat !== undefined &&
+      structuredFormat !== null &&
+      !isStructuredDataFormat(structuredFormat)
+    ) {
+      throw new Error("Text preview structured_format is invalid");
+    }
+
+    const formattedHtml = preview["formatted_html"];
+    if (
+      formattedHtml !== undefined &&
+      formattedHtml !== null &&
+      typeof formattedHtml !== "string"
+    ) {
+      throw new Error("Text preview formatted_html must be a string or null");
+    }
+
+    const formatNotice = preview["format_notice"];
+    if (
+      formatNotice !== undefined &&
+      formatNotice !== null &&
+      typeof formatNotice !== "string"
+    ) {
+      throw new Error("Text preview format_notice must be a string or null");
+    }
+
+    return {
+      ...preview,
+      structured_format: structuredFormat ?? null,
+      formatted_html: formattedHtml ?? null,
+      format_notice: formatNotice ?? null,
+    } as FilePreview;
   }
 
-  return {
-    ...preview,
-    first_row_as_header: firstRowAsHeader ?? false,
-  } as FilePreview;
+  return payload as FilePreview;
 }
 
 function normalizeGitHubDiffSourcePayload(

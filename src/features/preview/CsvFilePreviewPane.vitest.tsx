@@ -103,6 +103,37 @@ describe("CsvFilePreviewPane", () => {
     expect(cells[3]?.textContent).toBe("e");
   });
 
+  it("labels TSV files as Formatted TSV and CSV files as Formatted CSV", () => {
+    const root = document.getElementById("root");
+    if (root === null) {
+      throw new Error("missing test root");
+    }
+
+    dispose = render(
+      () => (
+        <CsvFilePreviewPane
+          colorScheme="dark"
+          firstRowAsHeader={false}
+          onFirstRowAsHeaderChange={() => undefined}
+          presentationMode="formatted"
+          preview={csvFixture({
+            mime_type: "text/tab-separated-values",
+            file_name: "sample.tsv",
+          })}
+          subtitle="File type: TSV | File size: 16 B"
+        />
+      ),
+      root,
+    );
+
+    expect(root.querySelector(".pane__header")?.textContent).toContain(
+      "Formatted TSV",
+    );
+    expect(root.querySelector(".pane__header")?.textContent).not.toContain(
+      "Formatted CSV",
+    );
+  });
+
   it("pads ragged rows to column_count", () => {
     const root = document.getElementById("root");
     if (root === null) {

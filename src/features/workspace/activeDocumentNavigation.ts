@@ -61,15 +61,17 @@ export function nudgeActiveDocumentPane(direction: 1 | -1): void {
   body.scrollTop += delta;
 }
 
-export function seekActiveDocumentMediaElement(direction: 1 | -1): void {
+export function seekActiveDocumentMediaElement(
+  direction: 1 | -1,
+  seconds = SMALL_MEDIA_SEEK_SECONDS,
+): void {
   const media = getActiveDocumentMediaElement();
 
   if (media === null) {
     return;
   }
 
-  const unclampedTime =
-    media.currentTime + direction * SMALL_MEDIA_SEEK_SECONDS;
+  const unclampedTime = media.currentTime + direction * seconds;
   const duration = media.duration;
   const nextTime = Number.isFinite(duration)
     ? Math.min(Math.max(unclampedTime, 0), duration)

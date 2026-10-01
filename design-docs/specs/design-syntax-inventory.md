@@ -4,11 +4,11 @@
 
 Measured locally on 2026-09-09 using Apple M4, arm64, macOS 26.5.2. Results are observations for the checked-in fixtures, not guarantees for arbitrary files.
 
-This inventory covers two independent paths: Rust file previews and Markdown code fences, and the TypeScript diff tokenizer. The backend contains 76 actual grammar entries, including 7 hidden grammars. Hidden entries support embedded syntax and are benchmarked directly; they are not all standalone file types. Extension declarations can overlap and do not by themselves establish which grammar wins path detection.
+This inventory covers two independent paths: Rust file previews and Markdown code fences, and the TypeScript diff tokenizer. The backend contains 85 actual grammar entries, including 7 hidden grammars. Hidden entries support embedded syntax and are benchmarked directly; they are not all standalone file types. Extension declarations can overlap and do not by themselves establish which grammar wins path detection.
 
 Backend inventory: [machine-readable grammar metadata](../../src-tauri/examples/support/exhaustive_inventory.json). Fixtures select actual grammar scopes rather than accepting plain-text fallback: [backend fixtures](../../src-tauri/examples/support/exhaustive_fixtures.json).
 
-The dedicated JSON source-file lexer is separate from the bundled JSON grammar used by fences. TypeScript/TSX/JSX backend aliases use JavaScript grammar, not a dedicated TypeScript grammar. Swift and Nix have dedicated diff tokenizers but currently fall back to plain text in backend file previews despite friendly display labels. These are existing support limitations, not newly added language support.
+The dedicated JSON source-file lexer is separate from the bundled JSON grammar used by fences. TypeScript/TSX/JSX backend aliases use JavaScript grammar, not a dedicated TypeScript grammar. Swift and Nix previously fell back to plain text in backend file previews despite friendly display labels; both now have project-authored `sublime-syntax` grammars (`src-tauri/syntaxes/Swift.sublime-syntax`, `src-tauri/syntaxes/Nix.sublime-syntax`) and resolve to real highlighting in both file previews and Markdown fences.
 
 ## Backend Grammar Entries
 
@@ -90,6 +90,35 @@ The dedicated JSON source-file lexer is separate from the bundled JSON grammar u
 | XML | `text.xml` | `xml`, `xsd`, `xslt`, `tld`, `dtml`, `rss`, `opml`, `svg` | No |
 | YAML | `source.yaml` | `yaml`, `yml`, `sublime-syntax` | No |
 | TOML | `source.toml` | `toml`, `tml`, `Cargo.lock`, `Gopkg.lock`, `Pipfile`, `pdm.lock`, `poetry.lock`, `uv.lock` | No |
+| Nix | `source.nix` | `nix` | No |
+| Swift | `source.swift` | `swift` | No |
+| Dockerfile | `source.dockerfile` | `Dockerfile`, `Containerfile`, `dockerfile`, `containerfile` | No |
+| Zig | `source.zig` | `zig`, `zon` | No |
+| Protocol Buffers | `source.proto` | `proto` | No |
+| Kotlin | `source.kotlin` | `kt`, `kts` | No |
+| INI | `source.ini` | `ini`, `cfg`, `conf`, `editorconfig`, `gitconfig`, `desktop`, `.editorconfig`, `.gitconfig` | No |
+| HCL | `source.hcl` | `hcl`, `tf`, `tfvars`, `nomad` | No |
+| GraphQL | `source.graphql` | `graphql`, `gql`, `graphqls` | No |
+
+The nine rows above are project-authored `sublime-syntax` grammars added under `src-tauri/syntaxes/` and registered in `src-tauri/build.rs`, targeting readable keyword/string/comment/number/operator scopes rather than full language fidelity (version 1 `sublime-syntax` features only, no `extends`, no external downloads).
+
+### New Grammar Performance (Measured, Single Run)
+
+Unlike the rest of this document's backend timings, the nine new grammars were not part of the original optimization study and have no multi-run confirmation. The numbers below are the median of 3 reference/optimized pairs from one `--release` run of `exhaustive_syntax_performance` (default `--samples=3`, same methodology as the table under "Backend Optimization and Measured Results"), against ~8 KiB of synthetic per-grammar source. Given only 3 samples, treat these as a single noisy observation, not a stability claim; several rows (Zig dark, HCL both themes) show the kind of run-to-run variance this document calls out elsewhere for Python.
+
+| Grammar | Dark before (ms) | Dark after (ms) | Light before (ms) | Light after (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| Nix | 4.91 | 4.15 | 8.48 | 4.47 |
+| Swift | 3.95 | 3.89 | 6.36 | 3.05 |
+| Dockerfile | 3.28 | 2.60 | 6.08 | 3.20 |
+| Zig | 3.89 | 11.93 | 4.19 | 3.24 |
+| Protocol Buffers | 8.64 | 7.78 | 10.95 | 3.43 |
+| Kotlin | 3.40 | 2.77 | 4.55 | 2.73 |
+| INI | 3.40 | 3.13 | 4.96 | 2.88 |
+| HCL | 10.65 | 6.80 | 5.97 | 10.32 |
+| GraphQL | 3.96 | 2.57 | 3.66 | 2.97 |
+
+These nine grammars are included in `exhaustive_inventory.json`, `exhaustive_fixtures.json`, `exhaustive_baseline.json`, and `exhaustive_after.json` (85 total entries, up from 76), so the `exhaustive_inventory_and_all_grammar_outputs_remain_exact` regression test locks their exact HTML output alongside the original grammars.
 
 ## Diff Tokenizers and Measured Results
 
@@ -265,25 +294,36 @@ Actual resolution, not just grammar-declared extensions, is recorded under `disp
 
 | Fence aliases | Resolved scope |
 | --- | --- |
-| `ts`, `typescript`, `tsx`, `jsx` | `source.js` |
+| `ts`, `typescript`, `tsx`, `jsx`, `mjs`, `cjs`, `mts`, `cts` | `source.js` |
 | `shell`, `shellscript`, `console` | `source.shell.bash` |
 | `md` | `text.html.markdown` |
-| `swift`, `nix` | `text.plain` |
-| `json` | `source.json` |
+| `swift` | `source.swift` |
+| `nix` | `source.nix` |
+| `scss`, `less` | `source.css` |
+| `vue`, `svelte` | `text.html.basic` |
+| `env`, `ksh` | `source.shell.bash` |
+| `jsonl`, `ndjson`, `jsonc`, `geojson`, `json5`, `json` | `source.json` |
+| `dockerfile`, `containerfile` | `source.dockerfile` |
+| `terraform`, `tf` | `source.hcl` |
+| `kotlin` | `source.kotlin` |
+| `protobuf` | `source.proto` |
+| `xsl`, `atom`, `plist`, `wsdl`, `kml`, `gpx`, `csproj`, `fsproj`, `vbproj`, `props`, `targets`, `resx`, `xaml`, `nuspec` | `text.xml` |
 
-Shell startup aliases `.bashrc`, `.bash_profile`, `.bash_login`, `.bash_logout`, `.bash_aliases`, `.profile`, `.zshenv`, `.zprofile`, `.zshrc`, `.zlogin`, `.zlogout`, and bare `bash`, `sh`, `zsh` resolve to Bash grammar. `.json` source paths use the dedicated lexer, including uppercase `.JSON`; JSON fences use the bundled grammar.
+Shell startup aliases `.bashrc`, `.bash_profile`, `.bash_login`, `.bash_logout`, `.bash_aliases`, `.profile`, `.zshenv`, `.zprofile`, `.zshrc`, `.zlogin`, `.zlogout`, and bare `bash`, `sh`, `zsh` resolve to Bash grammar. `.json` source paths use the dedicated lexer, including uppercase `.JSON`; JSON fences use the bundled grammar. JSON Lines/JSONC/GeoJSON/JSON5 fences (`jsonl`, `ndjson`, `jsonc`, `geojson`, `json5`) also route through the bundled JSON grammar, distinct from the dedicated file-preview lexer used by `is_json_path`.
 
-The following existing backend detection limitations are explicitly recorded, not counted as dedicated language coverage. A first-line signature can still select a grammar when present; these rows use empty source to isolate path detection.
+`resolve_syntax` now also tries an exact, case-sensitive match of the full file name (e.g. `Makefile`, `Cargo.lock`, `Dockerfile`, `Gemfile`, `Rakefile`, `Vagrantfile`, `Pipfile`, `Containerfile`) via `find_syntax_by_extension` before falling back to a lowercased extension lookup, whenever no explicit language token is given. `find_syntax_by_extension` itself compares case-insensitively, so this only requires the syntax's declared `file_extensions` list to include the literal file name — true already for several bundled grammars (Ruby declares `Gemfile`, `Rakefile`, `Vagrantfile`; Makefile declares `Makefile`; TOML declares `Cargo.lock` and `Pipfile`) and now also true for the new Dockerfile grammar (`Dockerfile`, `Containerfile`).
 
-| Path | Display label | Actual path-only grammar |
-| --- | --- | --- |
-| `sample.env` | Shell | Plain Text |
-| `sample.ksh` | Shell | Plain Text |
-| `sample.nix` | Nix | Plain Text |
-| `sample.swift` | Swift | Plain Text |
-| `Cargo.lock` | Plain Text | Plain Text |
-| `Makefile` | Plain Text | Plain Text |
-| `Gemfile` | Plain Text | Plain Text |
+The previously recorded backend detection limitations below are fixed by this work and no longer apply:
+
+| Path | Display label | Previous path-only grammar | Current path-only grammar |
+| --- | --- | --- | --- |
+| `sample.env` | Shell | Plain Text | Bourne Again Shell (bash) |
+| `sample.ksh` | Shell | Plain Text | Bourne Again Shell (bash) |
+| `sample.nix` | Nix | Plain Text | Nix |
+| `sample.swift` | Swift | Plain Text | Swift |
+| `Cargo.lock` | Plain Text | Plain Text | TOML |
+| `Makefile` | Plain Text | Plain Text | Makefile |
+| `Gemfile` | Plain Text | Plain Text | Ruby |
 
 ## Verification Status
 

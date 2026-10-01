@@ -63,6 +63,8 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| [Structured Data Formatting and Syntax](completed/structured-data-format-and-syntax.md) | 2026-10-01 | [Structured previews](../design-docs/specs/design-structured-data-formatting.md) |
+| [Internal Media Protocol](completed/media-protocol.md) | 2026-10-01 | [Socket-free media delivery and keyboard follow-up](../design-docs/specs/design-media-protocol.md) |
 | [Exhaustive Syntax Performance](completed/exhaustive-syntax-performance.md) | 2026-09-09 | [Complete syntax inventory](../design-docs/specs/design-syntax-inventory.md) |
 | [Source Preview Layout](completed/source-preview-layout.md) | 2026-09-09 | [Content-first source preview](../design-docs/specs/design-source-preview-layout.md) |
 | `macos-mounted-dmg-trust-gate.md` | 2026-09-09 | `design-docs/specs/design-macos-dmg-release.md#mounted-artifact-trust-gate` |

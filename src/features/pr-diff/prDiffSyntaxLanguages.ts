@@ -76,7 +76,30 @@ export function syntaxKindForPath(path: string): SyntaxKind {
     return "groovy";
   }
 
-  if (["xml", "svg"].includes(extension ?? "")) {
+  if (
+    [
+      "xml",
+      "svg",
+      "xsd",
+      "xsl",
+      "xslt",
+      "rss",
+      "atom",
+      "opml",
+      "plist",
+      "wsdl",
+      "kml",
+      "gpx",
+      "csproj",
+      "fsproj",
+      "vbproj",
+      "props",
+      "targets",
+      "resx",
+      "xaml",
+      "nuspec",
+    ].includes(extension ?? "")
+  ) {
     return "xml";
   }
 
@@ -92,7 +115,11 @@ export function syntaxKindForPath(path: string): SyntaxKind {
     return "nix";
   }
 
-  if (name === "dockerfile" || name.endsWith(".dockerfile")) {
+  if (
+    name === "dockerfile" ||
+    name === "containerfile" ||
+    name.endsWith(".dockerfile")
+  ) {
     return "dockerfile";
   }
 
@@ -107,7 +134,19 @@ export function syntaxKindForPath(path: string): SyntaxKind {
     return "shell";
   }
 
-  if (["json", "jsonc"].includes(extension ?? "")) {
+  if (
+    [
+      "json",
+      "jsonc",
+      "jsonl",
+      "ndjson",
+      "jsonlines",
+      "geojson",
+      "jsonld",
+      "webmanifest",
+      "har",
+    ].includes(extension ?? "")
+  ) {
     return "json";
   }
 

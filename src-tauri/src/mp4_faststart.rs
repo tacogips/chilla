@@ -7,6 +7,8 @@ use std::{
 
 /// Maximum moov box size we are willing to load into memory (100 MB).
 const MAX_MOOV_SIZE: u64 = 100 * 1024 * 1024;
+/// Bound metadata for pathological files containing many tiny boxes.
+const MAX_TOP_LEVEL_BOXES: usize = 65_536;
 
 /// A segment of the virtual file layout.
 #[derive(Clone)]
@@ -49,7 +51,10 @@ fn parse_top_level_boxes(file: &mut File, file_size: u64) -> Option<Vec<BoxInfo>
     let mut boxes = Vec::new();
     let mut pos: u64 = 0;
 
-    while pos + 8 <= file_size {
+    while pos.checked_add(8)? <= file_size {
+        if boxes.len() >= MAX_TOP_LEVEL_BOXES {
+            return None;
+        }
         file.seek(SeekFrom::Start(pos)).ok()?;
 
         let mut header = [0u8; 8];
@@ -65,7 +70,7 @@ fn parse_top_level_boxes(file: &mut File, file_size: u64) -> Option<Vec<BoxInfo>
             }
             1 => {
                 // Extended 64-bit size follows the type field.
-                if pos + 16 > file_size {
+                if pos.checked_add(16)? > file_size {
                     break;
                 }
                 let mut ext = [0u8; 8];
@@ -75,7 +80,7 @@ fn parse_top_level_boxes(file: &mut File, file_size: u64) -> Option<Vec<BoxInfo>
             n => u64::from(n),
         };
 
-        if total_size < 8 || pos + total_size > file_size {
+        if total_size < 8 || pos.checked_add(total_size)? > file_size {
             // Malformed or truncated box -- stop parsing.
             break;
         }
@@ -86,7 +91,7 @@ fn parse_top_level_boxes(file: &mut File, file_size: u64) -> Option<Vec<BoxInfo>
             total_size,
         });
 
-        pos += total_size;
+        pos = pos.checked_add(total_size)?;
     }
 
     if boxes.is_empty() {
@@ -138,7 +143,7 @@ pub(crate) fn analyze_mp4(path: &Path) -> Option<FaststartLayout> {
     // mdat_offset in the original file.  Everything in B (including mdat's payload)
     // is shifted right by moov_size bytes, so we must add +moov_size to all stco/co64
     // chunk offset entries.
-    let delta = moov_size as i64;
+    let delta = moov_size;
 
     // Patch stco/co64 in the in-memory moov buffer.
     // The moov buffer includes the box header (8 or 16 bytes).  The payload
@@ -216,7 +221,15 @@ const CONTAINER_BOXES: &[[u8; 4]] = &[
 /// `stco` and `co64` chunk offset entries by adding `delta`.
 ///
 /// Returns `false` if a patching error occurs (e.g. u32 overflow for stco).
-fn patch_moov_offsets(buffer: &mut [u8], delta: i64) -> bool {
+fn patch_moov_offsets(buffer: &mut [u8], delta: u64) -> bool {
+    patch_moov_offsets_at_depth(buffer, delta, 0)
+}
+/// A normal MP4 hierarchy is shallow; reject hostile nested containers safely.
+const MAX_CONTAINER_DEPTH: usize = 32;
+fn patch_moov_offsets_at_depth(buffer: &mut [u8], delta: u64, depth: usize) -> bool {
+    if depth > MAX_CONTAINER_DEPTH {
+        return false;
+    }
     let mut pos = 0usize;
 
     while pos + 8 <= buffer.len() {
@@ -259,12 +272,13 @@ fn patch_moov_offsets(buffer: &mut [u8], delta: i64) -> bool {
             n => (8, n as usize),
         };
 
-        if box_total_size < header_size || pos + box_total_size > buffer.len() {
-            break;
+        let Some(payload_end) = pos.checked_add(box_total_size) else {
+            return false;
+        };
+        if box_total_size < header_size || payload_end > buffer.len() {
+            return false;
         }
-
         let payload_start = pos + header_size;
-        let payload_end = pos + box_total_size;
 
         if &box_type == b"stco" {
             // FullBox: 1 byte version + 3 bytes flags = 4 bytes before entry_count.
@@ -279,7 +293,7 @@ fn patch_moov_offsets(buffer: &mut [u8], delta: i64) -> bool {
             ]) as usize;
 
             let data_start = payload_start + 8;
-            if data_start + entry_count * 4 > payload_end {
+            if entry_count > (payload_end - data_start) / 4 {
                 return false;
             }
 
@@ -291,12 +305,12 @@ fn patch_moov_offsets(buffer: &mut [u8], delta: i64) -> bool {
                     buffer[off + 2],
                     buffer[off + 3],
                 ]);
-                let new_val = i64::from(old) + delta;
-                if new_val < 0 || new_val > i64::from(u32::MAX) {
-                    eprintln!("[mp4-faststart] stco overflow: old={old} delta={delta}");
+                let Some(new_u32) = u64::from(old)
+                    .checked_add(delta)
+                    .and_then(|value| u32::try_from(value).ok())
+                else {
                     return false;
-                }
-                let new_u32 = new_val as u32;
+                };
                 buffer[off..off + 4].copy_from_slice(&new_u32.to_be_bytes());
             }
         } else if &box_type == b"co64" {
@@ -312,7 +326,7 @@ fn patch_moov_offsets(buffer: &mut [u8], delta: i64) -> bool {
             ]) as usize;
 
             let data_start = payload_start + 8;
-            if data_start + entry_count * 8 > payload_end {
+            if entry_count > (payload_end - data_start) / 8 {
                 return false;
             }
 
@@ -328,12 +342,10 @@ fn patch_moov_offsets(buffer: &mut [u8], delta: i64) -> bool {
                     buffer[off + 6],
                     buffer[off + 7],
                 ]);
-                let new_val = (old as i64) + delta;
-                if new_val < 0 {
-                    eprintln!("[mp4-faststart] co64 underflow: old={old} delta={delta}");
+                let Some(new_val) = old.checked_add(delta) else {
                     return false;
-                }
-                buffer[off..off + 8].copy_from_slice(&(new_val as u64).to_be_bytes());
+                };
+                buffer[off..off + 8].copy_from_slice(&new_val.to_be_bytes());
             }
         } else if CONTAINER_BOXES.contains(&box_type) {
             // Recurse into container.  For `meta`, it is a FullBox with 4 bytes of
@@ -346,7 +358,11 @@ fn patch_moov_offsets(buffer: &mut [u8], delta: i64) -> bool {
             };
 
             if child_payload_start < payload_end
-                && !patch_moov_offsets(&mut buffer[child_payload_start..payload_end], delta)
+                && !patch_moov_offsets_at_depth(
+                    &mut buffer[child_payload_start..payload_end],
+                    delta,
+                    depth + 1,
+                )
             {
                 return false;
             }
@@ -449,6 +465,21 @@ mod tests {
     // -----------------------------------------------------------------------
     // Tests for analyze_mp4
     // -----------------------------------------------------------------------
+
+    #[test]
+    fn analyzer_rejects_unbounded_top_level_box_metadata() {
+        let mut bytes = Vec::new();
+        for _ in 0..super::MAX_TOP_LEVEL_BOXES + 1 {
+            bytes.extend_from_slice(&[0, 0, 0, 8, b'f', b'r', b'e', b'e']);
+        }
+        let path =
+            std::env::temp_dir().join(format!("chilla-mp4-box-limit-{}", std::process::id()));
+        std::fs::write(&path, bytes).expect("fixture");
+        let mut file = std::fs::File::open(&path).expect("open");
+        let size = file.metadata().expect("metadata").len();
+        assert!(super::parse_top_level_boxes(&mut file, size).is_none());
+        let _ = std::fs::remove_file(path);
+    }
 
     #[test]
     fn analyze_mp4_returns_none_for_empty_file() {
@@ -563,6 +594,43 @@ mod tests {
         let stbl_box = wrap_box(b"stbl", &stco_box);
         let mut buf = stbl_box;
         assert!(!patch_moov_offsets(&mut buf, 1));
+    }
+
+    #[test]
+    fn patching_rejects_deep_containers_and_analyzer_falls_back() {
+        let mut nested = wrap_box(b"free", &[0; 4]);
+        for _ in 0..super::MAX_CONTAINER_DEPTH + 2 {
+            nested = wrap_box(b"trak", &nested);
+        }
+        assert!(!patch_moov_offsets(&mut nested.clone(), 1));
+        let mut mp4 = wrap_box(b"mdat", &[1, 2, 3, 4]);
+        mp4.extend(wrap_box(b"moov", &nested));
+        let path = write_temp_file(&mp4);
+        assert!(analyze_mp4(&path).is_none());
+        remove_temp_file(&path);
+    }
+
+    #[test]
+    fn co64_uses_checked_unsigned_addition() {
+        let old = i64::MAX as u64;
+        let mut buffer = wrap_box(b"co64", &build_co64(&[old, old + 1]));
+        assert!(patch_moov_offsets(&mut buffer, 1));
+        assert_eq!(extract_co64_entries(&buffer), vec![old + 1, old + 2]);
+        let mut overflow = wrap_box(b"co64", &build_co64(&[u64::MAX]));
+        assert!(!patch_moov_offsets(&mut overflow, 1));
+        let mut mp4 = wrap_box(b"mdat", &[1, 2, 3, 4]);
+        mp4.extend(wrap_box(b"moov", &overflow));
+        let path = write_temp_file(&mp4);
+        assert!(analyze_mp4(&path).is_none());
+        remove_temp_file(&path);
+    }
+
+    #[test]
+    fn patching_rejects_extended_size_overflow_after_prefix() {
+        let mut buffer = wrap_box(b"free", &[0; 4]);
+        buffer.extend_from_slice(&[0, 0, 0, 1, b't', b'r', b'a', b'k']);
+        buffer.extend_from_slice(&u64::MAX.to_be_bytes());
+        assert!(!patch_moov_offsets(&mut buffer, 1));
     }
 
     // -----------------------------------------------------------------------

@@ -48,6 +48,7 @@ import {
   safeLocalStorage,
 } from "../file-view/paneResize";
 import { DEFAULT_FILE_TREE_SORT, DIRECTORY_PAGE_SIZE } from "../file-view/sort";
+import { LARGE_MEDIA_SEEK_SECONDS } from "../preview/MediaFilePreviewPane";
 import { WorkspaceDocumentColumn } from "./WorkspaceDocumentColumn";
 import {
   MarkdownConflictBanner,
@@ -83,9 +84,17 @@ import {
   type LoadedDirectoryState,
   resolveSelectedPath,
 } from "./workspaceDirectoryState";
+import type { HtmlPresentationMode } from "./workspacePreviewModel";
 import {
+  isStructuredTextPreview,
   isVideoPath,
+  persistHtmlPresentationMode,
+  persistStructuredDataPresentationMode,
+  persistSyntaxHighlightingEnabled,
   previewPath,
+  restoreHtmlPresentationMode,
+  restoreStructuredDataPresentationMode,
+  restoreSyntaxHighlightingEnabled,
   selectionPreviewDebounceMsForPath,
 } from "./workspacePreviewModel";
 import { ShortcutsHelpDialog } from "./workspaceShortcuts";
@@ -136,6 +145,16 @@ export function WorkspaceShell() {
   const [csvPaneMode, setCsvPaneMode] =
     createSignal<DocumentPresentationMode>("formatted");
   const [csvFirstRowAsHeader, setCsvFirstRowAsHeader] = createSignal(false);
+  const [structuredDataPresentationMode, setStructuredDataPresentationMode] =
+    createSignal<DocumentPresentationMode>(
+      restoreStructuredDataPresentationMode(safeLocalStorage()),
+    );
+  const [htmlPresentationMode, setHtmlPresentationMode] =
+    createSignal<HtmlPresentationMode>(
+      restoreHtmlPresentationMode(safeLocalStorage()),
+    );
+  const [syntaxHighlightingEnabled, setSyntaxHighlightingEnabled] =
+    createSignal<boolean>(restoreSyntaxHighlightingEnabled(safeLocalStorage()));
   const [isTocOpen, setTocOpen] = createSignal(false);
   const [isFileTreeOpen, setFileTreeOpen] = createSignal(true);
   const [fileTreeWidthPx, setFileTreeWidthPx] = createSignal<number | null>(
@@ -834,6 +853,7 @@ export function WorkspaceShell() {
   const currentSelectedPath = () => selectedBrowserPath() ?? currentOpenPath();
 
   const handleOpenFiles = async () => {
+    let ownedDirectoryRequestId: number | null = null;
     try {
       const selection = await open({
         multiple: true,
@@ -862,12 +882,39 @@ export function WorkspaceShell() {
 
       if (target.kind === "single_file") {
         setFileTreeOpen(false);
-        await loadDirectoryState(
+        const directoryLoad = loadDirectoryState(
           target.directoryPath,
           target.filePath,
           directorySort(),
           "",
         );
+        ownedDirectoryRequestId = directoryRequestId;
+        try {
+          if (!(await directoryLoad)) return;
+        } catch {
+          if (ownedDirectoryRequestId !== directoryRequestId) return;
+          // Powerbox may grant the selected file without its parent directory.
+          const filePaths = [target.filePath];
+          setStartupContext(
+            startupContextForPickedTarget(
+              {
+                kind: "file_set",
+                filePaths,
+                selectedFilePath: target.filePath,
+              },
+              { csv_first_row_as_header: launchCsvFirstRowAsHeader },
+            ),
+          );
+          const fileSetLoad = loadExplicitFileSetState(
+            filePaths,
+            target.filePath,
+            directorySort(),
+            "",
+          );
+          ownedDirectoryRequestId = directoryRequestId;
+          await fileSetLoad;
+        }
+        if (ownedDirectoryRequestId !== directoryRequestId) return;
         await previewSelectedFile(target.filePath);
       } else {
         setFileTreeOpen(true);
@@ -880,13 +927,23 @@ export function WorkspaceShell() {
         await previewSelectedFile(target.selectedFilePath);
       }
     } catch (error: unknown) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to open the selected files",
-      );
+      if (
+        ownedDirectoryRequestId === null ||
+        ownedDirectoryRequestId === directoryRequestId
+      ) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to open the selected files",
+        );
+      }
     } finally {
-      setLoading(false);
+      if (
+        ownedDirectoryRequestId === null ||
+        ownedDirectoryRequestId === directoryRequestId
+      ) {
+        setLoading(false);
+      }
     }
   };
 
@@ -1144,6 +1201,61 @@ export function WorkspaceShell() {
     const preview = fp();
     return preview?.kind === "csv" ? preview : null;
   });
+  const structuredTextPreview = createMemo(() => {
+    const preview = fp();
+    return isStructuredTextPreview(preview) ? preview : null;
+  });
+  /** Preference if formatted output is available, otherwise raw without touching the stored preference. */
+  const structuredDataEffectiveMode = createMemo<DocumentPresentationMode>(
+    () => {
+      const preview = structuredTextPreview();
+      return preview !== null && preview.formatted_html !== null
+        ? structuredDataPresentationMode()
+        : "raw";
+    },
+  );
+  const handleSelectStructuredDataPresentationMode = (
+    mode: DocumentPresentationMode,
+  ): void => {
+    setStructuredDataPresentationMode(mode);
+    persistStructuredDataPresentationMode(safeLocalStorage(), mode);
+  };
+  const handleSelectHtmlPresentationMode = (
+    mode: HtmlPresentationMode,
+  ): void => {
+    setHtmlPresentationMode(mode);
+    persistHtmlPresentationMode(safeLocalStorage(), mode);
+  };
+  /**
+   * Flips formatted/raw only when a structured preview with formatted output
+   * is active. For HTML, formatting only applies to the Raw view, so this
+   * also switches HTML back to Raw when currently in Preview.
+   */
+  const handleToggleFormat = (): void => {
+    const preview = structuredTextPreview();
+    if (preview === null || preview.formatted_html === null) {
+      return;
+    }
+
+    handleSelectStructuredDataPresentationMode(
+      structuredDataPresentationMode() === "raw" ? "formatted" : "raw",
+    );
+
+    if (preview.structured_format === "html") {
+      handleSelectHtmlPresentationMode("raw");
+    }
+  };
+  const handleToggleSyntaxHighlighting = (): void => {
+    setSyntaxHighlightingEnabled((value) => {
+      const next = !value;
+      persistSyntaxHighlightingEnabled(safeLocalStorage(), next);
+      return next;
+    });
+  };
+  /** Text, CSV/TSV, and Markdown previews are the only ones syntax highlighting affects. */
+  const hasSourcePreview = createMemo(
+    () => md() !== null || csvPreview() !== null || fp()?.kind === "text",
+  );
   const currentOpenPath = () => md()?.path ?? previewPath(fp());
   const diffTarget = createMemo<DiffWorkspaceTarget | null>(() => {
     const activeGit = activeGitDiffTarget();
@@ -1311,6 +1423,12 @@ export function WorkspaceShell() {
     }
   };
 
+  const workspaceRootClassName = createMemo(() =>
+    syntaxHighlightingEnabled()
+      ? "workspace"
+      : "workspace workspace--syntax-off",
+  );
+
   const viewerGridClassName = createMemo(() => {
     if (diffTarget() !== null) {
       return "workspace__body workspace__body--pr-diff";
@@ -1332,17 +1450,38 @@ export function WorkspaceShell() {
   });
 
   const changePresentation = (rendered: boolean): void => {
-    if (markdownDoc() !== null) setMarkdownPane(rendered ? "preview" : "raw");
-    else {
-      const preview = csvPreview();
-      if (preview !== null && (!rendered || preview.formatted_available))
+    if (markdownDoc() !== null) {
+      setMarkdownPane(rendered ? "preview" : "raw");
+      return;
+    }
+
+    const csv = csvPreview();
+    if (csv !== null) {
+      if (!rendered || csv.formatted_available)
         setCsvPaneMode(rendered ? "formatted" : "raw");
+      return;
+    }
+
+    const structured = structuredTextPreview();
+    if (structured !== null && structured.structured_format === "html") {
+      handleSelectHtmlPresentationMode(rendered ? "preview" : "raw");
+      return;
+    }
+
+    if (
+      structured !== null &&
+      (!rendered || structured.formatted_html !== null)
+    ) {
+      handleSelectStructuredDataPresentationMode(
+        rendered ? "formatted" : "raw",
+      );
     }
   };
   const scrollDocument = (direction: -1 | 1): void => {
     if (hasActiveEpubPreview(fp())) stepActiveEpubPage(direction);
-    else if (!hasActiveDocumentMediaElement())
-      scrollActiveDocumentPane(direction);
+    else if (hasActiveDocumentMediaElement())
+      seekActiveDocumentMediaElement(direction, LARGE_MEDIA_SEEK_SECONDS);
+    else scrollActiveDocumentPane(direction);
   };
   const stepDocument = (direction: -1 | 1, event: KeyboardEvent): void => {
     if (isFileTreeOpen()) return;
@@ -1407,11 +1546,32 @@ export function WorkspaceShell() {
       "presentation.raw": () => changePresentation(false),
       "presentation.rendered": () => changePresentation(true),
       "presentation.toggle": () => {
-        if (markdownDoc() !== null)
+        if (markdownDoc() !== null) {
           setMarkdownPane((value) => (value === "raw" ? "preview" : "raw"));
-        else if (csvPreview()?.formatted_available)
+          return;
+        }
+
+        if (csvPreview()?.formatted_available) {
           setCsvPaneMode((value) => (value === "raw" ? "formatted" : "raw"));
+          return;
+        }
+
+        const structured = structuredTextPreview();
+        if (structured !== null && structured.structured_format === "html") {
+          handleSelectHtmlPresentationMode(
+            htmlPresentationMode() === "raw" ? "preview" : "raw",
+          );
+          return;
+        }
+
+        if (structured !== null && structured.formatted_html !== null) {
+          handleSelectStructuredDataPresentationMode(
+            structuredDataPresentationMode() === "raw" ? "formatted" : "raw",
+          );
+        }
       },
+      "format.toggle": handleToggleFormat,
+      "syntax.toggle": handleToggleSyntaxHighlighting,
       "theme.toggle": cycleColorScheme,
       "scroll.up": () => scrollDocument(-1),
       "scroll.down": () => scrollDocument(1),
@@ -1481,7 +1641,7 @@ export function WorkspaceShell() {
 
   return (
     <KeymapContextProvider.Provider value={keymap}>
-      <main class="workspace" ref={workspaceElement}>
+      <main class={workspaceRootClassName()} ref={workspaceElement}>
         <Portal>
           <ShortcutsHelpDialog
             open={isShortcutsHelpOpen()}
@@ -1502,6 +1662,11 @@ export function WorkspaceShell() {
             colorScheme={colorScheme()}
             csvPaneMode={csvPaneMode()}
             csvPreview={csvPreview()}
+            structuredTextPreview={structuredTextPreview()}
+            structuredDataPresentationMode={structuredDataEffectiveMode()}
+            htmlPresentationMode={htmlPresentationMode()}
+            hasSourcePreview={hasSourcePreview()}
+            syntaxHighlightingEnabled={syntaxHighlightingEnabled()}
             canReloadCurrent={canReloadCurrent()}
             hasTocDocument={hasTocDocument()}
             isTocOpen={isTocOpen()}
@@ -1521,7 +1686,13 @@ export function WorkspaceShell() {
               void handleReloadCurrent();
             }}
             onSelectCsvPaneMode={setCsvPaneMode}
+            onSelectStructuredDataPresentationMode={
+              handleSelectStructuredDataPresentationMode
+            }
+            onSelectHtmlPresentationMode={handleSelectHtmlPresentationMode}
+            onToggleFormat={handleToggleFormat}
             onSelectMarkdownPane={setMarkdownPane}
+            onToggleSyntaxHighlighting={handleToggleSyntaxHighlighting}
             onToggleToc={() => setTocOpen((value) => !value)}
           />
 
@@ -1670,6 +1841,8 @@ export function WorkspaceShell() {
                   csvFirstRowAsHeader={csvFirstRowAsHeader()}
                   csvPaneMode={csvPaneMode()}
                   csvPreview={csvPreview()}
+                  structuredDataMode={structuredDataEffectiveMode()}
+                  htmlPresentationMode={htmlPresentationMode()}
                   epubToc={epubPreview()?.toc ?? []}
                   filePreview={fp()}
                   hasOpenDocument={hasOpenDocument()}

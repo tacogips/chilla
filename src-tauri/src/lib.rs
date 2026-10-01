@@ -51,7 +51,19 @@ pub fn run(startup_request: StartupRequest) -> Result<(), String> {
     let builder_started_at = verbose_log::is_enabled().then(Instant::now);
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init());
+        .plugin(tauri_plugin_opener::init())
+        .register_asynchronous_uri_scheme_protocol(
+            "chilla-media",
+            |context, request, responder| {
+                if let Some(state) = context.app_handle().try_state::<AppState>() {
+                    state.media_stream_service().dispatch(request, responder);
+                } else {
+                    let mut response = tauri::http::Response::new(Vec::<u8>::new());
+                    *response.status_mut() = tauri::http::StatusCode::SERVICE_UNAVAILABLE;
+                    responder.respond(response);
+                }
+            },
+        );
     if let Some(started_at) = builder_started_at {
         verbose_log::record_phase("tauri_builder_setup", started_at, "success");
     }
@@ -63,20 +75,7 @@ pub fn run(startup_request: StartupRequest) -> Result<(), String> {
             let document_service = DocumentService::new();
             let viewer_service = ViewerService::new();
             let watcher_service = WatcherService::new();
-            let media_stream_service = match MediaStreamService::new() {
-                Ok(service) => service,
-                Err(error) => {
-                    if let Some(started_at) = setup_started_at {
-                        verbose_log::record_phase_message(
-                            "tauri_setup",
-                            started_at,
-                            "failure",
-                            &error.to_string(),
-                        );
-                    }
-                    return Err(error.into());
-                }
-            };
+            let media_stream_service = MediaStreamService::new();
             let startup_context = match viewer_service.startup_context_with_options(
                 &startup_request.target,
                 startup_request.file_open_options,

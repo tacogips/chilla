@@ -15,16 +15,41 @@ const TEXTUAL_APPLICATION_MIME_TYPES: [&str; 10] = [
     "application/yaml",
 ];
 /// When magic(1) reports `application/octet-stream` but the path is a known text config/data suffix.
-const TEXT_PREVIEW_EXTENSIONS: [&str; 9] = [
+const TEXT_PREVIEW_EXTENSIONS: [&str; 34] = [
     "toml",
     "json",
     "jsonc",
+    "jsonl",
+    "ndjson",
+    "jsonlines",
+    "geojson",
+    "jsonld",
+    "har",
     "yaml",
     "yml",
     "xml",
+    "xsd",
+    "xsl",
+    "xslt",
+    "rss",
+    "atom",
+    "opml",
+    "plist",
+    "wsdl",
+    "kml",
+    "gpx",
+    "csproj",
+    "fsproj",
+    "vbproj",
+    "props",
+    "targets",
+    "resx",
+    "xaml",
+    "nuspec",
     "lock",
     "webmanifest",
     "gradle",
+    "tsv",
 ];
 const IMAGE_EXTENSION_MIME_TYPES: [(&str, &str); 19] = [
     ("apng", "image/apng"),
@@ -80,11 +105,30 @@ pub(super) fn is_csv_path(path: &Path) -> bool {
         .is_some_and(|extension| extension.eq_ignore_ascii_case("csv"))
 }
 
+pub(super) fn is_tsv_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("tsv") || extension.eq_ignore_ascii_case("tab")
+        })
+}
+
 pub(super) fn should_preview_as_csv(path: &Path, mime_type: &str) -> bool {
-    if is_csv_path(path) {
+    if is_csv_path(path) || is_tsv_path(path) {
         return true;
     }
     mime_type.eq_ignore_ascii_case("text/csv")
+        || mime_type.eq_ignore_ascii_case("text/tab-separated-values")
+}
+
+/// Field delimiter to use when parsing a CSV/TSV preview: tab for TSV
+/// (by path extension or normalized MIME type), comma otherwise.
+pub(super) fn csv_delimiter_for(path: &Path, mime_type: &str) -> u8 {
+    if is_tsv_path(path) || mime_type.eq_ignore_ascii_case("text/tab-separated-values") {
+        b'\t'
+    } else {
+        b','
+    }
 }
 
 pub(super) fn is_textual_mime(mime_type: &str) -> bool {
@@ -147,8 +191,37 @@ pub(super) fn fallback_media_mime_type<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::{fallback_media_mime_type, is_text_preview_extension};
+    use super::{
+        csv_delimiter_for, fallback_media_mime_type, is_text_preview_extension, is_tsv_path,
+        should_preview_as_csv,
+    };
     use std::path::Path;
+
+    #[test]
+    fn tsv_paths_and_mime_are_routed_to_csv_preview_with_a_tab_delimiter() {
+        assert!(is_tsv_path(Path::new("data.tsv")));
+        assert!(is_tsv_path(Path::new("data.TAB")));
+        assert!(!is_tsv_path(Path::new("data.csv")));
+
+        assert!(should_preview_as_csv(
+            Path::new("data.tsv"),
+            "application/octet-stream"
+        ));
+        assert!(should_preview_as_csv(
+            Path::new("data.unknown"),
+            "text/tab-separated-values"
+        ));
+
+        assert_eq!(
+            csv_delimiter_for(Path::new("data.tsv"), "application/octet-stream"),
+            b'\t'
+        );
+        assert_eq!(
+            csv_delimiter_for(Path::new("data.unknown"), "text/tab-separated-values"),
+            b'\t'
+        );
+        assert_eq!(csv_delimiter_for(Path::new("data.csv"), "text/csv"), b',');
+    }
 
     #[test]
     fn supported_image_extensions_fall_back_to_expected_mime_case_insensitively() {

@@ -1,0 +1,94 @@
+%YAML 1.2
+---
+# http://www.sublimetext.com/docs/3/syntax.html
+name: Kotlin
+
+file_extensions:
+  - kt
+  - kts
+
+scope: source.kotlin
+
+contexts:
+  main:
+    - include: comments
+    - include: strings
+    - include: annotations
+    - include: keywords
+    - include: constants
+    - include: numbers
+    - include: operators
+
+  comments:
+    - match: '//.*$'
+      scope: comment.line.double-slash.kotlin
+    - match: '/\*'
+      scope: punctuation.definition.comment.begin.kotlin
+      push:
+        - meta_scope: comment.block.kotlin
+        - match: '\*/'
+          scope: punctuation.definition.comment.end.kotlin
+          pop: true
+
+  annotations:
+    - match: '@[A-Za-z_][A-Za-z0-9_.]*'
+      scope: storage.type.annotation.kotlin
+
+  keywords:
+    - match: |-
+        (?x)\b(
+          package|import|class|interface|object|fun|val|var|if|else|when|for|while|do
+          |return|break|continue|try|catch|finally|throw|is|as|in|out|this|super
+          |companion|init|constructor|override|open|abstract|final|private|protected
+          |public|internal|sealed|data|enum|annotation|inline|noinline|crossinline
+          |reified|suspend|lateinit|const|vararg|by|where|typealias|typeof|get|set
+        )\b
+      scope: keyword.control.kotlin
+
+  constants:
+    - match: '\b(true|false|null)\b'
+      scope: constant.language.kotlin
+
+  numbers:
+    - match: '\b0x[0-9A-Fa-f_]+\b'
+      scope: constant.numeric.hex.kotlin
+    - match: '\b0b[01_]+\b'
+      scope: constant.numeric.binary.kotlin
+    - match: '\b[0-9][0-9_]*(\.[0-9_]+)?([eE][+-]?[0-9_]+)?[LlFf]?\b'
+      scope: constant.numeric.kotlin
+
+  operators:
+    - match: '\?\.|\?:|\.\.|::|->|==|!=|<=|>=|&&|\|\||[+\-*/%<>!=]'
+      scope: keyword.operator.kotlin
+
+  strings:
+    - match: '"""'
+      scope: punctuation.definition.string.begin.kotlin
+      push:
+        - meta_scope: string.quoted.triple.kotlin
+        - match: '"""'
+          scope: punctuation.definition.string.end.kotlin
+          pop: true
+        - include: string-body
+    - match: '"'
+      scope: punctuation.definition.string.begin.kotlin
+      push:
+        - meta_scope: string.quoted.double.kotlin
+        - match: '\\.'
+          scope: constant.character.escape.kotlin
+        - include: string-body
+        - match: '"'
+          scope: punctuation.definition.string.end.kotlin
+          pop: true
+
+  string-body:
+    - match: '\$\{'
+      scope: punctuation.section.interpolation.begin.kotlin
+      push:
+        - meta_content_scope: meta.embedded.line.kotlin
+        - match: '\}'
+          scope: punctuation.section.interpolation.end.kotlin
+          pop: true
+        - include: main
+    - match: '\$[A-Za-z_][A-Za-z0-9_]*'
+      scope: variable.other.interpolated.kotlin

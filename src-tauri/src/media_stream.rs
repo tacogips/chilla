@@ -1,763 +1,416 @@
+use crate::{
+    error::{AppError, AppResult},
+    mp4_faststart::{FaststartLayout, VirtualSegment},
+};
 use std::{
     collections::HashMap,
     fs::File,
-    io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write},
-    net::{TcpListener, TcpStream},
+    io::{self, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
-        Arc, RwLock,
+        Arc, Mutex, RwLock,
     },
-    thread,
     time::{SystemTime, UNIX_EPOCH},
 };
+use tauri::http::{header, Method, Request, Response, StatusCode, Uri};
 
-use crate::error::{AppError, AppResult};
-use crate::mp4_faststart::{FaststartLayout, VirtualSegment};
-
-const STREAM_HOST: &str = "127.0.0.1";
 const MAX_MEDIA_STREAM_ENTRIES: usize = 256;
-const MAX_MEDIA_STREAM_CONNECTIONS: usize = 32;
+const MAX_READ_JOBS: usize = 8;
+const MAX_RESPONSE_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_LAYOUT_BYTES: usize = 16 * 1024 * 1024;
 
+/// Application-local media registry. Construction never starts a network listener.
 #[derive(Clone)]
 pub struct MediaStreamService {
-    port: u16,
-    entries: Arc<RwLock<HashMap<String, MediaStreamEntry>>>,
+    entries: Arc<RwLock<HashMap<String, Arc<MediaStreamEntry>>>>,
+    analyzer: Arc<Mutex<()>>,
+    retained_bytes: Arc<AtomicUsize>,
+    read_jobs: Arc<AtomicUsize>,
     token_seed: Arc<str>,
     token_counter: Arc<AtomicU64>,
 }
-
-#[derive(Clone)]
 struct MediaStreamEntry {
     path: PathBuf,
     mime_type: String,
-    faststart: Arc<RwLock<FaststartStatus>>,
+    layout: Option<RetainedLayout>,
 }
-
-#[derive(Clone)]
-enum FaststartStatus {
-    Unsupported,
-    Pending,
-    Ready(Arc<FaststartLayout>),
-    Unavailable,
+struct RetainedLayout {
+    layout: FaststartLayout,
+    bytes: usize,
+    budget: Arc<AtomicUsize>,
 }
-
-impl MediaStreamService {
-    pub fn new() -> AppResult<Self> {
-        let listener = TcpListener::bind((STREAM_HOST, 0)).map_err(|source| {
-            AppError::State(format!("failed to bind media stream server: {source}"))
-        })?;
-        let port = listener
-            .local_addr()
-            .map_err(|source| {
-                AppError::State(format!(
-                    "failed to inspect media stream server address: {source}"
-                ))
-            })?
-            .port();
-        let entries = Arc::new(RwLock::new(HashMap::new()));
-        let thread_entries = Arc::clone(&entries);
-        let active_connections = Arc::new(AtomicUsize::new(0));
-        let thread_active_connections = Arc::clone(&active_connections);
-        let token_seed: Arc<str> = Arc::from(new_token_seed());
-
-        thread::Builder::new()
-            .name("chilla-media-stream".to_string())
-            .spawn(move || {
-                run_media_stream_server(listener, thread_entries, thread_active_connections);
-            })
-            .map_err(|source| {
-                AppError::State(format!(
-                    "failed to start media stream server thread: {source}"
-                ))
-            })?;
-
-        Ok(Self {
-            port,
-            entries,
-            token_seed,
-            token_counter: Arc::new(AtomicU64::new(0)),
-        })
-    }
-
-    pub fn register_media_stream(&self, path: &Path, mime_type: &str) -> AppResult<String> {
-        let canonical_path = std::fs::canonicalize(path)
-            .map_err(|source| AppError::io("canonicalize media stream path", path, source))?;
-        let token = self.new_entry_token(&canonical_path);
-        let faststart = prepare_faststart_state(canonical_path.clone(), mime_type);
-
-        let entry = MediaStreamEntry {
-            path: canonical_path.clone(),
-            mime_type: mime_type.to_string(),
-            faststart,
-        };
-
-        let mut registry = self.entries.write().map_err(|_| {
-            AppError::State("failed to lock media stream registry for write".to_string())
-        })?;
-        registry.retain(|_, existing| existing.path != canonical_path);
-        while registry.len() >= MAX_MEDIA_STREAM_ENTRIES {
-            let Some(old_token) = registry.keys().next().cloned() else {
-                break;
-            };
-            registry.remove(&old_token);
-        }
-        registry.insert(token.clone(), entry);
-
-        Ok(format!("http://{STREAM_HOST}:{}/media/{token}", self.port))
-    }
-
-    fn new_entry_token(&self, path: &Path) -> String {
-        let counter = self.token_counter.fetch_add(1, Ordering::Relaxed);
-        let input = format!("{}:{}:{}", self.token_seed, path.display(), counter);
-        blake3::hash(input.as_bytes()).to_hex().to_string()
-    }
-}
-
-fn new_token_seed() -> String {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    format!("{}:{now}", std::process::id())
-}
-
-fn prepare_faststart_state(path: PathBuf, mime_type: &str) -> Arc<RwLock<FaststartStatus>> {
-    let should_analyze = should_prepare_faststart(&path, mime_type);
-    let initial_status = if should_analyze {
-        FaststartStatus::Pending
-    } else {
-        FaststartStatus::Unsupported
-    };
-    let status = Arc::new(RwLock::new(initial_status));
-
-    if !should_analyze {
-        return status;
-    }
-
-    let analysis_status = Arc::clone(&status);
-    let path_for_thread = path.clone();
-    if thread::Builder::new()
-        .name("chilla-media-faststart".to_string())
-        .spawn(move || {
-            let next_status = match crate::mp4_faststart::analyze_mp4(&path_for_thread) {
-                Some(layout) => FaststartStatus::Ready(Arc::new(layout)),
-                None => FaststartStatus::Unavailable,
-            };
-
-            if let Ok(mut guard) = analysis_status.write() {
-                *guard = next_status;
-            }
-        })
-        .is_err()
-    {
-        if let Ok(mut guard) = status.write() {
-            *guard = FaststartStatus::Unavailable;
-        }
-    }
-
-    status
-}
-
-fn should_prepare_faststart(path: &Path, mime_type: &str) -> bool {
-    if !mime_type.starts_with("video/") {
-        return false;
-    }
-
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| {
-            matches!(
-                extension.to_ascii_lowercase().as_str(),
-                "mp4" | "m4v" | "mov"
-            )
-        })
-        .unwrap_or(false)
-}
-
-fn ready_faststart_layout(entry: &MediaStreamEntry) -> Option<Arc<FaststartLayout>> {
-    entry
-        .faststart
-        .read()
-        .ok()
-        .and_then(|status| match &*status {
-            FaststartStatus::Ready(layout) => Some(Arc::clone(layout)),
-            FaststartStatus::Unsupported
-            | FaststartStatus::Pending
-            | FaststartStatus::Unavailable => None,
-        })
-}
-
-fn run_media_stream_server(
-    listener: TcpListener,
-    entries: Arc<RwLock<HashMap<String, MediaStreamEntry>>>,
-    active_connections: Arc<AtomicUsize>,
-) {
-    for connection in listener.incoming() {
-        let Ok(mut stream) = connection else {
-            continue;
-        };
-        let Some(permit) = ConnectionPermit::try_acquire(&active_connections) else {
-            let _ = write_response(
-                &mut stream,
-                "503 Service Unavailable",
-                &[("Content-Length", "0")],
-                None,
-                false,
-            );
-            continue;
-        };
-        let entries = Arc::clone(&entries);
-        let _ = thread::Builder::new()
-            .name("chilla-media-stream-client".to_string())
-            .spawn(move || {
-                let _permit = permit;
-                let _ = handle_connection(stream, entries);
-            });
-    }
-}
-
-struct ConnectionPermit {
-    active_connections: Arc<AtomicUsize>,
-}
-
-impl ConnectionPermit {
-    fn try_acquire(active_connections: &Arc<AtomicUsize>) -> Option<Self> {
-        let mut current = active_connections.load(Ordering::Relaxed);
-        loop {
-            if current >= MAX_MEDIA_STREAM_CONNECTIONS {
-                return None;
-            }
-
-            match active_connections.compare_exchange_weak(
-                current,
-                current + 1,
-                Ordering::Acquire,
-                Ordering::Relaxed,
-            ) {
-                Ok(_) => {
-                    return Some(Self {
-                        active_connections: Arc::clone(active_connections),
-                    });
-                }
-                Err(next_current) => current = next_current,
-            }
-        }
-    }
-}
-
-impl Drop for ConnectionPermit {
+impl Drop for RetainedLayout {
     fn drop(&mut self) {
-        self.active_connections.fetch_sub(1, Ordering::Release);
+        self.budget.fetch_sub(self.bytes, Ordering::AcqRel);
     }
 }
-
-fn handle_connection(
-    stream: TcpStream,
-    entries: Arc<RwLock<HashMap<String, MediaStreamEntry>>>,
-) -> io::Result<()> {
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(30)))?;
-    let mut writer = stream.try_clone()?;
-    let mut reader = BufReader::new(stream);
-
-    loop {
-        let mut request_line = String::new();
-        match reader.read_line(&mut request_line) {
-            Ok(0) => return Ok(()), // EOF: client closed connection
-            Err(e)
-                if e.kind() == io::ErrorKind::TimedOut || e.kind() == io::ErrorKind::WouldBlock =>
-            {
-                return Ok(()); // idle timeout
-            }
-            Err(e) => return Err(e),
-            Ok(_) => {}
-        }
-
-        let request_line_trimmed = request_line.trim_end().to_string();
-        let mut request_parts = request_line_trimmed.split_whitespace();
-        let method = request_parts.next().unwrap_or_default().to_string();
-        let target = request_parts.next().unwrap_or_default().to_string();
-
-        let mut range_header: Option<String> = None;
-        let mut connection_close = false;
-        loop {
-            let mut line = String::new();
-            if reader.read_line(&mut line)? == 0 {
-                break;
-            }
-            let trimmed = line.trim_end();
-            if trimmed.is_empty() {
-                break;
-            }
-            if let Some((name, value)) = trimmed.split_once(':') {
-                if name.eq_ignore_ascii_case("range") {
-                    range_header = Some(value.trim().to_string());
-                } else if name.eq_ignore_ascii_case("connection")
-                    && value.trim().eq_ignore_ascii_case("close")
-                {
-                    connection_close = true;
-                }
-            }
-        }
-
-        let keep_alive = !connection_close;
-
-        if method != "GET" && method != "HEAD" {
-            write_response(
-                &mut writer,
-                "405 Method Not Allowed",
-                &[("Allow", "GET, HEAD"), ("Content-Length", "0")],
-                None,
-                false,
-            )?;
-            return Ok(());
-        }
-
-        let Some(token) = media_token_from_target(&target) else {
-            write_response(
-                &mut writer,
-                "404 Not Found",
-                &[("Content-Length", "0")],
-                None,
-                false,
-            )?;
-            return Ok(());
-        };
-
-        let Some(entry) = entries
-            .read()
-            .ok()
-            .and_then(|registry| registry.get(token).cloned())
-        else {
-            write_response(
-                &mut writer,
-                "404 Not Found",
-                &[("Content-Length", "0")],
-                None,
-                false,
-            )?;
-            return Ok(());
-        };
-
-        serve_file(
-            &mut writer,
-            method == "HEAD",
-            &entry,
-            range_header.as_deref(),
-            keep_alive,
-        )?;
-
-        if !keep_alive {
-            return Ok(());
-        }
+struct ReadPermit(Arc<AtomicUsize>);
+impl Drop for ReadPermit {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
     }
 }
-
-fn media_token_from_target(target: &str) -> Option<&str> {
-    let path = target.split('?').next()?;
-    path.strip_prefix("/media/")
-        .filter(|value| !value.is_empty())
-}
-
-fn serve_file(
-    stream: &mut TcpStream,
-    is_head: bool,
-    entry: &MediaStreamEntry,
-    range_header: Option<&str>,
-    keep_alive: bool,
-) -> io::Result<()> {
-    if let Some(layout) = ready_faststart_layout(entry) {
-        return serve_virtual_file(stream, is_head, entry, &layout, range_header, keep_alive);
-    }
-
-    let mut file = File::open(&entry.path)?;
-    let metadata = file.metadata()?;
-    let file_len = metadata.len();
-
-    let (status, start, end) = match parse_range(range_header, file_len) {
-        Ok(Some((start, end))) => ("206 Partial Content", start, end),
-        Ok(None) => ("200 OK", 0, file_len.saturating_sub(1)),
-        Err(()) => {
-            let content_range = format!("bytes */{file_len}");
-            write_response(
-                stream,
-                "416 Range Not Satisfiable",
-                &[
-                    ("Accept-Ranges", "bytes"),
-                    ("Content-Range", &content_range),
-                    ("Content-Length", "0"),
-                ],
-                None,
-                false,
-            )?;
-            return Ok(());
-        }
-    };
-
-    let content_length = if file_len == 0 { 0 } else { end - start + 1 };
-    let content_length_header = content_length.to_string();
-    let content_range_header = if status == "206 Partial Content" {
-        Some(format!("bytes {start}-{end}/{file_len}"))
-    } else {
-        None
-    };
-
-    let mut headers = vec![
-        ("Accept-Ranges", "bytes".to_string()),
-        ("Content-Type", entry.mime_type.clone()),
-        ("Content-Length", content_length_header),
-    ];
-
-    if let Some(content_range_header) = content_range_header {
-        headers.push(("Content-Range", content_range_header));
-    }
-
-    let header_refs = headers
-        .iter()
-        .map(|(name, value)| (*name, value.as_str()))
-        .collect::<Vec<_>>();
-
-    if is_head || content_length == 0 {
-        write_response(stream, status, &header_refs, None, keep_alive)?;
-        return Ok(());
-    }
-
-    file.seek(SeekFrom::Start(start))?;
-    write_response_head(stream, status, &header_refs, keep_alive)?;
-    copy_n_bytes(&mut file, stream, content_length)
-}
-
-/// Serve an MP4 file using a virtual faststart layout.
-///
-/// This function handles range requests over the virtual byte stream described by
-/// `layout`, composing responses from a mix of in-memory moov data and on-disk
-/// file regions without ever loading the full file into memory.
-fn serve_virtual_file(
-    stream: &mut TcpStream,
-    is_head: bool,
-    entry: &MediaStreamEntry,
-    layout: &FaststartLayout,
-    range_header: Option<&str>,
-    keep_alive: bool,
-) -> io::Result<()> {
-    let file_len = layout.total_size;
-
-    let (status, start, end) = match parse_range(range_header, file_len) {
-        Ok(Some((s, e))) => ("206 Partial Content", s, e),
-        Ok(None) => ("200 OK", 0, file_len.saturating_sub(1)),
-        Err(()) => {
-            let content_range = format!("bytes */{file_len}");
-            write_response(
-                stream,
-                "416 Range Not Satisfiable",
-                &[
-                    ("Accept-Ranges", "bytes"),
-                    ("Content-Range", &content_range),
-                    ("Content-Length", "0"),
-                ],
-                None,
-                false,
-            )?;
-            return Ok(());
-        }
-    };
-
-    let content_length = if file_len == 0 { 0 } else { end - start + 1 };
-    let content_length_header = content_length.to_string();
-    let content_range_header = if status == "206 Partial Content" {
-        Some(format!("bytes {start}-{end}/{file_len}"))
-    } else {
-        None
-    };
-
-    let mut headers = vec![
-        ("Accept-Ranges", "bytes".to_string()),
-        ("Content-Type", entry.mime_type.clone()),
-        ("Content-Length", content_length_header),
-    ];
-
-    if let Some(cr) = content_range_header {
-        headers.push(("Content-Range", cr));
-    }
-
-    let header_refs = headers
-        .iter()
-        .map(|(name, value)| (*name, value.as_str()))
-        .collect::<Vec<_>>();
-
-    if is_head || content_length == 0 {
-        write_response(stream, status, &header_refs, None, keep_alive)?;
-        return Ok(());
-    }
-
-    write_response_head(stream, status, &header_refs, keep_alive)?;
-
-    // Walk segments and write the bytes that overlap [start, end].
-    let mut seg_start: u64 = 0; // virtual offset of the first byte in this segment
-    for segment in &layout.segments {
-        let seg_len = match segment {
-            VirtualSegment::File { length, .. } => *length,
-            VirtualSegment::Memory { length, .. } => *length,
-        };
-        let seg_end = seg_start + seg_len; // exclusive
-
-        // Does this segment overlap the requested range?
-        let overlap_start = start.max(seg_start);
-        let overlap_end = (end + 1).min(seg_end); // exclusive
-
-        if overlap_start < overlap_end {
-            let overlap_len = overlap_end - overlap_start;
-            let offset_within_seg = overlap_start - seg_start;
-
-            match segment {
-                VirtualSegment::File { file_offset, .. } => {
-                    let mut file = File::open(&entry.path)?;
-                    file.seek(SeekFrom::Start(file_offset + offset_within_seg))?;
-                    copy_n_bytes(&mut file, stream, overlap_len)?;
-                }
-                VirtualSegment::Memory { data, .. } => {
-                    let slice_start = offset_within_seg as usize;
-                    let slice_end = (offset_within_seg + overlap_len) as usize;
-                    stream.write_all(&data[slice_start..slice_end])?;
-                }
-            }
-        }
-
-        seg_start = seg_end;
-        if seg_start > end {
-            break;
-        }
-    }
-
-    stream.flush()
-}
-
-fn parse_range(range_header: Option<&str>, file_len: u64) -> Result<Option<(u64, u64)>, ()> {
-    let Some(range_header) = range_header else {
-        return Ok(None);
-    };
-
-    if file_len == 0 {
-        return Err(());
-    }
-
-    let value = range_header.trim();
-    let Some(range_spec) = value.strip_prefix("bytes=") else {
-        return Err(());
-    };
-    let Some((start_part, end_part)) = range_spec.split_once('-') else {
-        return Err(());
-    };
-
-    if start_part.is_empty() {
-        let suffix_len = end_part.parse::<u64>().map_err(|_| ())?;
-        if suffix_len == 0 {
-            return Err(());
-        }
-        let start = file_len.saturating_sub(suffix_len);
-        return Ok(Some((start, file_len - 1)));
-    }
-
-    let start = start_part.parse::<u64>().map_err(|_| ())?;
-    if start >= file_len {
-        return Err(());
-    }
-
-    let end = if end_part.is_empty() {
-        file_len - 1
-    } else {
-        let parsed_end = end_part.parse::<u64>().map_err(|_| ())?;
-        parsed_end.min(file_len - 1)
-    };
-
-    if end < start {
-        return Err(());
-    }
-
-    Ok(Some((start, end)))
-}
-
-fn write_response(
-    stream: &mut TcpStream,
-    status: &str,
-    headers: &[(&str, &str)],
-    body: Option<&[u8]>,
-    keep_alive: bool,
-) -> io::Result<()> {
-    write_response_head(stream, status, headers, keep_alive)?;
-    if let Some(body) = body {
-        stream.write_all(body)?;
-    }
-    stream.flush()
-}
-
-fn write_response_head(
-    stream: &mut TcpStream,
-    status: &str,
-    headers: &[(&str, &str)],
-    keep_alive: bool,
-) -> io::Result<()> {
-    write!(stream, "HTTP/1.1 {status}\r\n")?;
-    for (name, value) in headers {
-        write!(stream, "{name}: {value}\r\n")?;
-    }
-    if keep_alive {
-        write!(stream, "Connection: keep-alive\r\n\r\n")
-    } else {
-        write!(stream, "Connection: close\r\n\r\n")
+impl Default for MediaStreamService {
+    fn default() -> Self {
+        Self::new()
     }
 }
-
-fn copy_n_bytes<R: Read, W: Write>(reader: &mut R, writer: &mut W, len: u64) -> io::Result<()> {
-    const COPY_BUFFER_LEN: usize = 64 * 1024;
-
-    let mut remaining = len;
-    let mut buffer = [0_u8; COPY_BUFFER_LEN];
-
-    while remaining > 0 {
-        let bytes_to_read = remaining.min(COPY_BUFFER_LEN as u64) as usize;
-        let read_len = reader.read(&mut buffer[..bytes_to_read])?;
-
-        if read_len == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "media stream source ended before the declared content length",
-            ));
-        }
-
-        writer.write_all(&buffer[..read_len])?;
-        remaining -= read_len as u64;
-    }
-
-    writer.flush()
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{
-        collections::HashMap,
-        fs,
-        io::Cursor,
-        io::{Read, Write},
-        net::{TcpListener, TcpStream},
-        path::Path,
-        sync::{Arc, RwLock},
-        thread,
-        time::{SystemTime, UNIX_EPOCH},
-    };
-
-    use super::{
-        copy_n_bytes, handle_connection, parse_range, ready_faststart_layout,
-        should_prepare_faststart, FaststartStatus, MediaStreamEntry,
-    };
-
-    #[test]
-    fn parse_range_supports_open_and_suffix_ranges() {
-        assert_eq!(parse_range(Some("bytes=0-99"), 200), Ok(Some((0, 99))));
-        assert_eq!(parse_range(Some("bytes=100-"), 200), Ok(Some((100, 199))));
-        assert_eq!(parse_range(Some("bytes=-50"), 200), Ok(Some((150, 199))));
-        assert_eq!(parse_range(Some("bytes=-999"), 200), Ok(Some((0, 199))));
-    }
-
-    #[test]
-    fn parse_range_rejects_invalid_ranges() {
-        assert_eq!(parse_range(Some("bytes=200-300"), 200), Err(()));
-        assert_eq!(parse_range(Some("items=0-10"), 200), Err(()));
-        assert_eq!(parse_range(Some("bytes=99-10"), 200), Err(()));
-        assert_eq!(parse_range(Some("bytes=0-0"), 0), Err(()));
-    }
-
-    #[test]
-    fn copy_n_bytes_streams_large_payloads_without_truncation() {
-        let source = (0..150_000)
-            .map(|value| (value % 251) as u8)
-            .collect::<Vec<_>>();
-        let mut reader = Cursor::new(source.clone());
-        let mut writer = Vec::new();
-
-        copy_n_bytes(&mut reader, &mut writer, source.len() as u64).unwrap();
-
-        assert_eq!(writer, source);
-    }
-
-    #[test]
-    fn should_prepare_faststart_only_for_mp4_family_videos() {
-        assert!(should_prepare_faststart(
-            Path::new("/tmp/demo.MP4"),
-            "video/mp4"
-        ));
-        assert!(should_prepare_faststart(
-            Path::new("/tmp/demo.mov"),
-            "video/quicktime"
-        ));
-        assert!(!should_prepare_faststart(
-            Path::new("/tmp/demo.webm"),
-            "video/webm"
-        ));
-        assert!(!should_prepare_faststart(
-            Path::new("/tmp/demo.mp4"),
-            "audio/mp4"
-        ));
-    }
-
-    #[test]
-    fn ready_faststart_layout_is_absent_until_background_analysis_finishes() {
-        let entry = super::MediaStreamEntry {
-            path: Path::new("/tmp/demo.mp4").to_path_buf(),
-            mime_type: "video/mp4".to_string(),
-            faststart: Arc::new(RwLock::new(FaststartStatus::Pending)),
-        };
-
-        assert!(ready_faststart_layout(&entry).is_none());
-    }
-
-    #[test]
-    fn http_handler_serves_registered_media_without_wildcard_cors() {
-        let unique = SystemTime::now()
+impl MediaStreamService {
+    /// Create an infallible, socket-free media transport.
+    pub fn new() -> Self {
+        let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "chilla-media-stream-test-{}-{unique}.txt",
-            std::process::id()
-        ));
-        fs::write(&path, "media body").expect("write media fixture");
-
-        let mut registry = HashMap::new();
+        Self {
+            entries: Arc::new(RwLock::new(HashMap::new())),
+            analyzer: Arc::new(Mutex::new(())),
+            retained_bytes: Arc::new(AtomicUsize::new(0)),
+            read_jobs: Arc::new(AtomicUsize::new(0)),
+            token_seed: Arc::from(format!("{}:{now}", std::process::id())),
+            token_counter: Arc::new(AtomicU64::new(0)),
+        }
+    }
+    /// Register on a blocking worker; pin the representation before publishing its token.
+    pub fn register_media_stream(&self, path: &Path, mime_type: &str) -> AppResult<String> {
+        let path = std::fs::canonicalize(path)
+            .map_err(|source| AppError::io("canonicalize media stream path", path, source))?;
+        // Keep this guard until the candidate is admitted/dropped, bounding concurrent analyzers.
+        let _analysis_guard = self
+            .analyzer
+            .lock()
+            .map_err(|_| AppError::State("media analysis lock unavailable".into()))?;
+        let candidate = if should_prepare_faststart(&path, mime_type) {
+            crate::mp4_faststart::analyze_mp4(&path)
+        } else {
+            None
+        };
+        let counter = self.token_counter.fetch_add(1, Ordering::Relaxed);
+        let token =
+            blake3::hash(format!("{}:{}:{counter}", self.token_seed, path.display()).as_bytes())
+                .to_hex()
+                .to_string();
+        let mut registry = self
+            .entries
+            .write()
+            .map_err(|_| AppError::State("media registry unavailable".into()))?;
+        registry.retain(|_, entry| entry.path != path);
+        while registry.len() >= MAX_MEDIA_STREAM_ENTRIES {
+            if let Some(key) = registry.keys().next().cloned() {
+                registry.remove(&key);
+            } else {
+                break;
+            }
+        }
+        let layout = candidate.and_then(|layout| self.retain_layout(layout));
         registry.insert(
-            "test-token".to_string(),
-            MediaStreamEntry {
-                path: path.clone(),
-                mime_type: "text/plain".to_string(),
-                faststart: Arc::new(RwLock::new(FaststartStatus::Unsupported)),
-            },
+            token.clone(),
+            Arc::new(MediaStreamEntry {
+                path,
+                mime_type: mime_type.into(),
+                layout,
+            }),
         );
-        let entries = Arc::new(RwLock::new(registry));
-        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind test listener");
-        let address = listener.local_addr().expect("listener addr");
-        let handler_entries = Arc::clone(&entries);
-        let handle = thread::spawn(move || {
-            let (stream, _) = listener.accept().expect("accept connection");
-            handle_connection(stream, handler_entries).expect("handle connection");
+        Ok(media_url(&token))
+    }
+    fn retain_layout(&self, layout: FaststartLayout) -> Option<RetainedLayout> {
+        let metadata_bytes = layout
+            .segments
+            .capacity()
+            .checked_mul(std::mem::size_of::<VirtualSegment>())?
+            .checked_add(std::mem::size_of::<FaststartLayout>())?;
+        let bytes = layout
+            .segments
+            .iter()
+            .try_fold(metadata_bytes, |sum, segment| {
+                sum.checked_add(match segment {
+                    VirtualSegment::Memory { data, .. } => data.len(),
+                    _ => 0,
+                })
+            })?;
+        self.retained_bytes
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+                used.checked_add(bytes)
+                    .filter(|total| *total <= MAX_LAYOUT_BYTES)
+            })
+            .ok()?;
+        Some(RetainedLayout {
+            layout,
+            bytes,
+            budget: Arc::clone(&self.retained_bytes),
+        })
+    }
+    fn acquire_read(&self) -> Option<ReadPermit> {
+        self.read_jobs
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+                (count < MAX_READ_JOBS).then_some(count + 1)
+            })
+            .ok()?;
+        Some(ReadPermit(Arc::clone(&self.read_jobs)))
+    }
+    /// Admit before scheduling: rejected requests never fill the blocking task queue.
+    pub fn dispatch(&self, request: Request<Vec<u8>>, responder: tauri::UriSchemeResponder) {
+        let Some(permit) = self.acquire_read() else {
+            responder.respond(empty_response(StatusCode::SERVICE_UNAVAILABLE));
+            return;
+        };
+        let service = self.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let _permit = permit;
+            responder.respond(service.handle_request(&request));
         });
-
-        let mut client = TcpStream::connect(address).expect("connect client");
-        client
-            .write_all(
-                b"GET /media/test-token HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
-            )
-            .expect("write request");
-        let mut response = String::new();
-        client.read_to_string(&mut response).expect("read response");
-        handle.join().expect("handler joins");
-        let _ = fs::remove_file(path);
-
-        assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
-        assert!(response.contains("Content-Type: text/plain"), "{response}");
-        assert!(
-            !response.contains("Access-Control-Allow-Origin"),
-            "{response}"
-        );
-        assert!(response.ends_with("media body"), "{response}");
+    }
+    fn handle_request(&self, request: &Request<Vec<u8>>) -> Response<Vec<u8>> {
+        if request.method() != Method::GET && request.method() != Method::HEAD {
+            let mut response = empty_response(StatusCode::METHOD_NOT_ALLOWED);
+            response
+                .headers_mut()
+                .insert(header::ALLOW, header::HeaderValue::from_static("GET, HEAD"));
+            return response;
+        }
+        let Some(token) = media_token(request.uri()) else {
+            return empty_response(StatusCode::NOT_FOUND);
+        };
+        let entry = match self.entries.read() {
+            Ok(registry) => registry.get(token).cloned(),
+            Err(_) => return empty_response(StatusCode::INTERNAL_SERVER_ERROR),
+        };
+        let Some(entry) = entry else {
+            return empty_response(StatusCode::NOT_FOUND);
+        };
+        match serve_entry(&entry, request) {
+            Ok(response) => response,
+            Err(error) => empty_response(if error.kind() == io::ErrorKind::NotFound {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }),
+        }
     }
 }
+fn media_url(token: &str) -> String {
+    browser_media_url(
+        token,
+        cfg!(any(target_os = "windows", target_os = "android")),
+    )
+}
+fn browser_media_url(token: &str, mapped: bool) -> String {
+    if mapped {
+        format!("http://chilla-media.localhost/media/{token}")
+    } else {
+        format!("chilla-media://localhost/media/{token}")
+    }
+}
+fn media_token(uri: &Uri) -> Option<&str> {
+    // Wry normalizes Windows/Android's mapped browser URLs before invoking Rust.
+    if uri.scheme_str()? != "chilla-media"
+        || uri.authority()?.as_str() != "localhost"
+        || uri.query().is_some()
+    {
+        return None;
+    }
+    let token = uri.path().strip_prefix("/media/")?;
+    (token.len() == 64
+        && token
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))
+    .then_some(token)
+}
+fn should_prepare_faststart(path: &Path, mime_type: &str) -> bool {
+    mime_type.starts_with("video/")
+        && path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                matches!(
+                    extension.to_ascii_lowercase().as_str(),
+                    "mp4" | "m4v" | "mov"
+                )
+            })
+}
+fn empty_response(status: StatusCode) -> Response<Vec<u8>> {
+    let mut response = Response::new(Vec::new());
+    *response.status_mut() = status;
+    response.headers_mut().insert(
+        header::CONTENT_LENGTH,
+        header::HeaderValue::from_static("0"),
+    );
+    response
+}
+fn serve_entry(
+    entry: &MediaStreamEntry,
+    request: &Request<Vec<u8>>,
+) -> io::Result<Response<Vec<u8>>> {
+    let mut file = File::open(&entry.path)?;
+    let source_len = file.metadata()?.len();
+    let file_len = entry
+        .layout
+        .as_ref()
+        .map_or(source_len, |value| value.layout.total_size);
+    let range_values = request.headers().get_all(header::RANGE);
+    let mut values = range_values.iter();
+    let raw_range = values.next();
+    let range = if request.method() == Method::HEAD {
+        Ok(None)
+    } else if values.next().is_some() {
+        Err(())
+    } else {
+        raw_range
+            .map(|value| value.to_str().map_err(|_| ()))
+            .transpose()
+            .and_then(|value| parse_range(value, file_len))
+    };
+    let range = match range {
+        Ok(range) => range,
+        Err(()) => {
+            let mut response = empty_response(StatusCode::RANGE_NOT_SATISFIABLE);
+            insert_header(
+                &mut response,
+                header::CONTENT_RANGE,
+                &format!("bytes */{file_len}"),
+            )?;
+            insert_header(&mut response, header::ACCEPT_RANGES, "bytes")?;
+            return Ok(response);
+        }
+    };
+    let is_head = request.method() == Method::HEAD;
+    let (start, length, status) = match range {
+        Some((start, end)) => (
+            start,
+            (end - start + 1).min(MAX_RESPONSE_BYTES),
+            StatusCode::PARTIAL_CONTENT,
+        ),
+        None if !is_head && file_len > MAX_RESPONSE_BYTES => {
+            return Ok(empty_response(StatusCode::PAYLOAD_TOO_LARGE))
+        }
+        None => (0, file_len, StatusCode::OK),
+    };
+    let body = if is_head || length == 0 {
+        Vec::new()
+    } else {
+        match &entry.layout {
+            Some(value) => read_virtual(&mut file, &value.layout, start, length)?,
+            None => {
+                file.seek(SeekFrom::Start(start))?;
+                let mut body = vec![0; length as usize];
+                file.read_exact(&mut body)?;
+                body
+            }
+        }
+    };
+    let mut response = Response::new(body);
+    *response.status_mut() = status;
+    insert_header(&mut response, header::CONTENT_TYPE, &entry.mime_type)?;
+    insert_header(&mut response, header::CONTENT_LENGTH, &length.to_string())?;
+    insert_header(&mut response, header::ACCEPT_RANGES, "bytes")?;
+    insert_header(&mut response, header::CACHE_CONTROL, "no-store")?;
+    if range.is_some() {
+        insert_header(
+            &mut response,
+            header::CONTENT_RANGE,
+            &format!("bytes {start}-{}/{file_len}", start + length - 1),
+        )?;
+    }
+    Ok(response)
+}
+fn insert_header(
+    response: &mut Response<Vec<u8>>,
+    name: header::HeaderName,
+    value: &str,
+) -> io::Result<()> {
+    response.headers_mut().insert(
+        name,
+        header::HeaderValue::from_str(value).map_err(io::Error::other)?,
+    );
+    Ok(())
+}
+fn read_virtual(
+    file: &mut File,
+    layout: &FaststartLayout,
+    start: u64,
+    length: u64,
+) -> io::Result<Vec<u8>> {
+    let invalid = || {
+        io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "incomplete media representation",
+        )
+    };
+    let end = start.checked_add(length).ok_or_else(invalid)?;
+    let mut result = Vec::with_capacity(length as usize);
+    let mut segment_start = 0u64;
+    for segment in &layout.segments {
+        let segment_len = match segment {
+            VirtualSegment::File { length, .. } | VirtualSegment::Memory { length, .. } => *length,
+        };
+        let segment_end = segment_start.checked_add(segment_len).ok_or_else(invalid)?;
+        let overlap_start = start.max(segment_start);
+        let overlap_end = end.min(segment_end);
+        if overlap_start < overlap_end {
+            let offset = overlap_start - segment_start;
+            let count = usize::try_from(overlap_end - overlap_start).map_err(|_| invalid())?;
+            match segment {
+                VirtualSegment::File { file_offset, .. } => {
+                    file.seek(SeekFrom::Start(
+                        file_offset.checked_add(offset).ok_or_else(invalid)?,
+                    ))?;
+                    let previous = result.len();
+                    result.resize(previous + count, 0);
+                    file.read_exact(&mut result[previous..])?;
+                }
+                VirtualSegment::Memory { data, .. } => {
+                    let offset = usize::try_from(offset).map_err(|_| invalid())?;
+                    let slice = data
+                        .get(offset..offset.checked_add(count).ok_or_else(invalid)?)
+                        .ok_or_else(invalid)?;
+                    result.extend_from_slice(slice);
+                }
+            }
+        }
+        segment_start = segment_end;
+        if segment_start >= end {
+            break;
+        }
+    }
+    if result.len() as u64 != length {
+        return Err(invalid());
+    }
+    Ok(result)
+}
+fn parse_range(header: Option<&str>, length: u64) -> Result<Option<(u64, u64)>, ()> {
+    let Some(value) = header else {
+        return Ok(None);
+    };
+    if length == 0 {
+        return Err(());
+    }
+    let spec = value.strip_prefix("bytes=").ok_or(())?;
+    let (first, last) = spec.split_once('-').ok_or(())?;
+    let decimal = |value: &str| -> Result<u64, ()> {
+        if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(());
+        }
+        value.parse().map_err(|_| ())
+    };
+    if first.is_empty() {
+        let suffix = decimal(last)?;
+        return if suffix == 0 {
+            Err(())
+        } else {
+            Ok(Some((length.saturating_sub(suffix), length - 1)))
+        };
+    }
+    let start = decimal(first)?;
+    let end = if last.is_empty() {
+        length - 1
+    } else {
+        decimal(last)?.min(length - 1)
+    };
+    if start >= length || end < start {
+        return Err(());
+    }
+    Ok(Some((start, end)))
+}
+#[cfg(test)]
+mod tests;

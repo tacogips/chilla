@@ -7,6 +7,11 @@ import type {
 } from "../../lib/tauri/document";
 import type { ColorScheme } from "../../lib/theme";
 import {
+  structuredDataFormatLabel,
+  type HtmlPresentationMode,
+  type StructuredTextPreview,
+} from "./workspacePreviewModel";
+import {
   CloseWindowGlyph,
   FileViewGlyph,
   GitDiffGlyph,
@@ -17,8 +22,10 @@ import {
   PreviewGlyph,
   RawSourceGlyph,
   ReloadGlyph,
+  FormatSourceGlyph,
   SidebarGlyph,
   SunGlyph,
+  SyntaxHighlightGlyph,
   TocGlyph,
 } from "./workspaceGlyphs";
 import { SHORTCUT_LABELS } from "./workspaceShortcuts";
@@ -39,6 +46,11 @@ interface WorkspaceHeaderProps {
   readonly markdownPane: MarkdownPane;
   readonly csvPreview: CsvPreview | null;
   readonly csvPaneMode: DocumentPresentationMode;
+  readonly structuredTextPreview: StructuredTextPreview | null;
+  readonly structuredDataPresentationMode: DocumentPresentationMode;
+  readonly htmlPresentationMode: HtmlPresentationMode;
+  readonly hasSourcePreview: boolean;
+  readonly syntaxHighlightingEnabled: boolean;
   readonly activeGitDiff: boolean;
   readonly canOpenGitDiff: boolean;
   readonly hasTocDocument: boolean;
@@ -48,10 +60,16 @@ interface WorkspaceHeaderProps {
   readonly appWindow: WorkspaceWindowControls | null;
   readonly onSelectMarkdownPane: (pane: MarkdownPane) => void;
   readonly onSelectCsvPaneMode: (mode: DocumentPresentationMode) => void;
+  readonly onSelectStructuredDataPresentationMode: (
+    mode: DocumentPresentationMode,
+  ) => void;
+  readonly onSelectHtmlPresentationMode: (mode: HtmlPresentationMode) => void;
+  readonly onToggleFormat: () => void;
   readonly onOpenGitDiff: () => void;
   readonly onCloseGitDiff: () => void;
   readonly onOpenFiles: () => void;
   readonly onToggleToc: () => void;
+  readonly onToggleSyntaxHighlighting: () => void;
   readonly onReloadCurrent: () => void;
   readonly onCycleColorScheme: () => void;
 }
@@ -99,6 +117,25 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
     const keys = [primary, toggle === "" ? "" : `${toggle} toggles`]
       .filter(Boolean)
       .join("; ");
+    return keys === "" ? base : `${base} (${keys})`;
+  };
+  /** Same as {@link presentationTitle}, plus the dedicated format.toggle shortcut. */
+  const dataViewPresentationTitle = (
+    base: string,
+    action: "presentation.raw" | "presentation.rendered",
+    fallback: string,
+  ): string => {
+    const primary = label(action, fallback);
+    const togglePresentation = label(
+      "presentation.toggle",
+      SHORTCUT_LABELS.toggleMarkdownPane,
+    );
+    const toggleFormat = label("format.toggle", SHORTCUT_LABELS.toggleFormat);
+    const toggles = [
+      togglePresentation === "" ? "" : `${togglePresentation} toggles`,
+      toggleFormat === "" ? "" : `${toggleFormat} toggles format`,
+    ].filter((part) => part !== "");
+    const keys = [primary, ...toggles].filter((part) => part !== "").join("; ");
     return keys === "" ? base : `${base} (${keys})`;
   };
   return (
@@ -213,6 +250,161 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
         </Show>
 
         <Show
+          when={
+            props.structuredTextPreview !== null &&
+            props.structuredTextPreview.structured_format !== "html"
+              ? props.structuredTextPreview
+              : null
+          }
+        >
+          {(getStructuredPreview) => {
+            const structuredPreview = getStructuredPreview();
+            const formatLabel = () =>
+              structuredDataFormatLabel(
+                structuredPreview.structured_format,
+                structuredPreview.path,
+              );
+            return (
+              <div
+                class="workspace__mode-group"
+                role="group"
+                aria-label="Data view"
+              >
+                <button
+                  class={`workspace__mode${
+                    props.structuredDataPresentationMode === "raw"
+                      ? " workspace__mode--active"
+                      : ""
+                  }`}
+                  type="button"
+                  aria-label={`Raw ${formatLabel()} source`}
+                  title={dataViewPresentationTitle(
+                    "Raw",
+                    "presentation.raw",
+                    SHORTCUT_LABELS.rawView,
+                  )}
+                  onClick={() =>
+                    props.onSelectStructuredDataPresentationMode("raw")
+                  }
+                >
+                  <RawSourceGlyph />
+                </button>
+                <button
+                  class={`workspace__mode${
+                    props.structuredDataPresentationMode === "formatted"
+                      ? " workspace__mode--active"
+                      : ""
+                  }`}
+                  type="button"
+                  disabled={structuredPreview.formatted_html === null}
+                  aria-label={`Formatted ${formatLabel()}`}
+                  title={
+                    structuredPreview.formatted_html === null
+                      ? (structuredPreview.format_notice ??
+                        "Formatted view is unavailable for this file.")
+                      : dataViewPresentationTitle(
+                          "Formatted",
+                          "presentation.rendered",
+                          SHORTCUT_LABELS.secondaryView,
+                        )
+                  }
+                  onClick={() =>
+                    props.onSelectStructuredDataPresentationMode("formatted")
+                  }
+                >
+                  <PreviewGlyph />
+                </button>
+              </div>
+            );
+          }}
+        </Show>
+
+        <Show
+          when={
+            props.structuredTextPreview !== null &&
+            props.structuredTextPreview.structured_format === "html"
+              ? props.structuredTextPreview
+              : null
+          }
+        >
+          {(getHtmlPreview) => {
+            const htmlPreview = getHtmlPreview();
+            return (
+              <>
+                <div
+                  class="workspace__mode-group"
+                  role="group"
+                  aria-label="HTML view"
+                >
+                  <button
+                    class={`workspace__mode${
+                      props.htmlPresentationMode === "raw"
+                        ? " workspace__mode--active"
+                        : ""
+                    }`}
+                    type="button"
+                    aria-label="Raw HTML source"
+                    title={presentationTitle(
+                      "Raw source",
+                      "presentation.raw",
+                      SHORTCUT_LABELS.rawView,
+                    )}
+                    onClick={() => props.onSelectHtmlPresentationMode("raw")}
+                  >
+                    <RawSourceGlyph />
+                  </button>
+                  <button
+                    class={`workspace__mode${
+                      props.htmlPresentationMode === "preview"
+                        ? " workspace__mode--active"
+                        : ""
+                    }`}
+                    type="button"
+                    aria-label="HTML preview"
+                    title={presentationTitle(
+                      "Preview",
+                      "presentation.rendered",
+                      SHORTCUT_LABELS.secondaryView,
+                    )}
+                    onClick={() =>
+                      props.onSelectHtmlPresentationMode("preview")
+                    }
+                  >
+                    <PreviewGlyph />
+                  </button>
+                </div>
+                <button
+                  class={`button button--ghost workspace__icon-button${
+                    props.structuredDataPresentationMode === "formatted"
+                      ? " button--active"
+                      : ""
+                  }`}
+                  type="button"
+                  disabled={htmlPreview.formatted_html === null}
+                  aria-pressed={
+                    props.structuredDataPresentationMode === "formatted"
+                  }
+                  aria-label="Format source"
+                  title={
+                    htmlPreview.formatted_html === null
+                      ? (htmlPreview.format_notice ??
+                        "Formatted view is unavailable for this file.")
+                      : title(
+                          "Format source",
+                          "format.toggle",
+                          SHORTCUT_LABELS.toggleFormat,
+                        )
+                  }
+                  onClick={props.onToggleFormat}
+                >
+                  <FormatSourceGlyph />
+                </button>
+              </>
+            );
+          }}
+        </Show>
+
+        <Show
           when={props.activeGitDiff}
           fallback={
             <Show when={props.canOpenGitDiff}>
@@ -260,6 +452,25 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
             onClick={props.onToggleToc}
           >
             <TocGlyph />
+          </button>
+        </Show>
+
+        <Show when={props.hasSourcePreview}>
+          <button
+            class={`button button--ghost workspace__icon-button${
+              props.syntaxHighlightingEnabled ? " button--active" : ""
+            }`}
+            type="button"
+            aria-pressed={props.syntaxHighlightingEnabled}
+            aria-label="Toggle syntax highlighting"
+            title={title(
+              "Toggle syntax highlighting",
+              "syntax.toggle",
+              SHORTCUT_LABELS.toggleSyntax,
+            )}
+            onClick={props.onToggleSyntaxHighlighting}
+          >
+            <SyntaxHighlightGlyph />
           </button>
         </Show>
 

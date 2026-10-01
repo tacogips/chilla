@@ -165,6 +165,37 @@ export function TocGlyph() {
   );
 }
 
+export function SyntaxHighlightGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M3 21l3-1 12-12-2-2L4 18zM14 7l3 3"
+      />
+      <circle cx="19" cy="5" r="2" fill="currentColor" stroke="none" />
+    </WorkspaceHeaderIcon>
+  );
+}
+
+/** Indent lines suggest pretty-printing; used for the "Format source" toggle. */
+export function FormatSourceGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-width="2"
+        d="M4 5h16M4 10h10M8 15h12M4 20h7"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}
+
 export function ReloadGlyph() {
   return (
     <WorkspaceHeaderIcon>

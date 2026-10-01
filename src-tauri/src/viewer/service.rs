@@ -11,7 +11,8 @@ use crate::{
     error::{AppError, AppResult},
     syntax_highlight::{self, SyntaxUiTheme},
     verbose_log::{self, VerboseIoOutcome},
-    viewer::csv::{parse_csv_preview, CsvPreviewLimits},
+    viewer::csv::{parse_csv_preview_with_delimiter, CsvPreviewLimits},
+    viewer::data_format,
     viewer::directory_listing,
     viewer::epub::render_epub,
     viewer::html::{escape_html_attribute, escape_html_text, format_file_size},
@@ -20,8 +21,8 @@ use crate::{
         file_name, last_modified_string, observed_metadata, parent_directory_path,
     },
     viewer::preview_detection::{
-        fallback_media_mime_type, is_csv_path, is_markdown_path, is_text_preview_extension,
-        is_textual_mime, should_preview_as_csv,
+        csv_delimiter_for, fallback_media_mime_type, is_csv_path, is_markdown_path,
+        is_text_preview_extension, is_textual_mime, is_tsv_path, should_preview_as_csv,
     },
     viewer::types::{
         BrowserRoot, CsvRowCountStatus, DirectoryListSort, DirectoryPage, ExplicitFileSetPage,
@@ -176,11 +177,13 @@ impl ViewerService {
         }
 
         if should_preview_as_csv(&file_path, &mime_type) {
+            let delimiter = csv_delimiter_for(&file_path, &mime_type);
             return self.open_csv_preview(
                 &file_path,
                 mime_type,
                 ui_theme,
                 options.csv_first_row_as_header,
+                delimiter,
             );
         }
 
@@ -304,6 +307,37 @@ impl ViewerService {
             encoding_notice,
         );
 
+        let structured_format = data_format::structured_format_for_path(path);
+        let mut formatted_html = None;
+        let mut format_notice = None;
+        if let Some(format) = structured_format {
+            let source_for_format = source_text
+                .strip_prefix('\u{feff}')
+                .unwrap_or(source_text.as_ref());
+            let outcome = data_format::format_structured_source(source_for_format, format, path);
+            format_notice = outcome.notice;
+            if let Some(formatted_text) = outcome.formatted {
+                let notice_html = format_notice
+                    .as_deref()
+                    .map(|notice| {
+                        format!(
+                            "<p class=\"file-preview__notice\">{}</p>",
+                            escape_html_text(notice)
+                        )
+                    })
+                    .unwrap_or_default();
+                let highlighted_formatted =
+                    syntax_highlight::highlight_file_source(&formatted_text, path, ui_theme);
+                formatted_html = Some(format!(
+                    "<section class=\"file-preview file-preview--text\">{}{}<footer class=\"file-preview__meta\" aria-label=\"File information\">{} · {} · Formatted</footer></section>",
+                    notice_html,
+                    highlighted_formatted,
+                    escape_html_text(&file_type),
+                    escape_html_text(&format_file_size(file_bytes.len() as u64)),
+                ));
+            }
+        }
+
         Ok(FilePreview::Text {
             path: display_path(path),
             file_name: file_name(path),
@@ -312,6 +346,9 @@ impl ViewerService {
             html,
             size_bytes: file_bytes.len() as u64,
             last_modified: last_modified_string(path)?,
+            structured_format,
+            formatted_html,
+            format_notice,
         })
     }
 
@@ -321,6 +358,7 @@ impl ViewerService {
         mime_type: String,
         ui_theme: SyntaxUiTheme,
         first_row_as_header: bool,
+        delimiter: u8,
     ) -> AppResult<FilePreview> {
         let file_bytes =
             observed_read(path).map_err(|source| AppError::io("read", path, source))?;
@@ -333,6 +371,8 @@ impl ViewerService {
 
         let normalized_mime = if is_csv_path(path) {
             "text/csv".to_string()
+        } else if is_tsv_path(path) || mime_type.eq_ignore_ascii_case("text/tab-separated-values") {
+            "text/tab-separated-values".to_string()
         } else {
             mime_type
         };
@@ -348,7 +388,11 @@ impl ViewerService {
             encoding_notice,
         );
 
-        let parsed = parse_csv_preview(source_for_view, CsvPreviewLimits::default());
+        let parsed = parse_csv_preview_with_delimiter(
+            source_for_view,
+            CsvPreviewLimits::default(),
+            delimiter,
+        );
         let formatted_available = parsed.parse_error.is_none();
         let parse_error = parsed.parse_error.clone();
         let row_count_status = if parse_error.is_some() {

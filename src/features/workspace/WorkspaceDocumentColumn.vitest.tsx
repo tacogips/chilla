@@ -1,8 +1,14 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import type { FilePreview } from "../../lib/tauri/document";
 import { WorkspaceDocumentColumn } from "./WorkspaceDocumentColumn";
+
+vi.mock("@tauri-apps/api/core", () => ({
+  convertFileSrc(path: string) {
+    return `asset://localhost/${path}`;
+  },
+}));
 
 let dispose: VoidFunction | undefined;
 afterEach(() => {
@@ -23,6 +29,9 @@ describe("WorkspaceDocumentColumn source mode", () => {
       size_bytes: 5,
       last_modified: "now",
       html: '<section class="file-preview file-preview--text"><pre>value</pre><footer class="file-preview__meta">Python · 5 B</footer></section>',
+      structured_format: null,
+      formatted_html: null,
+      format_notice: null,
     });
     dispose = render(
       () => (
@@ -38,6 +47,8 @@ describe("WorkspaceDocumentColumn source mode", () => {
           csvPreview={null}
           csvFirstRowAsHeader={false}
           csvPaneMode="raw"
+          structuredDataMode="raw"
+          htmlPresentationMode="raw"
           videoAutoplayRequestId={0}
           hasOpenDocument={true}
           onMarkdownEditorInput={() => undefined}
@@ -60,6 +71,9 @@ describe("WorkspaceDocumentColumn source mode", () => {
       size_bytes: 2,
       last_modified: "now",
       html: '<section class="file-preview file-preview--text"><pre>{}</pre><footer class="file-preview__meta">JSON · 2 B</footer></section>',
+      structured_format: "json",
+      formatted_html: null,
+      format_notice: null,
     });
     expect(root.querySelector(".preview--source")).not.toBeNull();
     expect(root.querySelector("pre")?.textContent).toBe("{}");
@@ -107,6 +121,8 @@ describe("WorkspaceDocumentColumn source mode", () => {
           csvFirstRowAsHeader={firstRowAsHeader()}
           csvPaneMode="formatted"
           csvPreview={csvPreview}
+          structuredDataMode="raw"
+          htmlPresentationMode="raw"
           epubToc={[]}
           filePreview={csvPreview}
           hasOpenDocument={true}
@@ -134,5 +150,114 @@ describe("WorkspaceDocumentColumn source mode", () => {
     checkbox.click();
     expect(changes).toEqual([true]);
     expect(checkbox.checked).toBe(true);
+  });
+
+  it("renders formatted_html for a structured JSON preview only in formatted mode", () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const jsonPreview: Extract<FilePreview, { kind: "text" }> = {
+      kind: "text",
+      path: "/tmp/sample.json",
+      file_name: "sample.json",
+      mime_type: "application/json",
+      file_type: "JSON",
+      size_bytes: 12,
+      last_modified: "now",
+      html: '<section class="file-preview file-preview--text"><pre>{"a":1}</pre></section>',
+      structured_format: "json",
+      formatted_html:
+        '<section class="file-preview file-preview--text"><pre>{\n  "a": 1\n}</pre></section>',
+      format_notice: null,
+    };
+    const [structuredDataMode, setStructuredDataMode] = createSignal<
+      "raw" | "formatted"
+    >("raw");
+    dispose = render(
+      () => (
+        <WorkspaceDocumentColumn
+          colorScheme="dark"
+          markdownDoc={null}
+          markdownPane="preview"
+          markdownEditorBuffer=""
+          markdownIsDirty={false}
+          selection={{ lineStart: null, anchorId: null }}
+          filePreview={jsonPreview}
+          epubToc={[]}
+          csvPreview={null}
+          csvFirstRowAsHeader={false}
+          csvPaneMode="raw"
+          structuredDataMode={structuredDataMode()}
+          htmlPresentationMode="raw"
+          videoAutoplayRequestId={0}
+          hasOpenDocument={true}
+          onMarkdownEditorInput={() => undefined}
+          onCsvFirstRowAsHeaderChange={() => undefined}
+          onRelocateEpub={() => undefined}
+        />
+      ),
+      root,
+    );
+
+    expect(root.querySelector("pre")?.textContent).toBe('{"a":1}');
+    setStructuredDataMode("formatted");
+    expect(root.querySelector("pre")?.textContent).toBe('{\n  "a": 1\n}');
+  });
+
+  it("renders a sandboxed iframe for HTML previews in preview mode, and source in raw mode", () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const htmlPreview: Extract<FilePreview, { kind: "text" }> = {
+      kind: "text",
+      path: "/tmp/site/index.html",
+      file_name: "index.html",
+      mime_type: "text/html",
+      file_type: "HTML",
+      size_bytes: 20,
+      last_modified: "now",
+      html: '<section class="file-preview file-preview--text"><pre>&lt;html&gt;&lt;/html&gt;</pre></section>',
+      structured_format: "html",
+      formatted_html: null,
+      format_notice: null,
+    };
+    const [htmlPresentationMode, setHtmlPresentationMode] = createSignal<
+      "raw" | "preview"
+    >("raw");
+    dispose = render(
+      () => (
+        <WorkspaceDocumentColumn
+          colorScheme="dark"
+          markdownDoc={null}
+          markdownPane="preview"
+          markdownEditorBuffer=""
+          markdownIsDirty={false}
+          selection={{ lineStart: null, anchorId: null }}
+          filePreview={htmlPreview}
+          epubToc={[]}
+          csvPreview={null}
+          csvFirstRowAsHeader={false}
+          csvPaneMode="raw"
+          structuredDataMode="raw"
+          htmlPresentationMode={htmlPresentationMode()}
+          videoAutoplayRequestId={0}
+          hasOpenDocument={true}
+          onMarkdownEditorInput={() => undefined}
+          onCsvFirstRowAsHeaderChange={() => undefined}
+          onRelocateEpub={() => undefined}
+        />
+      ),
+      root,
+    );
+
+    expect(root.querySelector(".preview--source")).not.toBeNull();
+    expect(root.querySelector("iframe.preview-html-frame")).toBeNull();
+
+    setHtmlPresentationMode("preview");
+
+    const iframe = root.querySelector<HTMLIFrameElement>(
+      "iframe.preview-html-frame",
+    );
+    expect(iframe).not.toBeNull();
+    expect(iframe?.getAttribute("sandbox")).toBe("");
+    expect(root.querySelector(".preview--source")).toBeNull();
   });
 });

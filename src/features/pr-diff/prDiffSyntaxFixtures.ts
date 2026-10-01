@@ -74,7 +74,28 @@ export const diffSyntaxFixtures = {
       'def sample = { value -> return value + 42 }; implementation "sample:1.0" // note\n',
   },
   xml: {
-    aliases: ["xml", "svg"],
+    aliases: [
+      "xml",
+      "svg",
+      "xsd",
+      "xsl",
+      "xslt",
+      "rss",
+      "atom",
+      "opml",
+      "plist",
+      "wsdl",
+      "kml",
+      "gpx",
+      "csproj",
+      "fsproj",
+      "vbproj",
+      "props",
+      "targets",
+      "resx",
+      "xaml",
+      "nuspec",
+    ],
     source:
       '<svg viewBox="0 0 42 42"><rect width="42" /></svg> <!-- note -->\n',
   },
@@ -92,7 +113,7 @@ export const diffSyntaxFixtures = {
     source: 'let value = 42; in { enabled = true; name = "hello"; } # note\n',
   },
   dockerfile: {
-    aliases: ["Dockerfile", "sample.dockerfile"],
+    aliases: ["Dockerfile", "Containerfile", "sample.dockerfile"],
     source: 'RUN echo "hello" && exit 0 # note\n',
   },
   makefile: {
@@ -121,7 +142,17 @@ export const diffSyntaxFixtures = {
     source: 'if [ "$value" = "42" ]; then echo true; fi # note\n',
   },
   json: {
-    aliases: ["json", "jsonc"],
+    aliases: [
+      "json",
+      "jsonc",
+      "jsonl",
+      "ndjson",
+      "jsonlines",
+      "geojson",
+      "jsonld",
+      "webmanifest",
+      "har",
+    ],
     source:
       '{"name": "hello", "count": 42.5, "enabled": true, "items": [1, 2, null]}\n',
   },

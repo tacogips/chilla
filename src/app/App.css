@@ -967,6 +967,7 @@ button {
 
 /* File-view PDF / media: fill the document pane below the header. */
 .pane__body.preview.preview--embedded-pdf,
+.pane__body.preview.preview--embedded-html,
 .pane__body.preview.preview--embedded-video,
 .pane__body.preview.preview--embedded-audio,
 .pane__body.preview.preview--embedded-epub {
@@ -979,6 +980,17 @@ button {
 .pane__body.preview.preview--embedded-pdf .preview-pdf-frame {
   flex: 1;
   min-height: 0;
+}
+
+.pane__body.preview.preview--embedded-html .preview-html-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  /* The sandboxed page supplies its own background; white matches a default
+     browser document background regardless of the app's color scheme. */
+  background: #fff;
 }
 
 .pane__body.preview.preview--embedded-video .preview-media--video {
@@ -2658,6 +2670,58 @@ button {
 .file-preview__meta {
   color: var(--text-subtle);
   font-size: 0.78rem;
+}
+
+.file-preview__notice {
+  margin: 0 0 0.55rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgb(200 150 40 / 0.45);
+  background: rgb(255 244 214 / 0.55);
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+:root[data-theme="dark"] .file-preview__notice {
+  border-color: rgb(214 168 74 / 0.4);
+  background: rgb(58 48 24 / 0.55);
+}
+
+.preview__source-content > .file-preview--text > .file-preview__notice {
+  flex: none;
+  margin: 0;
+  padding: 0.35rem 8px;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+/* Syntax highlighting off: neutralize syntect's per-token inline styles (raw
+   and formatted text/CSV/TSV source previews, Markdown fenced code) and the
+   PR/Git diff tokenizer's classes, without touching CSV formatted tables,
+   images, or any other non-source preview. */
+.workspace--syntax-off .file-preview--text pre,
+.workspace--syntax-off .preview__content.markdown-body pre {
+  background-color: var(--markdown-pre-bg) !important;
+  color: var(--markdown-fg) !important;
+}
+
+.workspace--syntax-off .file-preview--text pre span,
+.workspace--syntax-off .preview__content.markdown-body pre span {
+  color: inherit !important;
+  font-weight: inherit !important;
+  font-style: inherit !important;
+  background: none !important;
+  text-decoration: none !important;
+}
+
+.workspace--syntax-off .pr-syntax {
+  color: inherit !important;
+  font-weight: inherit !important;
+  font-style: inherit !important;
 }
 
 /* Source panes reserve the available area for code. Only the pre scrolls;

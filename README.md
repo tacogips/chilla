@@ -236,9 +236,11 @@ Default global shortcuts:
 - `y`: copy the selected file or directory absolute path
 - `r`: refresh the current directory or explicit file set and active local file
 - `Shift+T`: toggle table of contents for Markdown
-- `Shift+P`: switch Markdown raw/preview pane
-- `1`: select raw view for Markdown or CSV
-- `2`: select Markdown preview or formatted CSV view when available
+- `Shift+P`: switch Markdown raw/preview pane, HTML raw/preview pane (preview is a sandboxed, script-disabled rendered view), or Raw/Formatted for CSV, TSV, JSON, JSONL, XML, CSS, and JS/TS previews
+- `1`: select raw view for Markdown, HTML, or CSV/TSV/JSON/JSONL/XML/CSS/JS/TS
+- `2`: select Markdown or HTML preview, or formatted CSV/TSV/JSON/JSONL/XML/CSS/JS/TS view when available
+- `Shift+F`: toggle formatting for JSON, JSON Lines, XML, HTML, CSS, and JS/TS previews (no-op when formatted output is unavailable); for HTML this applies to the Raw view and switches out of Preview
+- `Shift+C`: toggle syntax highlighting for text, CSV/TSV raw, and Markdown previews
 - `+` / `-`: native preview zoom, from 50%-300% for rendered content or 50%-800% for direct SVG/raster images, in 10% steps (not configured by keymap.toml)
 - `Ctrl+mouse wheel`: native preview zoom under the pointer (not configured by keymap.toml)
 - `Shift+D`: toggle light/dark theme, including while browsing files
@@ -274,6 +276,8 @@ changing browser context also cancels the sequence. Uppercase second keys use
 Shift. Recursive search shortcuts apply only to filesystem directory browsing.
 
 Video preview:
+
+- Audio/video bytes are delivered through an internal Tauri protocol. Chilla does not start a media HTTP server or listen on a network port.
 
 - Opening a video from the file tree requests playback immediately when the webview allows it.
 - The preview overlay uses a focused play button with an icon-only affordance and an accessible label for the current file.
@@ -399,8 +403,16 @@ mode have no effect.
 Workspace actions: `help`, `quit`, `files.open`, `document.save`,
 `document.reload`, `path.copy`, `sidebar.toggle`, `git.toggle`, `toc.toggle`,
 `presentation.toggle`, `presentation.raw`, `presentation.rendered`,
-`theme.toggle`, `scroll.up`, `scroll.down`, `document.previous`, and
-`document.next`. `noop` is valid in either context.
+`format.toggle`, `syntax.toggle`, `theme.toggle`, `scroll.up`, `scroll.down`,
+`document.previous`, and `document.next`. `noop` is valid in either context.
+`presentation.toggle`/`presentation.raw`/`presentation.rendered` also drive
+Raw/Preview for Markdown and HTML (HTML Preview is a sandboxed, script-disabled
+rendered view) and Raw/Formatted for CSV, TSV, JSON, JSON Lines, XML, CSS, and
+JS/TS previews. `format.toggle` flips formatted/raw specifically for JSON,
+JSON Lines, XML, HTML, CSS, and JS/TS previews (no-op elsewhere or when
+formatted output is unavailable); for HTML it applies to the Raw view and
+switches out of Preview. `syntax.toggle` turns syntax highlighting on/off for
+text, CSV/TSV raw, and Markdown previews.
 
 Invalid TOML, unknown fields/actions, invalid key notation, or files larger
 than 64 KiB produce a visible warning and retain built-in defaults atomically.

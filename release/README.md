@@ -139,8 +139,10 @@ brew install --cask chilla
 ## Mac App Store Flow
 
 The Mac App Store build is isolated from the Developer ID DMG. It enables App
-Sandbox, user-selected read/write access, and outbound networking, embeds a Mac
-App Store Connect provisioning profile, and produces a Mac Installer
+Sandbox, user-selected read/write access and outbound networking. Media is read
+through an internal Tauri protocol without a TCP listener; the release task rejects
+the network server entitlement. The build embeds a Mac App Store Connect
+provisioning profile and produces a Mac Installer
 Distribution-signed package.
 
 Required local prerequisites are an Apple Distribution identity, a Mac
@@ -168,3 +170,16 @@ checks the effective signed entitlements, signs the `.pkg`, and deletes temporar
 credentials/profile copies on exit. The App Store variant supports directories
 opened through the in-app picker; shell-provided paths remain a DMG/Homebrew
 feature because they do not receive App Sandbox Powerbox access.
+
+Selecting a file grants access to that file. If the parent directory cannot be
+listed, the workspace uses the selected file as an explicit file set so that
+preview and refresh do not require permission to browse sibling files.
+
+For a packaging-only review correction, set `CHILLA_APP_STORE_SOURCE_APP` to a
+previously shipped, signature-valid `.app` with the same bundle identifier and
+marketing version. The task reuses that executable, updates the build number
+from `tauri.appstore.conf.json`, embeds the validated profile, and signs with
+the current entitlements. It compares executable content after removing code
+signatures from temporary copies. This avoids incorporating unrelated source
+changes into an entitlement correction. Verify a sandboxed runtime copy before
+upload; signature checks alone do not prove the app launches.

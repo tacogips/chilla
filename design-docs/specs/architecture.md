@@ -940,3 +940,8 @@ file even beyond the first directory page, and returns focus to that row. Search
 closes on successful navigation; navigation errors remain visible and must not
 leave a mismatched selection. Existing Enter/click opening behavior is preserved.
 The jump button has an accessible file-specific name and shortcut tooltip.
+
+## Internal Media Delivery
+
+See [Internal Media Protocol](design-media-protocol.md) for the socket-free Tauri
+protocol architecture replacing the startup loopback HTTP media server.

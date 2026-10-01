@@ -758,5 +758,94 @@
     "hidden": false,
     "name": "TOML",
     "scope": "source.toml"
+  },
+  {
+    "extensions": [
+      "nix"
+    ],
+    "hidden": false,
+    "name": "Nix",
+    "scope": "source.nix"
+  },
+  {
+    "extensions": [
+      "swift"
+    ],
+    "hidden": false,
+    "name": "Swift",
+    "scope": "source.swift"
+  },
+  {
+    "extensions": [
+      "Dockerfile",
+      "Containerfile",
+      "dockerfile",
+      "containerfile"
+    ],
+    "hidden": false,
+    "name": "Dockerfile",
+    "scope": "source.dockerfile"
+  },
+  {
+    "extensions": [
+      "zig",
+      "zon"
+    ],
+    "hidden": false,
+    "name": "Zig",
+    "scope": "source.zig"
+  },
+  {
+    "extensions": [
+      "proto"
+    ],
+    "hidden": false,
+    "name": "Protocol Buffers",
+    "scope": "source.proto"
+  },
+  {
+    "extensions": [
+      "kt",
+      "kts"
+    ],
+    "hidden": false,
+    "name": "Kotlin",
+    "scope": "source.kotlin"
+  },
+  {
+    "extensions": [
+      "ini",
+      "cfg",
+      "conf",
+      "editorconfig",
+      "gitconfig",
+      "desktop",
+      ".editorconfig",
+      ".gitconfig"
+    ],
+    "hidden": false,
+    "name": "INI",
+    "scope": "source.ini"
+  },
+  {
+    "extensions": [
+      "hcl",
+      "tf",
+      "tfvars",
+      "nomad"
+    ],
+    "hidden": false,
+    "name": "HCL",
+    "scope": "source.hcl"
+  },
+  {
+    "extensions": [
+      "graphql",
+      "gql",
+      "graphqls"
+    ],
+    "hidden": false,
+    "name": "GraphQL",
+    "scope": "source.graphql"
   }
 ]

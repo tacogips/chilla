@@ -84,6 +84,20 @@ describe("keymap compilation", () => {
     }
   });
 
+  it("binds Shift+F to format.toggle and Shift+C to syntax.toggle without colliding with file/diff contexts", () => {
+    const defaults = compileKeymap({});
+    expect(matchingBindings(defaults.workspace, ["F"])[0]?.actions).toEqual([
+      "format.toggle",
+    ]);
+    expect(matchingBindings(defaults.workspace, ["C"])[0]?.actions).toEqual([
+      "syntax.toggle",
+    ]);
+    for (const context of ["file", "diff"] as const) {
+      expect(matchingBindings(defaults[context], ["F"])).toEqual([]);
+      expect(matchingBindings(defaults[context], ["C"])).toEqual([]);
+    }
+  });
+
   it("preserves defaults and merges prepend/default/append with first-key priority", () => {
     const defaults = compileKeymap({});
     expect(matchingBindings(defaults.file, ["s"])[0]?.actions).toEqual([

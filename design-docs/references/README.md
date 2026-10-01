@@ -32,6 +32,7 @@ This directory contains reference materials for system design and implementation
 | Adding Software to Homebrew | https://docs.brew.sh/Adding-Software-to-Homebrew#casks | Official cask authoring, validation, and submission workflow |
 | Homebrew Cask Cookbook | https://docs.brew.sh/Cask-Cookbook | Official cask stanza order and DSL reference |
 | Tauri App Store distribution | https://v2.tauri.app/distribute/app-store/ | Official macOS App Store bundle, sandbox, provisioning, package, and upload guidance |
+| App Sandbox server entitlement | https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.network.server | Required permission for the loopback media TCP listener |
 | App Store Connect app records | https://developer.apple.com/help/app-store-connect/create-an-app-record/add-a-new-app | Required app-record fields and role prerequisites |
 | App Store Connect build uploads | https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds | Supported upload tools and build-processing lifecycle |
 | App Store Connect submissions | https://developer.apple.com/help/app-store-connect/manage-submissions-to-app-review/submit-an-app | Version selection, review submission, and release workflow |
@@ -74,3 +75,5 @@ When adding new reference materials:
 1. Create a topic directory if it does not exist
 2. Add reference documents with clear naming
 3. Update this README.md with the reference entry
+
+- [Tauri streaming protocol example](https://github.com/tauri-apps/tauri/blob/dev/examples/streaming/main.rs): asynchronous URI handler and byte-range responses; reference for internal media delivery.

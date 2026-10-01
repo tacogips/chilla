@@ -86,9 +86,23 @@ fn resolve_syntax<'a>(
     path: Option<&Path>,
     source: Option<&str>,
 ) -> &'a SyntaxReference {
-    let raw = lang_token
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
+    let explicit_lang = lang_token.map(str::trim).filter(|s| !s.is_empty());
+
+    // Exact, case-sensitive file-name resolution (e.g. `Makefile`, `Cargo.lock`,
+    // `Dockerfile`) before any lowercased extension lookup. `find_syntax_by_extension`
+    // itself compares case-insensitively, so this only needs the raw, undecorated
+    // file name; explicit language tokens (markdown fences) always take priority.
+    if explicit_lang.is_none() {
+        if let Some(syntax) = path
+            .and_then(Path::file_name)
+            .and_then(|file_name| file_name.to_str())
+            .and_then(|file_name| ss.find_syntax_by_extension(file_name))
+        {
+            return syntax;
+        }
+    }
+
+    let raw = explicit_lang
         .map(str::to_string)
         .or_else(|| path.and_then(path_syntax_token))
         .or_else(|| {
@@ -121,9 +135,25 @@ fn resolve_syntax<'a>(
 fn canonical_lang_token(raw: &str) -> String {
     match raw.trim().to_ascii_lowercase().as_str() {
         // syntect's default bundle lacks dedicated TypeScript grammars, so use JavaScript.
-        "ts" | "typescript" | "tsx" | "jsx" => "js".to_string(),
+        "ts" | "typescript" | "tsx" | "jsx" | "mjs" | "cjs" | "mts" | "cts" => "js".to_string(),
         "shell" | "shellscript" | "console" => "sh".to_string(),
         "md" => "markdown".to_string(),
+        // No dedicated Sass/Less or Vue/Svelte grammars; fall back to the closest relative.
+        "scss" | "less" => "css".to_string(),
+        "vue" | "svelte" => "html".to_string(),
+        // POSIX-ish shell dialects and env files share the Bash grammar.
+        "env" | "ksh" => "sh".to_string(),
+        // JSON-family fences route through the bundled JSON grammar; the dedicated JSON
+        // lexer (`json.rs`) is only used for file-path previews via `is_json_path`.
+        "jsonl" | "ndjson" | "jsonc" | "geojson" | "json5" => "json".to_string(),
+        "dockerfile" | "containerfile" => "dockerfile".to_string(),
+        "terraform" | "tf" => "hcl".to_string(),
+        "kotlin" => "kt".to_string(),
+        "protobuf" => "proto".to_string(),
+        // Extension-only variants of the XML family that the bundled XML grammar itself
+        // does not declare.
+        "xsl" | "atom" | "plist" | "wsdl" | "kml" | "gpx" | "csproj" | "fsproj" | "vbproj"
+        | "props" | "targets" | "resx" | "xaml" | "nuspec" => "xml".to_string(),
         other => other.to_string(),
     }
 }
@@ -148,6 +178,13 @@ fn path_syntax_token(path: &Path) -> Option<String> {
             | "sh"
             | "zsh"
     ) {
+        return Some("sh".to_string());
+    }
+
+    // Bare `.env` has no `Path::extension()` (a leading-dot name with no other
+    // `.` has none), so it needs the same literal-file-name handling as the
+    // bash dotfiles above rather than the extension-based branch below.
+    if file_name == ".env" {
         return Some("sh".to_string());
     }
 
@@ -181,7 +218,11 @@ fn path_syntax_display_name(path: &Path) -> Option<String> {
 
 pub fn describe_file_syntax(path: &Path) -> String {
     if is_json_path(path) {
-        return "JSON".to_string();
+        return if is_json_lines_path(path) {
+            "JSON Lines".to_string()
+        } else {
+            "JSON".to_string()
+        };
     }
     let ss = syntax_set();
     let syntax = resolve_syntax(ss, None, Some(path), None);
@@ -222,10 +263,39 @@ pub fn highlight_file_source(source: &str, path: &Path, ui: SyntaxUiTheme) -> St
         .unwrap_or_else(|_| escaped_fallback(source))
 }
 
+/// JSON-family paths (including JSON Lines) that route through the dedicated
+/// JSON lexer in `json.rs` rather than a syntect grammar. Deliberately
+/// excludes `jsonc`, whose comments the strict JSON formatter/highlighter
+/// cannot represent.
 fn is_json_path(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "json"
+                    | "jsonl"
+                    | "ndjson"
+                    | "jsonlines"
+                    | "geojson"
+                    | "jsonld"
+                    | "webmanifest"
+                    | "har"
+            )
+        })
+}
+
+/// Subset of [`is_json_path`] that is specifically JSON Lines (one JSON
+/// record per line), used to pick the "JSON" vs "JSON Lines" display label.
+fn is_json_lines_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "jsonl" | "ndjson" | "jsonlines"
+            )
+        })
 }
 
 /// Markdown fenced block: `lang_token` is the first word of the info string (e.g. `rust`).
@@ -319,5 +389,118 @@ mod tests {
         assert_eq!(describe_file_syntax(Path::new("zsh")), "Shell");
         assert_eq!(describe_file_syntax(Path::new("flake.nix")), "Nix");
         assert_eq!(describe_file_syntax(Path::new("App.swift")), "Swift");
+        // `env`/`ksh` alias to the Bash grammar, so they now resolve to a real
+        // grammar (previously fell back to Plain Text).
+        assert_eq!(describe_file_syntax(Path::new("sample.env")), "Shell");
+        assert_eq!(describe_file_syntax(Path::new("sample.ksh")), "Shell");
+        // Bare `.env` has no `Path::extension()`, so it needs the dedicated
+        // literal-file-name branch in `path_syntax_token`.
+        assert_eq!(describe_file_syntax(Path::new(".env")), "Shell");
+    }
+
+    #[test]
+    fn highlights_new_project_grammars_with_real_spans() {
+        let cases: &[(&str, &str, &str)] = &[
+            ("flake.nix", "nix", "let x = 1; in x\n"),
+            ("Dockerfile", "dockerfile", "FROM alpine\nRUN echo hi\n"),
+            ("main.zig", "zig", "const std = @import(\"std\");\n"),
+            (
+                "schema.proto",
+                "proto",
+                "syntax = \"proto3\";\nmessage M { string a = 1; }\n",
+            ),
+            ("Main.kt", "kotlin", "fun main() { val x = 1 }\n"),
+            ("app.ini", "ini", "[section]\nkey = value\n"),
+            (
+                "main.tf",
+                "hcl",
+                "resource \"a\" \"b\" {\n  enabled = true\n}\n",
+            ),
+            ("schema.graphql", "graphql", "query Q { field }\n"),
+        ];
+
+        for (path, lang_token, source) in cases {
+            let file_html = highlight_file_source(source, Path::new(path), SyntaxUiTheme::Dark);
+            assert!(
+                file_html.contains("style=") && file_html.contains("<span"),
+                "expected syntax-highlighted HTML for {path}, got: {file_html}"
+            );
+
+            let fence_html =
+                highlight_markdown_fence(source, Some(lang_token), SyntaxUiTheme::Dark);
+            assert!(
+                fence_html.contains("style=") && fence_html.contains("<span"),
+                "expected syntax-highlighted HTML for {lang_token} fence, got: {fence_html}"
+            );
+        }
+    }
+
+    #[test]
+    fn resolves_alias_extensions_to_expected_grammar_labels() {
+        let cases: &[(&str, &str)] = &[
+            ("app.mjs", "JavaScript"),
+            ("app.cjs", "JavaScript"),
+            ("app.mts", "JavaScript"),
+            ("app.cts", "JavaScript"),
+            ("styles.scss", "CSS"),
+            ("styles.less", "CSS"),
+            ("App.vue", "HTML"),
+            ("App.svelte", "HTML"),
+            ("main.tf", "HCL"),
+            ("vars.tfvars", "HCL"),
+            ("feed.atom", "XML"),
+            ("Info.plist", "XML"),
+            ("project.csproj", "XML"),
+        ];
+
+        for (path, expected) in cases {
+            assert_eq!(
+                describe_file_syntax(Path::new(path)),
+                *expected,
+                "path={path}"
+            );
+        }
+    }
+
+    #[test]
+    fn resolves_kotlin_and_protobuf_fence_aliases() {
+        let kotlin_html =
+            highlight_markdown_fence("fun main() {}\n", Some("kotlin"), SyntaxUiTheme::Dark);
+        let proto_html = highlight_markdown_fence(
+            "syntax = \"proto3\";\n",
+            Some("protobuf"),
+            SyntaxUiTheme::Dark,
+        );
+        for html in [kotlin_html, proto_html] {
+            assert!(
+                html.contains("style=") && html.contains("<span"),
+                "expected syntax-highlighted HTML for aliased fence, got: {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn resolves_exact_filenames_before_lowercased_extension_lookup() {
+        // These file names carry no useful `Path::extension()` (either no dot, or a
+        // dot that yields a meaningless suffix like `lock`), so they only resolve
+        // once the exact, case-sensitive file name is tried directly.
+        let cases: &[(&str, &str)] = &[
+            ("Makefile", "Makefile"),
+            ("Gemfile", "Ruby"),
+            ("Rakefile", "Ruby"),
+            ("Vagrantfile", "Ruby"),
+            ("Cargo.lock", "TOML"),
+            ("Pipfile", "TOML"),
+            ("Dockerfile", "Dockerfile"),
+            ("Containerfile", "Dockerfile"),
+        ];
+
+        for (path, expected) in cases {
+            assert_eq!(
+                describe_file_syntax(Path::new(path)),
+                *expected,
+                "path={path}"
+            );
+        }
     }
 }
