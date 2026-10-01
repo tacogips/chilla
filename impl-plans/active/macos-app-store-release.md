@@ -396,3 +396,16 @@ configured release mode remains manual release after approval.
 
 **Notes**: No additional package upload was needed. The App Store Connect API
 confirmed build 3 remains valid and attached to version 0.3.4.
+
+### 2026-10-01: 0.3.5/build 5 Replacement Submitted
+
+At the owner's request, included all current product changes, committed/pushed
+0.3.5 and published the signed/notarized GitHub release plus Homebrew cask. A
+fresh sandboxed package passed signature/profile/version/entitlement validation
+and Apple upload/processing; internal media playback, seeking, refresh and
+focused keyboard controls passed selected-file runtime verification without
+network.server or a TCP listener. Canceled the pending 0.3.4 candidate and renamed
+the editable record to 0.3.5, preserving metadata and owner-controlled answers.
+Build 5 is VALID, attached and submitted. Version and review submission are both
+WAITING_FOR_REVIEW; release mode AFTER_APPROVAL. Apple approval remains external.
+See [0.3.5 Release](../completed/macos-release-0.3.5.md) for complete evidence.

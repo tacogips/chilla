@@ -63,6 +63,7 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| [macOS 0.3.5 Release](completed/macos-release-0.3.5.md) | 2026-10-01 | [macOS and Apple distribution](../design-docs/specs/design-macos-dmg-release.md) |
 | [Structured Data Formatting and Syntax](completed/structured-data-format-and-syntax.md) | 2026-10-01 | [Structured previews](../design-docs/specs/design-structured-data-formatting.md) |
 | [Internal Media Protocol](completed/media-protocol.md) | 2026-10-01 | [Socket-free media delivery and keyboard follow-up](../design-docs/specs/design-media-protocol.md) |
 | [Exhaustive Syntax Performance](completed/exhaustive-syntax-performance.md) | 2026-09-09 | [Complete syntax inventory](../design-docs/specs/design-syntax-inventory.md) |
