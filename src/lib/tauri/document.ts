@@ -1438,6 +1438,43 @@ export async function listenDocumentRefreshed(
   });
 }
 
+/** Atomically drain ordered native file-open batches retained by the backend. */
+export async function takeNativeOpenRequests(): Promise<
+  readonly (readonly string[])[]
+> {
+  try {
+    const payload = await invoke<unknown>("take_native_open_requests");
+    if (!Array.isArray(payload))
+      throw new Error("Invalid native file-open queue response");
+    return payload.map((batch: unknown) => {
+      if (
+        !Array.isArray(batch) ||
+        batch.length === 0 ||
+        !batch.every(
+          (path: unknown) =>
+            typeof path === "string" && path.length > 0 && !path.includes("\0"),
+        )
+      ) {
+        throw new Error("Invalid native file-open batch response");
+      }
+      return batch.map((path: unknown) => {
+        if (typeof path !== "string")
+          throw new Error("Invalid native file-open path response");
+        return path;
+      });
+    });
+  } catch (error: unknown) {
+    throw new Error(toErrorMessage(error));
+  }
+}
+
+/** Wake up the queue consumer; paths are obtained only through the drain command. */
+export function listenNativeFilesOpened(
+  handler: () => void,
+): Promise<UnlistenFn> {
+  return listen<null>("native_files_opened", () => handler());
+}
+
 export function isMarkdownPath(path: string): boolean {
   return /\.(md|markdown|mdown)$/i.test(path);
 }

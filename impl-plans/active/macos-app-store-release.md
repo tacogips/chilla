@@ -409,3 +409,14 @@ the editable record to 0.3.5, preserving metadata and owner-controlled answers.
 Build 5 is VALID, attached and submitted. Version and review submission are both
 WAITING_FOR_REVIEW; release mode AFTER_APPROVAL. Apple approval remains external.
 See [0.3.5 Release](../completed/macos-release-0.3.5.md) for complete evidence.
+
+### 2026-10-06: Live Publication Status Check
+
+App Store Connect confirms version 0.3.5/build 5 and its current review submission
+remain WAITING_FOR_REVIEW. Submission date: 2026-10-01. Build processing is VALID,
+build is not expired, no outstanding encryption declaration, and all three
+listing screenshots are COMPLETE. Release mode remains AFTER_APPROVAL.
+The current submission is not rejected; no actionable build/submission issue was
+reported. App Store publication remains pending Apple's review decision.
+Read-only status evidence is protected outside Git under
+`/tmp/chilla-apple-status-20261006/`; no credentials were recorded in the plan.

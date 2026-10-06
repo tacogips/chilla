@@ -2,6 +2,8 @@
 
 This directory contains implementation plans that translate design documents into actionable implementation specifications.
 
+- [macOS File Open](completed/macos-file-open.md): LaunchServices cold/warm file delivery with startup buffering and shared picker flow.
+
 - [Search Result Navigation](completed/search-result-navigation.md): j/k navigation and keyboard/mouse reveal with exact file selection.
 
 - [GitHub Diff Shorthand](completed/github-diff-shorthand.md): verified repository shorthand for commits and branch comparisons.

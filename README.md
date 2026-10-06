@@ -148,6 +148,7 @@ The repository design documents started from a Markdown workbench concept, then 
 - `chilla` with no arguments opens the current working directory.
 - `chilla <dir>` opens that directory in file-view mode.
 - `chilla <file>` opens the file's parent directory and previews the selected file.
+- On macOS, `open -a Chilla "/path/to/file.png"` opens a file through the installed app, whether Chilla is already running or starts with the request. Multiple file paths are also supported. If the sandbox grants access only to the selected file, Chilla previews it without listing its parent directory.
 - Markdown files get a richer preview flow with:
   - rendered HTML
   - heading extraction

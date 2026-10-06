@@ -31,8 +31,8 @@ export function normalizeDialogSelection(
   const seenPaths = new Set<string>();
 
   for (const rawPath of rawPaths) {
-    const path = rawPath.trim();
-    if (path.length === 0 || seenPaths.has(path)) {
+    const path = rawPath;
+    if (path.trim().length === 0 || seenPaths.has(path)) {
       continue;
     }
 

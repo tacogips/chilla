@@ -136,6 +136,12 @@ pub fn render_markdown_preview(
     })
 }
 
+/// Consume native LaunchServices batches queued before or after WebView startup.
+#[tauri::command]
+pub fn take_native_open_requests(state: State<'_, AppState>) -> Result<Vec<Vec<String>>, String> {
+    state.take_native_open_requests()
+}
+
 #[tauri::command]
 pub fn get_startup_context(state: State<'_, AppState>) -> Result<StartupContext, String> {
     verbose_log::mark_frontend_ready();

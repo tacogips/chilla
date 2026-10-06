@@ -6,6 +6,10 @@ This document describes system architecture and design decisions.
 
 Architectural patterns, system structure, and technical decisions.
 
+## macOS File Open
+
+[Native file delivery](design-macos-file-open.md) routes LaunchServices events through a queue managed before Tauri setup and a serialized frontend consumer, preserving cold and warm file opening.
+
 ## Mise Native Toolchain
 
 Development and CI follow ign-template's tauri-v1 at revision

@@ -18,9 +18,11 @@ pub mod watcher;
 
 use std::time::Instant;
 
+#[cfg(target_os = "macos")]
+use tauri::Emitter;
 use tauri::Manager;
 
-use app_state::AppState;
+use app_state::{AppState, NativeOpenRequests};
 use cli::StartupRequest;
 use document::service::DocumentService;
 use media_stream::MediaStreamService;
@@ -50,6 +52,7 @@ pub fn run(startup_request: StartupRequest) -> Result<(), String> {
     };
     let builder_started_at = verbose_log::is_enabled().then(Instant::now);
     let builder = tauri::Builder::default()
+        .manage(NativeOpenRequests::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .register_asynchronous_uri_scheme_protocol(
@@ -69,7 +72,7 @@ pub fn run(startup_request: StartupRequest) -> Result<(), String> {
     }
 
     let setup_started_at = verbose_log::is_enabled().then(Instant::now);
-    builder
+    let app = builder
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let document_service = DocumentService::new();
@@ -96,6 +99,7 @@ pub fn run(startup_request: StartupRequest) -> Result<(), String> {
                 viewer_service,
                 watcher_service,
                 media_stream_service,
+                app.state::<NativeOpenRequests>().inner().clone(),
             ));
 
             if let Some(started_at) = setup_started_at {
@@ -149,6 +153,7 @@ pub fn run(startup_request: StartupRequest) -> Result<(), String> {
         .invoke_handler(tauri::generate_handler![
             commands::document::stop_document_watch,
             commands::document::get_startup_context,
+            commands::document::take_native_open_requests,
             commands::keymap::get_keymap_config,
             commands::document::detect_git_repository,
             commands::document::load_git_diff,
@@ -165,6 +170,71 @@ pub fn run(startup_request: StartupRequest) -> Result<(), String> {
             commands::document::set_syntax_ui_theme,
             commands::document::render_markdown_preview,
         ])
-        .run(context)
-        .map_err(|error| error.to_string())
+        .build(context)
+        .map_err(|error| error.to_string())?;
+    app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Opened { urls } = event {
+            handle_native_files_opened(app_handle, urls);
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = (app_handle, event);
+    });
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn handle_native_files_opened(app_handle: &tauri::AppHandle, urls: Vec<tauri::Url>) {
+    let mut seen = std::collections::HashSet::new();
+    let paths = urls
+        .into_iter()
+        .filter_map(|url| {
+            if url.scheme() != "file" || !matches!(url.host_str(), None | Some("localhost")) {
+                return None;
+            }
+            let path = url
+                .to_file_path()
+                .ok()?
+                .into_os_string()
+                .into_string()
+                .ok()?;
+            seen.insert(path.clone()).then_some(path)
+        })
+        .collect::<Vec<_>>();
+    if paths.is_empty() {
+        return;
+    }
+    let Some(queue) = app_handle.try_state::<NativeOpenRequests>() else {
+        return;
+    };
+    if let Err(error) = queue.enqueue(paths) {
+        verbose_log::record_phase_message(
+            "native_file_open_queue",
+            Instant::now(),
+            "failure",
+            &error,
+        );
+        return;
+    }
+    // The queue is authoritative; an early or failed wakeup cannot lose a batch.
+    if let Err(error) = app_handle.emit(events::NATIVE_FILES_OPENED_EVENT, ()) {
+        verbose_log::record_phase_message(
+            "native_file_open_wakeup",
+            Instant::now(),
+            "failure",
+            &error.to_string(),
+        );
+    }
+    if let Some(window) = app_handle.get_webview_window("main") {
+        for result in [window.unminimize(), window.show(), window.set_focus()] {
+            if let Err(error) = result {
+                verbose_log::record_phase_message(
+                    "native_file_open_focus",
+                    Instant::now(),
+                    "failure",
+                    &error.to_string(),
+                );
+            }
+        }
+    }
 }

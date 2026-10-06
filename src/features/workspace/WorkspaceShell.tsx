@@ -30,6 +30,8 @@ import {
   detectGitRepository,
   isMarkdownPath,
   listenDocumentRefreshed,
+  listenNativeFilesOpened,
+  takeNativeOpenRequests,
   listDirectory,
   listExplicitFileSet,
   openDocument,
@@ -64,6 +66,7 @@ import {
 } from "./documentRefreshDecision";
 import {
   classifyDialogSelection,
+  type DialogSelection,
   startupContextForPickedTarget,
 } from "./openFiles";
 import type { WorkspaceSelection } from "./state";
@@ -109,6 +112,12 @@ export function WorkspaceShell() {
   const keymap = createKeymapController();
   let workspaceElement: HTMLElement | undefined;
   const appWindow = resolveCurrentWindow();
+  let isWorkspaceDisposed = false;
+  let finishInitialization: () => void = () => {};
+  const workspaceInitialized = new Promise<void>((resolve) => {
+    finishInitialization = resolve;
+  });
+  let fileOpenQueue = Promise.resolve();
   let directoryRequestId = 0;
   let previewRequestId = 0;
   let launchCsvFirstRowAsHeader = false;
@@ -561,6 +570,7 @@ export function WorkspaceShell() {
     fileOpenOptions?: FileOpenOptions,
     preserveCsvState = false,
   ): Promise<string | null> => {
+    if (isWorkspaceDisposed) return null;
     const requestId = ++previewRequestId;
     const resolvedFileOpenOptions: FileOpenOptions = {
       csv_first_row_as_header:
@@ -592,6 +602,7 @@ export function WorkspaceShell() {
           // Not running under Tauri or watcher already idle
         }
 
+        if (isWorkspaceDisposed) return null;
         const nextPreview = await openFilePreview(
           path,
           resolvedFileOpenOptions,
@@ -730,6 +741,7 @@ export function WorkspaceShell() {
 
     try {
       const nextStartupContext = await getStartupContext();
+      if (isWorkspaceDisposed) return;
       launchCsvFirstRowAsHeader =
         nextStartupContext.file_open_options?.csv_first_row_as_header ?? false;
       setStartupContext(nextStartupContext);
@@ -768,12 +780,19 @@ export function WorkspaceShell() {
         await previewSelectedFile(browserRoot.selected_file_path);
       }
     } catch (error: unknown) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to load workspace",
-      );
+      if (!isWorkspaceDisposed) {
+        setErrorMessage(
+          error instanceof Error ? error.message : "Failed to load workspace",
+        );
+      }
     } finally {
-      setLoading(false);
-      if (!isFileTreeOpen()) queueMicrotask(focusVisiblePane);
+      if (!isWorkspaceDisposed) {
+        setLoading(false);
+        if (!isFileTreeOpen())
+          queueMicrotask(() => {
+            if (!isWorkspaceDisposed) focusVisiblePane();
+          });
+      }
     }
   };
 
@@ -852,14 +871,12 @@ export function WorkspaceShell() {
 
   const currentSelectedPath = () => selectedBrowserPath() ?? currentOpenPath();
 
-  const handleOpenFiles = async () => {
+  const openSelectedFiles = async (
+    selection: DialogSelection,
+  ): Promise<void> => {
+    if (isWorkspaceDisposed) return;
     let ownedDirectoryRequestId: number | null = null;
     try {
-      const selection = await open({
-        multiple: true,
-        directory: false,
-        title: "Open files",
-      });
       const target = classifyDialogSelection(selection);
 
       if (target === null) {
@@ -892,7 +909,11 @@ export function WorkspaceShell() {
         try {
           if (!(await directoryLoad)) return;
         } catch {
-          if (ownedDirectoryRequestId !== directoryRequestId) return;
+          if (
+            isWorkspaceDisposed ||
+            ownedDirectoryRequestId !== directoryRequestId
+          )
+            return;
           // Powerbox may grant the selected file without its parent directory.
           const filePaths = [target.filePath];
           setStartupContext(
@@ -914,22 +935,34 @@ export function WorkspaceShell() {
           ownedDirectoryRequestId = directoryRequestId;
           await fileSetLoad;
         }
-        if (ownedDirectoryRequestId !== directoryRequestId) return;
+        if (
+          isWorkspaceDisposed ||
+          ownedDirectoryRequestId !== directoryRequestId
+        )
+          return;
         await previewSelectedFile(target.filePath);
       } else {
         setFileTreeOpen(true);
-        await loadExplicitFileSetState(
+        const fileSetLoad = loadExplicitFileSetState(
           target.filePaths,
           target.selectedFilePath,
           directorySort(),
           "",
         );
+        ownedDirectoryRequestId = directoryRequestId;
+        await fileSetLoad;
+        if (
+          isWorkspaceDisposed ||
+          ownedDirectoryRequestId !== directoryRequestId
+        )
+          return;
         await previewSelectedFile(target.selectedFilePath);
       }
     } catch (error: unknown) {
       if (
-        ownedDirectoryRequestId === null ||
-        ownedDirectoryRequestId === directoryRequestId
+        !isWorkspaceDisposed &&
+        (ownedDirectoryRequestId === null ||
+          ownedDirectoryRequestId === directoryRequestId)
       ) {
         setErrorMessage(
           error instanceof Error
@@ -939,11 +972,58 @@ export function WorkspaceShell() {
       }
     } finally {
       if (
-        ownedDirectoryRequestId === null ||
-        ownedDirectoryRequestId === directoryRequestId
+        !isWorkspaceDisposed &&
+        (ownedDirectoryRequestId === null ||
+          ownedDirectoryRequestId === directoryRequestId)
       ) {
         setLoading(false);
       }
+    }
+  };
+
+  const queueFileOpenWork = (work: () => Promise<void>): Promise<void> => {
+    fileOpenQueue = fileOpenQueue
+      .then(async () => {
+        await workspaceInitialized;
+        if (!isWorkspaceDisposed) await work();
+      })
+      .catch((error: unknown) => {
+        if (!isWorkspaceDisposed)
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Failed to open native files",
+          );
+      });
+    return fileOpenQueue;
+  };
+
+  const drainNativeOpenRequests = (): Promise<void> =>
+    queueFileOpenWork(async () => {
+      const requests = await takeNativeOpenRequests();
+      for (const paths of requests) {
+        if (isWorkspaceDisposed) return;
+        await openSelectedFiles(paths);
+      }
+    });
+
+  const handleOpenFiles = async (): Promise<void> => {
+    try {
+      const selection = await open({
+        multiple: true,
+        directory: false,
+        title: "Open files",
+      });
+      if (selection !== null && !isWorkspaceDisposed) {
+        await queueFileOpenWork(() => openSelectedFiles(selection));
+      }
+    } catch (error: unknown) {
+      if (!isWorkspaceDisposed)
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to open the selected files",
+        );
     }
   };
 
@@ -1581,12 +1661,41 @@ export function WorkspaceShell() {
   });
 
   onMount(() => {
-    let isDisposed = false;
     let disposeListener: (() => void) | undefined;
+    let disposeNativeListener: (() => void) | undefined;
 
-    void handleInitialLoad();
+    void (async () => {
+      let subscriptionError: unknown;
+      try {
+        const dispose = await listenNativeFilesOpened(() => {
+          void drainNativeOpenRequests();
+        });
+        if (isWorkspaceDisposed) {
+          dispose();
+          return;
+        }
+        disposeNativeListener = dispose;
+      } catch (error: unknown) {
+        subscriptionError = error;
+      }
+      try {
+        if (!isWorkspaceDisposed) await handleInitialLoad();
+      } finally {
+        finishInitialization();
+      }
+      if (isWorkspaceDisposed) return;
+      if (subscriptionError !== undefined) {
+        setErrorMessage(
+          subscriptionError instanceof Error
+            ? subscriptionError.message
+            : "Failed to subscribe to native file-open events",
+        );
+      }
+      void drainNativeOpenRequests();
+    })();
 
     void listenDocumentRefreshed((refreshedSnapshot) => {
+      if (isWorkspaceDisposed) return;
       const decision = decideMarkdownDocumentRefresh(
         markdownDoc(),
         markdownEditorBuffer(),
@@ -1603,7 +1712,7 @@ export function WorkspaceShell() {
       }
     })
       .then((dispose) => {
-        if (isDisposed) {
+        if (isWorkspaceDisposed) {
           dispose();
           return;
         }
@@ -1611,7 +1720,7 @@ export function WorkspaceShell() {
         disposeListener = dispose;
       })
       .catch((error: unknown) => {
-        if (isDisposed) {
+        if (isWorkspaceDisposed) {
           return;
         }
 
@@ -1632,8 +1741,12 @@ export function WorkspaceShell() {
     window.addEventListener("keydown", handleGlobalKeyDown);
 
     onCleanup(() => {
-      isDisposed = true;
+      isWorkspaceDisposed = true;
+      directoryRequestId += 1;
+      previewRequestId += 1;
+      finishInitialization();
       disposeListener?.();
+      disposeNativeListener?.();
       window.removeEventListener("keydown", handleGlobalKeyDown);
       clearSelectionPreviewDebounce();
     });
