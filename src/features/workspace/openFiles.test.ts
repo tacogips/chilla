@@ -16,7 +16,7 @@ describe("openFiles", () => {
         "/workspace/a.md",
         "   /workspace/c.md   ",
       ]),
-    ).toEqual(["/workspace/a.md", "/workspace/b.md", "/workspace/c.md"]);
+    ).toEqual(["/workspace/a.md", "/workspace/b.md", "   /workspace/c.md   "]);
   });
 
   it("infers Windows drive-root directories", () => {

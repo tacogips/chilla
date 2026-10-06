@@ -420,3 +420,7 @@ The current submission is not rejected; no actionable build/submission issue was
 reported. App Store publication remains pending Apple's review decision.
 Read-only status evidence is protected outside Git under
 `/tmp/chilla-apple-status-20261006/`; no credentials were recorded in the plan.
+
+### 2026-10-06: 0.3.6 review replacement
+
+Uploaded and processed 0.3.6/build 6 as VALID. Replaced the waiting 0.3.5 review only after the new build was ready, preserving listing/contact/screenshots and automatic AFTER_APPROVAL mode. Submitted 0.3.6 for App Review; resulting state WAITING_FOR_REVIEW. See `impl-plans/completed/macos-release-0.3.6.md` for public/Homebrew release evidence. App Store approval and public availability remain pending.

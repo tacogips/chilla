@@ -2,6 +2,8 @@
 
 This directory contains implementation plans that translate design documents into actionable implementation specifications.
 
+- [macOS 0.3.6 Release](completed/macos-release-0.3.6.md): signed public assets, verified Homebrew cask, and Apple review submission.
+
 - [macOS File Open](completed/macos-file-open.md): LaunchServices cold/warm file delivery with startup buffering and shared picker flow.
 
 - [Search Result Navigation](completed/search-result-navigation.md): j/k navigation and keyboard/mouse reveal with exact file selection.

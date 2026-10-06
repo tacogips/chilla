@@ -20,6 +20,8 @@ const documentMocks = vi.hoisted(() => ({
   reloadDocument: vi.fn(),
   saveDocument: vi.fn(),
   listenDocumentRefreshed: vi.fn(),
+  takeNativeOpenRequests: vi.fn(),
+  listenNativeFilesOpened: vi.fn(),
   stopDocumentWatch: vi.fn(),
 }));
 const dialogMocks = vi.hoisted(() => ({ open: vi.fn() }));
@@ -97,6 +99,8 @@ vi.mock("../../lib/tauri/document", async (importOriginal) => {
     reloadDocument: documentMocks.reloadDocument,
     saveDocument: documentMocks.saveDocument,
     listenDocumentRefreshed: documentMocks.listenDocumentRefreshed,
+    takeNativeOpenRequests: documentMocks.takeNativeOpenRequests,
+    listenNativeFilesOpened: documentMocks.listenNativeFilesOpened,
     stopDocumentWatch: documentMocks.stopDocumentWatch,
   };
 });
@@ -352,10 +356,14 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     documentMocks.openFilePreview.mockReset();
     documentMocks.reloadDocument.mockReset();
     documentMocks.listenDocumentRefreshed.mockReset();
+    documentMocks.takeNativeOpenRequests.mockReset();
+    documentMocks.listenNativeFilesOpened.mockReset();
     documentMocks.stopDocumentWatch.mockReset();
     dialogMocks.open.mockReset();
     dialogMocks.open.mockResolvedValue(null);
     documentMocks.listenDocumentRefreshed.mockResolvedValue(() => {});
+    documentMocks.takeNativeOpenRequests.mockResolvedValue([]);
+    documentMocks.listenNativeFilesOpened.mockResolvedValue(vi.fn());
     documentMocks.stopDocumentWatch.mockResolvedValue(undefined);
   });
 
@@ -2810,8 +2818,12 @@ describe("WorkspaceShell Git-ignored visibility", () => {
     documentMocks.openFilePreview.mockReset();
     documentMocks.reloadDocument.mockReset();
     documentMocks.listenDocumentRefreshed.mockReset();
+    documentMocks.takeNativeOpenRequests.mockReset();
+    documentMocks.listenNativeFilesOpened.mockReset();
     documentMocks.stopDocumentWatch.mockReset();
     documentMocks.listenDocumentRefreshed.mockResolvedValue(() => {});
+    documentMocks.takeNativeOpenRequests.mockResolvedValue([]);
+    documentMocks.listenNativeFilesOpened.mockResolvedValue(vi.fn());
     documentMocks.stopDocumentWatch.mockResolvedValue(undefined);
   });
 
