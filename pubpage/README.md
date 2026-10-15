@@ -107,3 +107,10 @@ Installation now appears immediately after the introduction, before screenshots
 and detailed features. A section-order regression check covers both locales.
 The performance label reads "Fast and responsive" / "軽快な動作"; related hero
 copy and metadata use the same benefit-focused wording.
+
+## Mac App Store links
+
+Both product-page locales include the verified Chilla Viewer listing (app ID
+`6810136995`) in the hero, installation guide, and footer. The Japanese page
+uses the Japan storefront; the English page lets Apple select the storefront.
+The existing DMG and Homebrew installation instructions remain available.

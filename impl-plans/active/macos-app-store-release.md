@@ -3,7 +3,7 @@
 **Status**: In Progress
 **Design Reference**: `design-docs/specs/design-macos-dmg-release.md#mac-app-store-distribution`
 **Created**: 2026-09-09
-**Last Updated**: 2026-10-01
+**Last Updated**: 2026-10-14
 
 ## Design Document Reference
 
@@ -129,6 +129,16 @@ record, listing metadata, privacy answers, screenshots, review information
 - [x] macOS version is submitted to App Review
 
 ## Progress Log
+
+### Session: 2026-10-14 (App Store Publication Verified)
+
+The owner requested release after approval. App Store Connect confirms version
+0.3.6 is `READY_FOR_SALE` / `READY_FOR_DISTRIBUTION`, with `AFTER_APPROVAL`
+release mode. Apple's public Japan storefront independently lists Chilla Viewer
+0.3.6 as free, released at `2026-10-11T16:22:25Z`. Automatic publication is
+complete; no manual release mutation was needed. See
+`impl-plans/completed/macos-release-0.3.6.md` for release evidence. Historical
+unchecked verification items below are retained without claiming new runtime QA.
 
 ### Session: 2026-10-01 (0.3.4 Build 4 Resubmitted)
 

@@ -116,3 +116,11 @@ Completion requires:
 See `design-docs/references/README.md` for repository reference material. The
 local Konjac product page at `../konjac/pubpage/` is the implementation and
 Cloudflare deployment reference for this design.
+
+## Mac App Store Availability
+
+Both product-page locales link directly to Chilla Viewer on the Mac App Store
+(app ID `6810136995`) from the hero, installation section, and footer. Use the
+Japan storefront for Japanese and a region-neutral URL for English. Keep the
+existing DMG, Homebrew, and repository links available. State that the App Store
+version is free and supports Apple Silicon, consistent with the public listing.

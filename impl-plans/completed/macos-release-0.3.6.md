@@ -3,7 +3,7 @@
 **Status**: Completed
 **Design Reference**: design-docs/specs/design-macos-dmg-release.md#mac-app-store-distribution
 **Created**: 2026-10-06
-**Last Updated**: 2026-10-06
+**Last Updated**: 2026-10-14
 
 ## Scope
 
@@ -26,6 +26,7 @@ User authorized commit, push, 0.3.6 Homebrew/public release and Apple review sub
 - [x] Replace pending 0.3.5 only after new package is ready
 - [x] Attach build and validate preserved listing
 - [x] Submit and verify review state
+- [x] Verify approval and public App Store availability
 
 ## Progress log
 
@@ -48,3 +49,14 @@ Apple archive validation and upload succeeded without errors. Build 6 processed 
 Renamed the editable pending candidate to 0.3.6 after canceling the earlier waiting review, preserving listing metadata, review contact, three COMPLETE screenshots, copyright, existing compliance/business settings and AFTER_APPROVAL release mode. Attached processed VALID build 6, validated listing/build/screenshot/contact gates through the macOS API and submitted a new review request. Apple returned WAITING_FOR_REVIEW. Apple approval and storefront publication remain external pending steps.
 
 Source/tag, signed public distribution, Homebrew cask publication and Apple review submission are complete. Follow-up fixture/documentation commit updates existing test mocks/expectations without changing shipped code. Local typecheck/format/Cargo check/strict Clippy passed; no tests were added or run. GitHub CI and unsigned validation builds were still running during finalization. Temporary QA processes stopped and credentials/profiles remain outside Git.
+
+### 2026-10-14: App Store publication verified
+
+The owner requested release following Apple's approval. A fresh authenticated
+App Store Connect query confirmed macOS version 0.3.6 is `READY_FOR_SALE`, with
+`appVersionState` `READY_FOR_DISTRIBUTION` and release mode `AFTER_APPROVAL`.
+Automatic publication had already completed, so no manual release request was
+necessary. Apple's public Japan storefront lookup independently returned
+Chilla Viewer 0.3.6 as free, with release timestamp `2026-10-11T16:22:25Z`
+(2026-10-12 01:22:25 JST). Public listing:
+https://apps.apple.com/jp/app/chilla-viewer/id6810136995.

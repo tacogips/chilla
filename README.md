@@ -8,6 +8,13 @@ Product website: [chilla-viewer.com](https://chilla-viewer.com/)
 
 ## Install
 
+### macOS: Mac App Store
+
+[Get Chilla Viewer free on the Mac App Store](https://apps.apple.com/app/chilla-viewer/id6810136995)
+for Apple Silicon Macs. Select Get in the App Store, then launch Chilla Viewer
+from Applications. For terminal commands such as `chilla .`, use the Homebrew
+installation below.
+
 ### macOS: Homebrew Cask
 
 ```bash
