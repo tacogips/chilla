@@ -17,8 +17,8 @@ fi
 '''
 
 [tools]
-node = "22.23.2"
-bun = "1.4.0"
+node = "22.23.4"
+bun = "1.4.4"
 rust = { version = "1.92.0", components = ["rustfmt", "clippy"] }
 rust-analyzer = "latest"
 taplo = "latest"
