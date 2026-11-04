@@ -62,6 +62,11 @@ Large features are split into multiple related plans with cross-references.
 | ---- | ------- | ---------------- |
 | `macos-app-store-release.md` | 2026-09-09 | `design-docs/specs/design-macos-dmg-release.md#mac-app-store-distribution` |
 | `official-homebrew-cask.md` | 2026-07-15 | `design-docs/specs/design-macos-dmg-release.md#official-homebrew-cask-distribution` |
+| `preview-contextmenu-guard-module.md` | 2026-11-04 | `design-docs/specs/architecture.md#pan-gesture-contract` |
+| `preview-contextmenu-guard-readme.md` | 2026-11-04 | `design-docs/specs/architecture.md#verification` |
+| `preview-contextmenu-guard-preview-pane.md` | 2026-11-04 | `design-docs/specs/architecture.md#verification` |
+| `preview-contextmenu-guard-media-pane.md` | 2026-11-04 | `design-docs/specs/architecture.md#verification` |
+| `preview-contextmenu-guard-pdf-pane.md` | 2026-11-04 | `design-docs/specs/architecture.md#verification` |
 
 ## Completed Plans
 

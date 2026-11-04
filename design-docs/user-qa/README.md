@@ -20,7 +20,7 @@ Store questions, pending decisions, and items awaiting user approval.
 - [qa-github-pr-diff-viewer.md](./qa-github-pr-diff-viewer.md) - GitHub diff viewer scope decisions
 - [qa-local-git-diff-viewer.md](./qa-local-git-diff-viewer.md) - Local Git diff mode and commit/range startup decisions
 - [qa-pdf-inline-rendering.md](./qa-pdf-inline-rendering.md) - Video zoom scope, PDF text layer, and lazy page rendering defaults
-- [qa-preview-right-drag-pan.md](./qa-preview-right-drag-pan.md) - Right-drag pan versus press-time contextmenu on macOS and Linux WebKit
+- [qa-preview-right-drag-pan.md](./qa-preview-right-drag-pan.md) - Right-drag pan versus press-time contextmenu on macOS and Linux WebKit (resolved: native-menu guard on preview pan targets)
 
 ## Adding New Items
 

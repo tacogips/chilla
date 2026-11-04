@@ -24,9 +24,17 @@ default planning assumption below applies unless the user decides otherwise.
    - Option C: keep Option A and add a modifier or a different trigger for
      panning on macOS and Linux.
 
-## Default Planning Assumption
+## Decision (resolved, session-718)
 
-- Option A, the rule as requested, is implemented and verified with vitest in
-  this run. The real-app result on macOS is a GUI check delegated to the
-  supervising session. A switch to Option B or C is follow-up work and needs a
-  user decision.
+- The supervising GUI check on the macOS debug app (PDF preview, CGEvent
+  right-drag) confirmed that Option A (commit 30f411a) opens the native menu
+  and does not pan.
+- The user chose a variant of Option B, following the nodetto-cloud
+  native-menu guard: on preview pan targets, `contextmenu` is prevented at
+  event time on every platform (no macOS/Linux-only branch), except when the
+  window has a non-empty text selection or the target is inside `input`,
+  `textarea` or a non-`false` `[contenteditable]`. A plain right-click over a
+  preview therefore no longer shows Reload or Inspect Element. See
+  "Pan Gesture Contract" and "Platform Event Order" in
+  `design-docs/specs/architecture.md`.
+- Option C is not pursued. No open question remains for this topic.

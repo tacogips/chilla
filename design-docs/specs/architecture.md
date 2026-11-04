@@ -953,11 +953,29 @@ clamping.
   `stopFling()` from an effect on its document identity: `PreviewPane` on
   `props.html` and `props.layout`, video on its source URL, PDF on its load
   generation.
-- Context menu: a `contextmenu` listener calls `preventDefault()` only when
-  the active or just-ended right-button gesture panned. The just-ended flag is
-  consumed by that `contextmenu` event and cleared by the next `pointerdown`.
-  A plain right-click (no move past the slop) keeps the native menu. Middle and
-  left gestures never touch the context menu.
+- Context menu (native-menu guard, behavioral reference: nodetto-cloud
+  `apps/desktop/src/shell/native-context-menu.ts`, `keepsNativeContextMenu` /
+  `installNativeContextMenuGuard`): the `contextmenu` listener that
+  `attachPreviewPan` registers on each pan target decides at event time, with
+  no dependence on pointer movement, so it is correct when WebKit dispatches
+  `contextmenu` at right-button press. Rules, in order:
+  1. If the active right-button gesture is panning, or the just-ended flag is
+     set (a right gesture that panned has just ended), call `preventDefault()`.
+  2. Otherwise, if the event keeps the native menu, do nothing. It keeps the
+     native menu when either (a) `window.getSelection()?.toString()` is a
+     non-empty string (any selection in the window, as in the reference), or
+     (b) the event target, or its parent element when the target is a text
+     node, has an ancestor-or-self matching `input`, `textarea`, or
+     `[contenteditable]` whose `contenteditable` value is not `"false"`
+     (`Element.closest`, light DOM only; `composedPath()` is not used).
+  3. Otherwise call `preventDefault()`. This covers a plain right-click, a
+     right press before any move, and clicks after middle or left gestures.
+  The just-ended flag is consumed by any `contextmenu` event and cleared by
+  the next `pointerdown`, as before. The guard does not depend on `isActive()`
+  or on the press button, and has no platform or user-agent branch. It is not
+  installed anywhere outside the preview pan targets (Markdown/rendered,
+  source, image, video, PDF). Pointer start, slop, pan, chord release, fling
+  and wheel zoom are unchanged.
 - Cursor: `App.css` keeps `.preview--right-drag-panning { cursor: grabbing;
   user-select: none; }`. The class is present only while a gesture is panning.
 - Left click, links and text selection: without `dragPanEnabled` a left press
@@ -1022,15 +1040,19 @@ clamping.
 
 ### Platform Event Order
 
-On Windows the `contextmenu` event follows the button release, so the contract
-above suppresses the menu after a pan and keeps it for a plain click. On macOS
-WebKit (the Tauri WKWebView) and on WebKitGTK, `contextmenu` is normally
-dispatched at button press, before any movement. With the contract as written,
-a press opens the native menu and the drag may not reach the page there. This
-run implements the contract as requested. Middle-button pan does not depend on
-the context menu, so it remains the reliable pan button on those platforms.
-Real-app behavior on macOS is a GUI check delegated to the supervising session
-and a user-accepted gap for this run. The follow-up decision is recorded in
+On Windows the `contextmenu` event follows the button release. On macOS WebKit
+(the Tauri WKWebView) and on WebKitGTK, `contextmenu` is dispatched at button
+press, before any movement. The first contract (commit 30f411a) prevented the
+menu only after a moved right gesture, so in the real macOS debug app a right
+press opened the native menu (Reload / Inspect Element) and swallowed the
+drag. The native-menu guard above fixes this by preventing the menu at event
+time on pan targets on every platform, so the result no longer depends on the
+event order. The webview Reload item is also harmful here because it restarts
+the frontend, which is the reference's reason for the same guard. Accepted
+cost: a plain right-click over a preview shows no native menu (no Reload or
+Inspect Element) unless text is selected or the target is editable. Real-app
+behavior on macOS is a GUI check delegated to the supervising session and a
+user-accepted gap for this run. The decision is recorded in
 `design-docs/user-qa/qa-preview-right-drag-pan.md`.
 
 ### Verification
@@ -1048,12 +1070,32 @@ and a user-accepted gap for this run. The follow-up decision is recorded in
   the cursor class; chord release; a fling that decays and stops below the
   minimum velocity; a fling that stops at an edge; a fling stopped by
   `pointerdown`, `wheel`, `keydown`, `stopFling()` and `detach()`; no fling
-  under reduced motion; `contextmenu` prevented only after a right gesture
-  that panned.
+  under reduced motion. Native-menu guard cases (they replace the old
+  "suppresses only a moved right menu" assertions):
+  - A plain right-click (`pointerdown`/`pointerup` without a move) and a
+    `contextmenu` after a middle gesture are `defaultPrevented`.
+  - Press-time regression: `pointerdown(button=2, buttons=2)`, then
+    `contextmenu` dispatched before any `pointermove` is `defaultPrevented`,
+    then `pointermove`s past the slop still pan the scroll container
+    (`scrollLeft`/`scrollTop` change by the drag delta).
+  - With no gesture, `contextmenu` dispatched on a descendant `input`, a
+    `textarea`, or an element inside `[contenteditable]` (for example
+    `contenteditable="true"`) is not prevented; inside
+    `contenteditable="false"` it is prevented.
+  - With a non-empty window selection (stubbed `getSelection` or a real
+    selected text range), a plain `contextmenu` is not prevented; after the
+    selection is cleared it is prevented again.
+  - After a right gesture that panned, the following `contextmenu` is
+    prevented (unchanged), including when a selection is present.
+  Test `contextmenu` events that must reach a descendant use
+  `bubbles: true`.
 - `PreviewPane.vitest.tsx` (rendered, `layout="source"`, direct image),
   `MediaFilePreviewPane.vitest.tsx` (video) and `PdfFilePreviewPane.vitest.tsx`:
   right and middle drag pan past the slop; a release fling moves the scroll
-  and then stops; a plain right-click is not prevented; a hidden pane does not
+  and then stops; a plain right-click `contextmenu` and one after a middle
+  gesture are `defaultPrevented` (these replace the earlier "plain right-click
+  is not prevented" and "middle menu is not prevented" assertions, and only
+  those assertions change); a hidden pane does not
   pan; `Ctrl`+wheel and `Meta`+wheel zoom smoothly, keep the pointer anchor and
   respect the per-type clamps; `Alt`+wheel and a plain wheel are not prevented
   and do not change zoom; keyboard `+`/`-` still step by 10; a document change
@@ -1116,8 +1158,9 @@ and a user-accepted gap for this run. The follow-up decision is recorded in
   wheel or trackpad pinch: smooth preview zoom under the pointer for
   Markdown/rendered, source, image, video and PDF previews (not configured by
   keymap.toml)". The pan line becomes "Right- or middle-button drag pans
-  Markdown/rendered, source, image, video and PDF previews with momentum; a
-  plain right-click opens the context menu". The image left-drag feature line
+  Markdown/rendered, source, image, video and PDF previews with momentum; the
+  native context menu is suppressed over previews except on selected text or
+  editable fields". The image left-drag feature line
   mentions momentum.
 - Commands: `bun run typecheck`, `bun run lint:biome`, `bun run test`,
   `mise exec -- env PATH="$(mise where node)/bin:$PATH" bun run test:dom` and
