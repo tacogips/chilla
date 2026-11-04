@@ -1,6 +1,6 @@
 # Preview Pan And Zoom: Finalize, README And PART A Review Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Plan ID**: preview-pan-zoom-finalize
 **Wave**: 3 (depends on preview-pan-zoom-preview-pane, preview-pan-zoom-media-pane, preview-pan-zoom-pdf-pane)
 **Design Reference**: design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures (Verification, README bullet); design-docs/specs/design-pdf-inline-rendering.md
@@ -130,12 +130,12 @@ exit code:
 
 ## Completion Criteria
 
-- [ ] `previewZoomDirectionFromWheel` is deleted with no remaining
+- [x] `previewZoomDirectionFromWheel` is deleted with no remaining
       references.
-- [ ] The three README lines are updated.
-- [ ] The PART A review findings are recorded, and any real defect is fixed
+- [x] The three README lines are updated.
+- [x] The PART A review findings are recorded, and any real defect is fixed
       with a test.
-- [ ] The PART A plan progress logs are updated.
+- [x] The PART A plan progress logs are updated.
 - [ ] All seven verification commands meet their expected result, with log
       paths recorded.
 
@@ -148,3 +148,34 @@ exit code:
 ## Related Plans
 
 - **Depends On**: preview-pan-zoom-preview-pane, preview-pan-zoom-media-pane, preview-pan-zoom-pdf-pane
+
+### Session: 2026-11-04 — implementation
+
+Removed the obsolete helper and updated the three README lines. PART A review found no material defect: picker queue behavior matches its accepted design; Vite resource paths match the pdf.js loader; CSP adds only the asset protocol and its localhost origin; worker and loader hardening match the PDF design. Six PART A logs cite this run and `tmp/pdf-inline-rendering-20261104-02/pdf-shortcuts-finalize/runtime-observed/RUNTIME-EVIDENCE.md`. Alt+wheel is superseded. Pre/post hashes and gate logs are under `tmp/preview-pan-zoom/preview-pan-zoom-finalize/`.
+
+The debug build was pending: its configured `dist/` and Cargo `target/` outputs were outside the declared empty artifact roots (resolved by the amendment below). The execution contract requires a checkpoint amendment before such generated repository output. Formal review, GUI checks, archiving and commit remain downstream.
+
+Foreground verification: `typecheck-agent.log` and `lint-biome-agent.log` exit 0; `test-agent.log` exit 0 (67 passed); `test-dom-agent.log` exit 0 (491 passed). `absence.log` confirms no obsolete names; `git-status.log` records `.riela/` and `riela-lock.json` untracked. The debug build has not run in this session.
+
+## Amendment 2026-11-04 (blocked-wave-scope-or-contract, round 1)
+
+**Blocker**: The wave-003 progress gate reported that `CARGO_TERM_QUIET=true bun run tauri build --debug --no-bundle` was not run. The plan declared no artifact roots, and the build writes generated output to `dist/` (Vite `frontendDist`) and `target/` (the Cargo workspace target at the repository root; `src-tauri/target` does not exist).
+
+**Decision** (additive; no redesign):
+
+- `dist` and `target` are added to this plan's `writePaths` and declared as `artifactRoots`. They are generated build outputs, so the runtime records them only as digest/count manifests, not as source snapshots. No source path lies inside them.
+- The worker may let the debug build create or overwrite files under `dist/` and `target/` only. Do not hand-edit, commit or stage anything there. Both directories already exist and are build caches.
+- The worker must not delete `target/` or run `cargo clean`. That would discard caches and is not required.
+
+**Resume steps** (only the blocked work; everything else already ran in the previous session and should not be redone unless a hash drifted):
+
+1. Re-hash the owned source files and compare them with `tmp/preview-pan-zoom/preview-pan-zoom-finalize/post-hashes.txt`. Record any drift; do not repair sibling files.
+2. Run `CARGO_TERM_QUIET=true bun run tauri build --debug --no-bundle` in the foreground from the repository root, logging to `tmp/preview-pan-zoom/preview-pan-zoom-finalize/tauri-build-debug.log`. Expected result: exit 0, with the debug binary present at `target/debug/chilla`.
+3. Re-run `git status --porcelain .riela riela-lock.json` and confirm that both are still untracked and that nothing under `.riela/` is staged.
+4. If the build fails, record the exact error and exit code in the progress log. Fix only defects inside this plan's source `writePaths`. Report anything else as a blocker.
+5. Check the full-gate completion criterion only when step 2 exits 0. Then append a progress-log session with the log path and exit code.
+
+**Completion criteria added**:
+
+- [ ] `tmp/preview-pan-zoom/preview-pan-zoom-finalize/tauri-build-debug.log` exists, and the build exited 0.
+- [ ] No files outside `writePaths` changed, except build output inside `dist/` and `target/`.

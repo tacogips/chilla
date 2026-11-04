@@ -69,12 +69,16 @@
       {
         "decision": "Keep the existing App.css .preview--right-drag-panning rule as PREVIEW_PANNING_CLASS.",
         "rationale": "No CSS rename is needed, and no plan owns App.css."
+      },
+      {
+        "decision": "Amendment 2026-11-04 round 1: declare dist and target as writePaths and artifactRoots of preview-pan-zoom-finalize so the required debug tauri build may write its generated output.",
+        "rationale": "Blocked plan: preview-pan-zoom-finalize (blocked-wave-scope-or-contract). Resolved gap: the debug build writes gitignored build caches dist/ (.gitignore:29) and target/ (.gitignore:5) that were outside the empty artifact roots. No source path lies inside them; no cargo clean or hand-edits there. Resume steps are in impl-plans/active/preview-pan-zoom-finalize.md section 'Amendment 2026-11-04'."
       }
     ],
     "intentionalTradeoffs": [
       "On macOS WebKit and WebKitGTK, contextmenu fires at press, so right-drag pan may not work in the real app (user-accepted). Middle-button drag stays available.",
       "Per-plan bun run typecheck may fail transiently from a sibling's in-progress wave-2 edits. Only owned-file errors gate a wave-2 plan. The serial finalize gate is authoritative.",
-      "The finalize debug build writes dist/ and target/. No accepted plan declares artifactRoots, so none are recorded."
+      "The finalize debug build writes dist/ and target/. Amendment round 1 declares them as artifactRoots of preview-pan-zoom-finalize only; they are recorded as digest/count manifests, not source snapshots."
     ],
     "supportedEdgeCases": [
       "A move of 4px or less does not scroll and does not suppress contextmenu.",
@@ -232,10 +236,12 @@
         "impl-plans/active/pdf-video-zoom.md",
         "impl-plans/active/pdf-zoom-wheel-contract.md",
         "impl-plans/active/workspace-picker-supersession.md",
-        "impl-plans/active/preview-pan-zoom-finalize.md"
+        "impl-plans/active/preview-pan-zoom-finalize.md",
+        "dist",
+        "target"
       ],
       "sharedPaths": [],
-      "artifactRoots": [],
+      "artifactRoots": ["dist", "target"],
       "acceptanceCriteria": [
         "previewZoomDirectionFromWheel is deleted from PreviewPane.tsx with no remaining references.",
         "Exactly the three README lines are updated: Ctrl/Cmd+wheel or pinch zoom, right/middle drag pan with momentum, and image drag pan with momentum.",
