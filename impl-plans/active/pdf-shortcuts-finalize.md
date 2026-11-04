@@ -277,6 +277,64 @@ count-based and exhaustive.
 **Unchanged**: plan IDs, the DAG, other plans, the README edits, and Final
 verification steps 1-7 other than the Node runtime pin.
 
+## Amendment 2026-11-04 (blocked-wave-scope-or-contract, round 2)
+
+**Blocker addressed**: automatic approval review rejected the prescribed
+`rm -rf "$BASE"` cleanup. The baseline export
+`/var/folders/wn/q3_zjgs15t9_367s8627fd0w0000gn/T/tmp.CjkYj6EYNo` remains on
+disk. It is outside the repository, under the per-user macOS temporary
+directory.
+
+**Decisions**
+
+1. *Cleanup is no longer a gate.* Decision 2(f) of round 1 is amended. Removing
+   the export is best-effort hygiene, not an acceptance criterion. The export:
+   - sits outside the repository;
+   - contains only `git archive` output of `cc1d40b` plus a `node_modules`
+     symlink;
+   - is not read by any gate, test or build;
+   - lives under `$TMPDIR`, which the OS purges.
+
+   Do not attempt `rm -rf` or any other destructive deletion again. Do not ask
+   for broader permissions. Record the path, and the result of
+   `test -e <path>`, in the progress log as a residual cleanup item for the
+   user. Never modify, read or reuse the export again.
+2. *Do not repeat the baseline.* The round-1 comparison is complete: three
+   baseline and three current isolated runs fail the same assertion, so
+   disposition **B** applies. Its evidence is in
+   `tmp/pdf-inline-rendering-20261104-01/pdf-shortcuts-finalize/baseline-comparison.json`
+   and the `baseline-stale-picker-{base,current}-{1,2,3}.log` files. Reuse that
+   evidence and do not create a new export.
+3. *Branch outcome under B.* If all of the following hold, report the plan
+   with `implementation_blocked: false`:
+   - `test-dom-pinned.log` shows exactly 1 failure out of 457 tests, and that
+     failure is the stale-picker assertion;
+   - typecheck, test, lint, cargo check, build, the dist checks and the tauri
+     debug build exit 0 under Node 22.23.4, as their existing `*-pinned.log`
+     and `cargo-r2.log` files show;
+   - `WorkspaceShell.tsx` is unmodified.
+
+   In that case:
+   - Set `baselineReviewPending` to `{test: "ignores a stale parent directory
+     rejection after a newer picker workspace opens", assertion: "expected ...
+     to contain 'new preview'", b: 3, c: 3, logs: [...]}`.
+   - Report the DOM gate honestly as a nonzero exit pending baseline
+     disposition. Never describe it as passing.
+
+   If any of the conditions above is false, report a blocker.
+4. *Runtime check (step 8).* Re-check the current tree with a single
+   foreground launch attempt. If the debug executable still cannot be
+   inspected visually or through its console, record an explicit verification
+   gap, citing `runtime-launch-retry.log` (exit 130). A runtime gap alone is
+   not a blocker under this plan. It stays a residual risk for the
+   integration review.
+5. *Before reporting:* verify that the current hashes of
+   `WorkspaceShell.vitest.tsx`, `README.md` and this plan match the recorded
+   values. Make no new source edits.
+
+**Unchanged**: writePaths, artifactRoots, plan IDs, the DAG, and round-1
+Decisions 1, 3 and 4.
+
 ## Progress Log
 
 ### Session: 2026-11-04
@@ -291,3 +349,9 @@ verification steps 1-7 other than the Node runtime pin.
 **Blockers**: `bun run test:dom` exited 1 (447 passed, 10 failed; `test-dom.log`): Node 26 lacks localStorage and an existing stale-picker test fails. Under Node 22 the WorkspaceShell suite still fails that stale-picker test (61 passed, 1 failed; `check-agent-workspace-node22.log`); source-matched baseline comparison is unavailable. The apparent file-open queue cause is in `src/features/workspace/WorkspaceShell.tsx`, outside this plan's write scope. Resolve the failure or establish the required baseline before acceptance.
 **Runtime gap**: The three fixture PDFs were not generated, the debug executable was not launched, and rendered pixels, shortcut interaction, real worker, CSP and decoder console evidence remain unverified. The failed required DOM gate prevented completion; do not treat the build as runtime proof.
 **Hashes**: README before `16738c9e04780e7caa27e31117130f6785c495aa9c9ee279324531f1a7d04958`, after `36188dbf66305224a78e742888a230cac7200685b7d50bdb2b5d1caa2a2dbc03`; WorkspaceShell test before `e98fd29bfaf304e50e418dca6d36da15cd8552358473208d37b92af84d2993d4`, after `4aec80515eebbd8e41d670ba2062bfe50d973ce411fca8a320436d8ff4a11169`. Per-edit intent and intermediate hashes are in the same evidence directory. Formal review and finalization remain downstream.
+
+### Session: 2026-11-04 — round-1 verification
+**Disposition**: B, baseline review pending. Three source-matched `cc1d40b` isolated runs and three pinned current runs all failed the same stale-picker assertion (`b=3`, `c=3`). The pinned full DOM gate exited 1, with 456 passed and one failure; the source-matched full baseline exited 1 with 442 passed and the identical failure. `tmp/pdf-inline-rendering-20261104-01/pdf-shortcuts-finalize/baseline-comparison.json` records the exact assertion comparison. This is not a passing gate and requires independent review. `WorkspaceShell.tsx` was not edited.
+**Checks**: Explicitly prepending `$(mise where node)/bin` to PATH is necessary: plain `mise exec -- bun run test:dom` selected Homebrew Node 26 despite the separate Node version check. With pinned PATH, typecheck, unit tests (67 passed), lint, build and debug Tauri build exited 0; Cargo check exited 0 with `CARGO_TERM_QUIET=true`; asset checks exited 0; PDF-focused tests passed 2/2. Complete logs: `typecheck-pinned.log`, `test-pinned.log`, `lint-pinned.log`, `build-pinned.log`, `tauri-pinned.log`, `cargo-r2.log`, `assets-pinned.log`, `pdf-focused-pinned.log`, `test-dom-pinned.log`, and `baseline-full-dom-path22.log` in the plan evidence directory.
+**Runtime gap**: Plain, CMap and JPX fixtures were generated outside the repository; generator commands and hashes are recorded in `runtime-fixture-commands.log` and `runtime-fixture-generation.log`. The rebuilt `target/debug/chilla` was launched in the foreground and exited 130 after interruption (`runtime-launch-retry.log`), but Computer Use could not select the raw debug executable reliably. Rendering, shortcuts, worker identity and console errors remain unverified. No runtime success is claimed.
+**Cleanup**: Automatic approval review rejected the prescribed `rm -rf` of the out-of-repository baseline export; it remains at `/var/folders/wn/q3_zjgs15t9_367s8627fd0w0000gn/T/tmp.CjkYj6EYNo`. No alternate deletion was attempted.
