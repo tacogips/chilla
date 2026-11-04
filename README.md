@@ -165,7 +165,7 @@ The repository design documents started from a Markdown workbench concept, then 
 - Non-Markdown files are previewed according to type:
   - images: inline image preview, including HEIC / HEIF when the platform WebView can decode the file
   - video: embedded video preview
-  - PDF: embedded iframe preview
+  - PDF: in-app pdf.js canvas rendering (keyboard shortcuts and zoom apply)
   - text-like files: syntax-highlighted source preview with prebuilt grammar data and a native regex engine for faster loading; Markdown code fences share the same engine
   - source preview layout: full-pane code with a small inset, independent scrolling/zoom, and compact language/size metadata in a footer
   - diff highlighting: shared token scanning and span coalescing across all 28 tokenizer kinds; see the [complete syntax inventory and measured results](design-docs/specs/design-syntax-inventory.md)
@@ -185,7 +185,7 @@ Markdown source can be edited in the raw pane and saved back to disk. If the fil
 - Active preview headers show the selected file name across Markdown, text, image, CSV, EPUB, PDF, audio, and video views
 - Local Markdown image resolution with HEIC / HEIF image fallback and open-in-default-app affordance when the WebView cannot render an image
 - Direct image-file previews for AVIF, APNG, BMP/DIB, GIF, HEIC/HEIF, ICO, JPEG, PNG, SVG, TIFF, and WebP files that the platform WebView can decode
-- Touch-style left-button drag panning for direct SVG and raster image previews
+- Touch-style left-button drag panning with momentum for direct SVG and raster image previews
 - GitHub diff URL viewer for pull requests, commits, and compares with changed-file browsing, GitHub jump action, cached diff loading, text modes for left/right, stack, and full-file review, plus rendered SVG image review
 - Local Git diff viewer for uncommitted repository changes and commit/range startup diffs using the same review modes
 - Automatic refresh of opened Markdown documents when the file changes on disk, including common atomic-replace save patterns
@@ -249,8 +249,9 @@ Default global shortcuts:
 - `2`: select Markdown or HTML preview, or formatted CSV/TSV/JSON/JSONL/XML/CSS/JS/TS view when available
 - `Shift+F`: toggle formatting for JSON, JSON Lines, XML, HTML, CSS, and JS/TS previews (no-op when formatted output is unavailable); for HTML this applies to the Raw view and switches out of Preview
 - `Shift+C`: toggle syntax highlighting for text, CSV/TSV raw, and Markdown previews
-- `+` / `-`: native preview zoom, from 50%-300% for rendered content or 50%-800% for direct SVG/raster images, in 10% steps (not configured by keymap.toml)
-- `Ctrl+mouse wheel`: native preview zoom under the pointer (not configured by keymap.toml)
+- `+` / `-`: native preview zoom, from 50%-300% for rendered content, PDF and video or 50%-800% for direct SVG/raster images, in 10% steps (not configured by keymap.toml)
+- `Ctrl`/`Cmd`+mouse wheel or trackpad pinch: smooth preview zoom under the pointer for Markdown/rendered, source, image, video and PDF previews (not configured by keymap.toml)
+- Right- or middle-button drag pans Markdown/rendered, source, image, video and PDF previews with momentum; a plain right-click opens the context menu.
 - `Shift+D`: toggle light/dark theme, including while browsing files
 
 Theme switching uses `Shift+D` so `Shift+S` remains dedicated to content search.

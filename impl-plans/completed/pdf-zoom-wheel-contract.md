@@ -1,6 +1,6 @@
 # PDF Inline Rendering: Shared Modifier-Wheel Zoom Contract Implementation Plan
 
-**Status**: In Progress
+**Status**: Completed
 **Design Reference**: `design-docs/specs/design-pdf-inline-rendering.md#shared-zoom-input-contract`, `design-docs/specs/architecture.md#shared-rendered-preview-zoom`
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04
@@ -178,3 +178,16 @@ only partly reviewed. Keep it. Do not revert it or reimplement it.
 - `src/features/preview/PreviewPane.vitest.tsx`: `724213e339bc3c21686c98031378e08bc74c9072370cde154f5a49a1afe1ae5f` / `58cdddd1326d3ab881fc1fb257a85d342f189df197b915623468d15821a12fd5`.
 - This plan before editing: `fe50973b1b1b2125c5807a39b4419bdea6371629b332537a1c82edda96996cae`; its final hash is recorded in plan-local evidence `final-hashes.txt` to avoid a self-referential hash.
 **Notes**: Formal reviews and downstream PDF/video integration remain assigned to later workflow steps.
+
+### Session: 2026-11-04 — session-710 re-verification
+**Tasks Completed**: Re-verified the existing modifier-wheel implementation and tests; no source repair was needed.
+**Blockers**: None.
+**Verification**: Node v22.23.4. The dispatched Vitest command exited 0 with 27 tests passed; a verbose rerun also exited 0 and lists the wheel cases. Scoped Biome and `bun run typecheck`, each run under the dispatched mise Node environment, exited 0. Logs: `tmp/pdf-inline-rendering-20261104-02/pdf-zoom-wheel-contract/{vitest-final,vitest-verbose,biome,typecheck,node-version}.log`. These checks ran on the shared working tree; final integration verification and formal reviews remain downstream.
+**SHA-256 before / after**:
+- `src/features/preview/PreviewPane.tsx`: `58ac063f0a8a279fbef10ed51c91c5b8391f4fc4e247240cabc839193ce0ce81` / `58ac063f0a8a279fbef10ed51c91c5b8391f4fc4e247240cabc839193ce0ce81`.
+- `src/features/preview/PreviewPane.vitest.tsx`: `58cdddd1326d3ab881fc1fb257a85d342f189df197b915623468d15821a12fd5` / `58cdddd1326d3ab881fc1fb257a85d342f189df197b915623468d15821a12fd5`.
+- This plan before editing: `ebb72e8d774d7f35c3864cad8c8f521b242293db181c3a9777eeeb25d6bec687`; its final hash is in plan-local `final-hashes.txt` to avoid self-reference.
+
+### Session: 2026-11-04 — preview pan and zoom finalization
+
+PART A review found no material defect. The earlier Alt+wheel behavior is superseded by the preview pan and zoom plans. Runtime evidence: `tmp/pdf-inline-rendering-20261104-02/pdf-shortcuts-finalize/runtime-observed/RUNTIME-EVIDENCE.md`. Current gate evidence is recorded under `tmp/preview-pan-zoom/preview-pan-zoom-finalize/`; see the finalize plan for outcomes and any outstanding checks. Formal integration review and archiving remain downstream.

@@ -25,6 +25,9 @@ const documentMocks = vi.hoisted(() => ({
   stopDocumentWatch: vi.fn(),
 }));
 const dialogMocks = vi.hoisted(() => ({ open: vi.fn() }));
+const pdfMocks = vi.hoisted(() => ({ load: vi.fn(), close: vi.fn() }));
+
+vi.mock("../preview/pdfjs", () => ({ loadPdfDocument: pdfMocks.load }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   async invoke() {
@@ -63,7 +66,7 @@ vi.mock("@tauri-apps/api/path", () => ({
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow() {
     return {
-      close: vi.fn().mockResolvedValue(undefined),
+      close: pdfMocks.close,
       minimize: vi.fn().mockResolvedValue(undefined),
       toggleMaximize: vi.fn().mockResolvedValue(undefined),
     };
@@ -2214,6 +2217,176 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     });
   });
 
+  describe("with a PDF preview open", () => {
+    beforeEach(() => {
+      const page = {
+        getViewport: vi.fn(({ scale }: { scale: number }) => ({
+          width: 100 * scale,
+          height: 200 * scale,
+        })),
+        render: vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() })),
+        cleanup: vi.fn(),
+      };
+      pdfMocks.load.mockReset().mockImplementation(() => ({
+        promise: Promise.resolve({ numPages: 1, getPage: async () => page }),
+        destroy: vi.fn().mockResolvedValue(undefined),
+      }));
+      pdfMocks.close.mockReset().mockResolvedValue(undefined);
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+        {} as CanvasRenderingContext2D,
+      );
+      documentMocks.getStartupContext.mockResolvedValue(
+        directoryStartupContext("/workspace/doc.pdf"),
+      );
+      documentMocks.listDirectory.mockResolvedValue(
+        directoryPageWithPaths(["/workspace/doc.pdf", "/workspace/other.txt"]),
+      );
+      documentMocks.openFilePreview.mockResolvedValue({
+        kind: "pdf",
+        path: "/workspace/doc.pdf",
+        file_name: "doc.pdf",
+        mime_type: "application/pdf",
+        html: "",
+        last_modified: "2026-10-01T00:00:00Z",
+      });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("routes workspace shortcuts while the PDF remains in the document", async () => {
+      dispose = renderWorkspace();
+      await waitForElement("canvas.preview-pdf-page");
+      expect(document.querySelector("iframe")).toBeNull();
+      expect(
+        document
+          .querySelector(".preview--pdf")
+          ?.contains(document.activeElement),
+      ).toBe(false);
+      const press = (key: string, init: KeyboardEventInit = {}) =>
+        window.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key,
+            bubbles: true,
+            cancelable: true,
+            ...init,
+          }),
+        );
+      const sidebarBefore = document.querySelector(".file-browser") !== null;
+      press("L", { shiftKey: true });
+      await waitFor(() =>
+        expect(document.querySelector(".file-browser") !== null).toBe(
+          !sidebarBefore,
+        ),
+      );
+      if (!sidebarBefore) press("L", { shiftKey: true });
+      press("o", { metaKey: true });
+      await waitFor(() => expect(dialogMocks.open).toHaveBeenCalled());
+      press("+");
+      expect(document.querySelector(".preview__zoom")?.textContent).toBe(
+        "110%",
+      );
+      press("-");
+      expect(document.querySelector(".preview__zoom")?.textContent).toBe(
+        "100%",
+      );
+      const theme = document
+        .querySelector(".workspace__theme-toggle")
+        ?.getAttribute("aria-label");
+      press("D", { shiftKey: true });
+      await waitFor(() =>
+        expect(
+          document
+            .querySelector(".workspace__theme-toggle")
+            ?.getAttribute("aria-label"),
+        ).not.toBe(theme),
+      );
+      const body = document.querySelector<HTMLElement>(".preview--pdf");
+      if (!body) throw new Error("missing PDF body");
+      Object.defineProperty(body, "clientHeight", {
+        configurable: true,
+        value: 400,
+      });
+      press("j");
+      expect(body.scrollTop).toBeGreaterThan(0);
+      press("k");
+      expect(body.scrollTop).toBe(0);
+      const loadCount = pdfMocks.load.mock.calls.length;
+      const previewCount = documentMocks.openFilePreview.mock.calls.length;
+      const listCount = documentMocks.listDirectory.mock.calls.length;
+      press("r");
+      await waitFor(() => {
+        expect(documentMocks.openFilePreview.mock.calls.length).toBeGreaterThan(
+          previewCount,
+        );
+        expect(documentMocks.listDirectory.mock.calls.length).toBeGreaterThan(
+          listCount,
+        );
+        expect(pdfMocks.load.mock.calls.length).toBeGreaterThan(loadCount);
+      });
+      expect(
+        new URL(
+          pdfMocks.load.mock.calls[pdfMocks.load.mock.calls.length - 1]![0],
+        ).searchParams.has("chilla_refresh"),
+      ).toBe(true);
+      press("q");
+      await waitFor(() => expect(pdfMocks.close).toHaveBeenCalled());
+    });
+
+    it("moves file selection and opens it with Enter while a PDF is open", async () => {
+      dispose = renderWorkspace();
+      await waitForElement("canvas.preview-pdf-page");
+      if (!document.querySelector(".file-browser"))
+        modeButton("Expand left pane").click();
+      const row = await waitForElement<HTMLButtonElement>(
+        'button[data-path="/workspace/doc.pdf"]',
+      );
+      row.focus();
+      row.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "j",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      expect(
+        document
+          .querySelector(".file-browser__button--active")
+          ?.getAttribute("data-path"),
+      ).toBe("/workspace/other.txt");
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "k",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      expect(
+        document
+          .querySelector(".file-browser__button--active")
+          ?.getAttribute("data-path"),
+      ).toBe("/workspace/doc.pdf");
+      const count = documentMocks.openFilePreview.mock.calls.length;
+      row.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      await waitFor(() =>
+        expect(documentMocks.openFilePreview.mock.calls.length).toBeGreaterThan(
+          count,
+        ),
+      );
+      expect(documentMocks.openFilePreview).toHaveBeenLastCalledWith(
+        "/workspace/doc.pdf",
+        { csv_first_row_as_header: false },
+      );
+    });
+  });
+
   it.each(["video", "audio"] as const)(
     "routes focused %s seeking through workspace keymaps and preserves file-tree J/K",
     async (kind) => {
@@ -2549,6 +2722,59 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     expect(document.body.textContent).toContain("keep");
     expect(documentMocks.listExplicitFileSet).toHaveBeenCalledTimes(2);
     expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens native batches in order", async () => {
+    const first = "/workspace/a.txt";
+    const second = "/workspace/b.txt";
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.takeNativeOpenRequests
+      .mockResolvedValueOnce([[first], [second]])
+      .mockResolvedValue([]);
+    documentMocks.listDirectory
+      .mockResolvedValueOnce(directoryPage("/workspace/old.txt"))
+      .mockResolvedValueOnce(directoryPage(first))
+      .mockResolvedValueOnce(directoryPage(second));
+    documentMocks.openFilePreview.mockImplementation(async (path: string) => ({
+      ...textPreview(),
+      path,
+      file_name: path.slice(path.lastIndexOf("/") + 1),
+      html: `<section class="file-preview"><pre>${path}</pre></section>`,
+    }));
+    dispose = renderWorkspace();
+    await waitFor(() => expect(document.body.textContent).toContain(second));
+    expect(
+      documentMocks.openFilePreview.mock.calls.map((call) => call[0]),
+    ).toEqual([first, second]);
+  });
+
+  it("waits for workspace initialization before opening a picker selection", async () => {
+    const picked = "/workspace/picked.txt";
+    let finishStartup: ((context: StartupContext) => void) | undefined;
+    documentMocks.getStartupContext.mockReturnValue(
+      new Promise<StartupContext>((resolve) => {
+        finishStartup = resolve;
+      }),
+    );
+    documentMocks.listDirectory.mockResolvedValue(directoryPage(picked));
+    documentMocks.openFilePreview.mockResolvedValue(textPreview());
+    dialogMocks.open.mockResolvedValue(picked);
+    dispose = renderWorkspace();
+    modeButton("Open one or more files").click();
+    await waitFor(() => expect(dialogMocks.open).toHaveBeenCalled());
+    expect(documentMocks.listDirectory).not.toHaveBeenCalled();
+    expect(documentMocks.listExplicitFileSet).not.toHaveBeenCalled();
+    expect(documentMocks.openFilePreview).not.toHaveBeenCalled();
+    if (finishStartup === undefined)
+      throw new Error("Missing startup resolver");
+    finishStartup(directoryStartupContext(null));
+    await waitFor(() =>
+      expect(documentMocks.openFilePreview).toHaveBeenCalledWith(picked, {
+        csv_first_row_as_header: false,
+      }),
+    );
   });
 
   it("ignores a stale parent directory rejection after a newer picker workspace opens", async () => {

@@ -1,6 +1,6 @@
 # Workspace Picker Supersession Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Design Reference**: `design-docs/specs/design-macos-file-open.md#interactive-picker-supersession`, `#delivery-and-lifecycle`
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04
@@ -155,13 +155,13 @@ Under AGENTS.md, invoke the `ts-coding` agent for the edits and
 
 ## Done criteria
 
-- [ ] `handleOpenFiles` no longer calls `queueFileOpenWork`. It awaits
+- [x] `handleOpenFiles` no longer calls `queueFileOpenWork`. It awaits
   `workspaceInitialized` and checks disposal first.
-- [ ] The stale-picker test passes unmodified in 3/3 runs.
-- [ ] The two new regression tests pass, or the second one is explicitly
+- [x] The stale-picker test passes unmodified in 3/3 runs.
+- [x] The two new regression tests pass, or the second one is explicitly
   logged as not reachable.
-- [ ] Verification steps 1-7 produce the stated results, with complete logs.
-- [ ] The progress log is updated with pre- and post-edit `shasum -a 256` for
+- [x] Verification steps 1-7 produce the stated results, with complete logs.
+- [x] The progress log is updated with pre- and post-edit `shasum -a 256` for
   each owned file.
 
 ## Concurrency and drift rules
@@ -183,3 +183,14 @@ Under AGENTS.md, invoke the `ts-coding` agent for the edits and
 **Tasks In Progress**: None
 **Blockers**: None
 **Notes**: Wave 1. `pdf-shortcuts-finalize` depends on this plan.
+
+### Session: 2026-11-04 — implementation
+**Tasks Completed**: Picker supersession, native batch ordering and initialization barrier regressions. Existing stale-picker test remains unchanged.
+**Verification**: Node v22.23.4; three scoped Vitest runs each passed 64 tests; verbose run confirms all three named regressions; typecheck and scoped Biome passed; queue count is 1 and diff against 99954ab is limited to handleOpenFiles. Complete logs and exits are in `tmp/pdf-inline-rendering-20261104-02/workspace-picker-supersession/`. All commands exited 0.
+**Hashes**: Pre-edit hashes for all three owned files are in `pre-hashes.log`; source post-edit and plan pre-update hashes are in `before-plan-update-hashes.log`; final hashes for all files are in `post-hashes.log` in that evidence directory (the plan cannot embed its own final hash without changing it).
+**Downstream**: Formal reviews and plan archiving remain workflow-owned.
+**Blockers**: None.
+
+### Session: 2026-11-04 — preview pan and zoom finalization
+
+PART A review found no material defect. The earlier Alt+wheel behavior is superseded by the preview pan and zoom plans. Runtime evidence: `tmp/pdf-inline-rendering-20261104-02/pdf-shortcuts-finalize/runtime-observed/RUNTIME-EVIDENCE.md`. Current gate evidence is recorded under `tmp/preview-pan-zoom/preview-pan-zoom-finalize/`; see the finalize plan for outcomes and any outstanding checks. Formal integration review and archiving remain downstream.

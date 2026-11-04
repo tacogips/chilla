@@ -965,8 +965,12 @@ button {
   color: var(--text-subtle);
 }
 
-/* File-view PDF / media: fill the document pane below the header. */
-.pane__body.preview.preview--embedded-pdf,
+.preview--right-drag-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* Embedded previews fill the document pane below the header. */
 .pane__body.preview.preview--embedded-html,
 .pane__body.preview.preview--embedded-video,
 .pane__body.preview.preview--embedded-audio,
@@ -975,11 +979,6 @@ button {
   flex-direction: column;
   padding: 0;
   overflow: hidden;
-}
-
-.pane__body.preview.preview--embedded-pdf .preview-pdf-frame {
-  flex: 1;
-  min-height: 0;
 }
 
 .pane__body.preview.preview--embedded-html .preview-html-frame {
@@ -1086,40 +1085,23 @@ button {
   color: var(--text-subtle);
 }
 
-.pane__body.preview.preview--embedded-pdf .preview-pdf-frame {
-  width: 100%;
-  border: 0;
-  border-radius: 0;
-  background: var(--bg-app);
+.pane__body.preview.preview--pdf {
+  overflow: auto;
+  padding: 1rem;
 }
 
-/* Markdown (and other HTML) preview: PDF iframe uses remaining column height. */
-.workspace__document-column .pane__body.preview:has(.preview-pdf-frame) {
+.preview-pdf-page {
+  display: block;
+  margin: 0 auto 12px;
+  background: #fff;
+  box-shadow: 0 1px 5px rgb(0 0 0 / 0.2);
+}
+
+.preview-pdf__error {
   display: flex;
   flex-direction: column;
-  padding: 0;
-  overflow: hidden;
-}
-
-.workspace__document-column
-  .pane__body.preview:has(.preview-pdf-frame)
-  .preview-media--pdf {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  margin: 0;
-}
-
-.workspace__document-column
-  .pane__body.preview:has(.preview-pdf-frame)
-  .preview-pdf-frame {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  border: 0;
-  border-radius: 0;
-  background: var(--bg-app);
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 .preview h1,

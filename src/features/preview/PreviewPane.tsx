@@ -21,6 +21,13 @@ import {
   type PreviewPathApi,
 } from "./preview-assets";
 import { PreviewHeader } from "./PreviewHeader";
+import {
+  anchorScrollAfterZoom,
+  applyWheelZoom,
+  attachPreviewPan,
+  measureAnchor,
+  type PreviewPanHandle,
+} from "./previewPanZoom";
 
 interface PreviewPaneProps {
   readonly fileName: string;
@@ -36,12 +43,12 @@ interface PreviewPaneProps {
   readonly layout?: "rendered" | "source";
 }
 
-type PreviewZoomDirection = "in" | "out";
+export type PreviewZoomDirection = "in" | "out";
 
 const PREVIEW_ZOOM_STEP = 10;
-const PREVIEW_ZOOM_MIN = 50;
-const RENDERED_PREVIEW_ZOOM_MAX = 300;
-const IMAGE_PREVIEW_ZOOM_MAX = 800;
+export const PREVIEW_ZOOM_MIN = 50;
+export const RENDERED_PREVIEW_ZOOM_MAX = 300;
+export const IMAGE_PREVIEW_ZOOM_MAX = 800;
 
 /** Returns the next bounded rendered-preview zoom percentage. */
 export function nextPreviewZoom(
@@ -607,6 +614,7 @@ export function PreviewPane(props: PreviewPaneProps) {
   let containerRef: HTMLDivElement | undefined;
   let previewRef: HTMLDivElement | undefined;
   let enhancementRunId = 0;
+  let panHandle: PreviewPanHandle | undefined;
   const [zoom, setZoom] = createSignal(100);
 
   const adjustZoom = (direction: PreviewZoomDirection) => {
@@ -616,6 +624,24 @@ export function PreviewPane(props: PreviewPaneProps) {
         : RENDERED_PREVIEW_ZOOM_MAX;
     setZoom((current) => nextPreviewZoom(current, direction, maximum));
   };
+
+  const sourceScrollOwner = (): HTMLElement => {
+    const preview = previewRef;
+    if (preview === undefined) throw new Error("Preview is not mounted");
+    return props.layout === "source"
+      ? (preview.querySelector<HTMLElement>(
+          ".preview__source-content > .file-preview--text > pre",
+        ) ?? preview)
+      : preview;
+  };
+
+  createEffect(
+    on(
+      () => [props.html, props.layout],
+      () => panHandle?.stopFling(),
+      { defer: true },
+    ),
+  );
 
   onMount(() => {
     const container = containerRef;
@@ -665,95 +691,41 @@ export function PreviewPane(props: PreviewPaneProps) {
     };
 
     const handleWheel = (event: WheelEvent) => {
-      if (!props.visible || !event.ctrlKey || event.deltaY === 0) {
-        return;
-      }
-
-      event.preventDefault();
-      adjustZoom(event.deltaY < 0 ? "in" : "out");
+      if (!props.visible) return;
+      const old = zoom();
+      const maximum =
+        props.dragPanEnabled === true
+          ? IMAGE_PREVIEW_ZOOM_MAX
+          : RENDERED_PREVIEW_ZOOM_MAX;
+      const next = applyWheelZoom(event, old, maximum);
+      if (next === null) return;
+      const owner = sourceScrollOwner();
+      const anchor =
+        props.layout === "source"
+          ? owner
+          : (preview.querySelector<HTMLElement>(".preview__zoom-surface") ??
+            owner);
+      const before = measureAnchor(owner, anchor);
+      setZoom(next);
+      const after = measureAnchor(owner, anchor);
+      anchorScrollAfterZoom(owner, event, before, after, next / old);
     };
 
-    let dragState:
-      | {
-          readonly pointerId: number;
-          readonly clientX: number;
-          readonly clientY: number;
-          readonly scrollLeft: number;
-          readonly scrollTop: number;
-        }
-      | undefined;
-
-    const finishDrag = (event: PointerEvent, releaseCapture: boolean) => {
-      if (dragState?.pointerId !== event.pointerId) {
-        return;
-      }
-
-      dragState = undefined;
-      if (releaseCapture && preview.hasPointerCapture(event.pointerId)) {
-        preview.releasePointerCapture(event.pointerId);
-      }
-    };
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (
-        props.dragPanEnabled !== true ||
-        !props.visible ||
-        event.button !== 0 ||
-        !event.isPrimary
-      ) {
-        return;
-      }
-
-      dragState = {
-        pointerId: event.pointerId,
-        clientX: event.clientX,
-        clientY: event.clientY,
-        scrollLeft: preview.scrollLeft,
-        scrollTop: preview.scrollTop,
-      };
-      preview.setPointerCapture(event.pointerId);
-      event.preventDefault();
-    };
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const drag = dragState;
-      if (drag === undefined || drag.pointerId !== event.pointerId) {
-        return;
-      }
-
-      preview.scrollLeft = drag.scrollLeft - (event.clientX - drag.clientX);
-      preview.scrollTop = drag.scrollTop - (event.clientY - drag.clientY);
-      event.preventDefault();
-    };
-
-    const handlePointerUp = (event: PointerEvent) => finishDrag(event, true);
-    const handlePointerCancel = (event: PointerEvent) =>
-      finishDrag(event, true);
-    const handleLostPointerCapture = (event: PointerEvent) =>
-      finishDrag(event, false);
+    panHandle = attachPreviewPan(preview, {
+      isActive: () => props.visible,
+      leftButton: () => props.dragPanEnabled === true,
+      scrollOwner: sourceScrollOwner,
+    });
 
     container.addEventListener("click", handleClick);
     window.addEventListener("keydown", handleKeyDown);
     preview.addEventListener("wheel", handleWheel, { passive: false });
-    preview.addEventListener("pointerdown", handlePointerDown);
-    preview.addEventListener("pointermove", handlePointerMove);
-    preview.addEventListener("pointerup", handlePointerUp);
-    preview.addEventListener("pointercancel", handlePointerCancel);
-    preview.addEventListener("lostpointercapture", handleLostPointerCapture);
-
     onCleanup(() => {
-      dragState = undefined;
+      panHandle?.detach();
+      panHandle = undefined;
       container.removeEventListener("click", handleClick);
       window.removeEventListener("keydown", handleKeyDown);
       preview.removeEventListener("wheel", handleWheel);
-      preview.removeEventListener("pointerdown", handlePointerDown);
-      preview.removeEventListener("pointermove", handlePointerMove);
-      preview.removeEventListener("pointerup", handlePointerUp);
-      preview.removeEventListener("pointercancel", handlePointerCancel);
-      preview.removeEventListener(
-        "lostpointercapture",
-        handleLostPointerCapture,
-      );
     });
   });
 
@@ -822,7 +794,7 @@ export function PreviewPane(props: PreviewPaneProps) {
             <span>{props.subtitle ?? "Rendered HTML"}</span>
           </Show>
           <span class="preview__zoom" aria-live="polite">
-            {zoom()}%
+            {Math.round(zoom())}%
           </span>
         </span>
       </PreviewHeader>

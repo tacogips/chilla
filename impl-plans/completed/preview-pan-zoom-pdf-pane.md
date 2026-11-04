@@ -1,6 +1,6 @@
 # Preview Pan And Zoom: PDF Pane Wiring Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: preview-pan-zoom-pdf-pane
 **Wave**: 2 (depends on preview-pan-zoom-module)
 **Design Reference**: design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures (Wheel Zoom Contract, PDF bullets)
@@ -164,12 +164,12 @@ Run in the foreground and record each exit code and log path under
 
 ## Completion Criteria
 
-- [ ] `zoom`/`renderZoom` are split, with a 150 ms debounce. Keyboard
+- [x] `zoom`/`renderZoom` are split, with a 150 ms debounce. Keyboard
       re-renders immediately.
-- [ ] Page-local anchoring passes the 2572 example, the centered and gap
+- [x] Page-local anchoring passes the 2572 example, the centered and gap
       cases.
-- [ ] Right/middle pan and fling work. Alt+wheel does not zoom.
-- [ ] Owned tests, biome and typecheck pass. The progress log is updated.
+- [x] Right/middle pan and fling work. Alt+wheel does not zoom.
+- [x] Owned tests, biome and typecheck pass. The progress log is updated.
 
 ## Progress Log
 
@@ -182,3 +182,9 @@ Run in the foreground and record each exit code and log path under
 - **Depends On**: preview-pan-zoom-module
 - **Next**: preview-pan-zoom-finalize
 - **Supersedes**: preview-right-drag-pdf-pane
+
+### Session: 2026-11-04 — implementation
+**Tasks Completed**: PDF live/render zoom, page-local anchoring, shared pan wiring, reload cleanup and regression coverage. Formal reviews and archival remain downstream.
+**Verification**: Scoped vitest exit 0 (14/14), `vitest-final-02.log`; scoped Biome exit 0, `biome-final-02.log`; `bun run typecheck` exit 0, `typecheck-final-02.log`. Logs and per-edit intent are under `tmp/preview-pan-zoom/preview-pan-zoom-pdf-pane/`. Checks ran on the shared working tree.
+**Hashes**: Pre-edit hashes for all owned files are in `pre-hashes.txt`; final source hashes are in `post-source-hashes.txt`; final plan hash is in `post-hashes.txt`, all under the evidence directory.
+**Blockers**: None.

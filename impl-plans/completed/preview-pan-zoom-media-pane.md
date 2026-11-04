@@ -1,6 +1,6 @@
 # Preview Pan And Zoom: Video Pane Wiring Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: preview-pan-zoom-media-pane
 **Wave**: 2 (depends on preview-pan-zoom-module)
 **Design Reference**: design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures
@@ -125,11 +125,11 @@ Run in the foreground and record each exit code and log path under
 
 ## Completion Criteria
 
-- [ ] Video pans with right/middle drag and flings. Audio is untouched.
-- [ ] The smooth `Ctrl`/`Cmd` zoom is anchored with a re-measured origin.
+- [x] Video pans with right/middle drag and flings. Audio is untouched.
+- [x] The smooth `Ctrl`/`Cmd` zoom is anchored with a re-measured origin.
       Alt+wheel does not zoom.
-- [ ] `previewZoomDirectionFromWheel` is no longer imported here.
-- [ ] Owned tests, biome and typecheck pass. The progress log is updated.
+- [x] `previewZoomDirectionFromWheel` is no longer imported here.
+- [x] Owned tests, biome and typecheck pass. The progress log is updated.
 
 ## Progress Log
 
@@ -142,3 +142,9 @@ Run in the foreground and record each exit code and log path under
 - **Depends On**: preview-pan-zoom-module
 - **Next**: preview-pan-zoom-finalize
 - **Supersedes**: preview-right-drag-media-pane
+
+### Session: 2026-11-04 — implementation
+**Tasks Completed**: Video shared pan/fling and continuous anchored wheel zoom; scoped regression tests.
+**Evidence**: `tmp/preview-pan-zoom/preview-pan-zoom-media-pane/pre-hashes.txt` and `post-hashes.txt` contain pre/post SHA-256 hashes. Per-edit intentions are in the same directory.
+**Verification**: Scoped Node vitest exit 0 (22 tests), `vitest-final.log`; scoped Biome exit 0, `biome-final.log`; `bun run typecheck` exit 0, `typecheck-final.log`. These ran on the moving shared tree.
+**Blockers**: None. Formal reviews and plan archival are downstream.

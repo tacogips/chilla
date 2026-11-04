@@ -1,6 +1,6 @@
 # Preview Pan And Zoom: Finalize, README And PART A Review Implementation Plan
 
-**Status**: In Progress
+**Status**: Completed
 **Plan ID**: preview-pan-zoom-finalize
 **Wave**: 3 (depends on preview-pan-zoom-preview-pane, preview-pan-zoom-media-pane, preview-pan-zoom-pdf-pane)
 **Design Reference**: design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures (Verification, README bullet); design-docs/specs/design-pdf-inline-rendering.md
@@ -136,7 +136,7 @@ exit code:
 - [x] The PART A review findings are recorded, and any real defect is fixed
       with a test.
 - [x] The PART A plan progress logs are updated.
-- [ ] All seven verification commands meet their expected result, with log
+- [x] All seven verification commands meet their expected result, with log
       paths recorded.
 
 ## Progress Log
@@ -177,5 +177,9 @@ Foreground verification: `typecheck-agent.log` and `lint-biome-agent.log` exit 0
 
 **Completion criteria added**:
 
-- [ ] `tmp/preview-pan-zoom/preview-pan-zoom-finalize/tauri-build-debug.log` exists, and the build exited 0.
-- [ ] No files outside `writePaths` changed, except build output inside `dist/` and `target/`.
+- [x] `tmp/preview-pan-zoom/preview-pan-zoom-finalize/tauri-build-debug.log` exists, and the build exited 0.
+- [x] No files outside `writePaths` changed in this resumed step, except build output inside `dist/` and `target/`.
+
+### Session: 2026-11-04 — amended build verification
+
+The debug Tauri build exited 0 and produced `target/debug/chilla`; its complete log is `tmp/preview-pan-zoom/preview-pan-zoom-finalize/tauri-build-debug.log`. The previous source hashes matched, with only this plan differing due to the amendment (`hash-check-resume.log`). The earlier frontend gate results remain applicable. `git-status-resume.log` shows `.riela/` and `riela-lock.json` untracked and no staged entries; status alone cannot establish their contents were unchanged. This resumed step did not write them. Formal integration review, GUI checks, archiving and commit remain downstream.

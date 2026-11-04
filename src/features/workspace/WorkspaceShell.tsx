@@ -1015,7 +1015,9 @@ export function WorkspaceShell() {
         title: "Open files",
       });
       if (selection !== null && !isWorkspaceDisposed) {
-        await queueFileOpenWork(() => openSelectedFiles(selection));
+        await workspaceInitialized;
+        if (isWorkspaceDisposed) return;
+        await openSelectedFiles(selection);
       }
     } catch (error: unknown) {
       if (!isWorkspaceDisposed)

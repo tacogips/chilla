@@ -1,6 +1,6 @@
 # Preview Pan And Zoom Shared Module Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: preview-pan-zoom-module
 **Wave**: 1 (no dependencies)
 **Design Reference**: design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures
@@ -310,13 +310,20 @@ Run in the foreground and record each exit code and log path under
 
 ## Completion Criteria
 
-- [ ] `previewPanZoom.ts` exports exactly the pinned contract
-- [ ] `previewPanZoom.vitest.ts` covers every listed case and passes
-- [ ] `rightDragPan.ts` and `rightDragPan.vitest.ts` are deleted
-- [ ] Biome and the typecheck are clean for the owned files
-- [ ] The progress log is updated with hashes and command evidence
+- [x] `previewPanZoom.ts` exports exactly the pinned contract
+- [x] `previewPanZoom.vitest.ts` covers every listed case and passes
+- [x] `rightDragPan.ts` and `rightDragPan.vitest.ts` are deleted
+- [x] Biome and the typecheck are clean for the owned files
+- [x] The progress log is updated with hashes and command evidence
 
 ## Progress Log
+
+### Session: 2026-11-04 — implementation
+**Tasks Completed**: Shared module, gesture and helper tests, and obsolete helper removal.
+**Tasks In Progress**: Independent review and downstream pane wiring are owned by later workflow steps.
+**Blockers**: None.
+**Hashes**: Before: new module and test absent; `rightDragPan.ts` `f4de5662909ffb2cc1b4df8653bbdaf561d921df42beb260fb1c9ccc468ebeae`; its test `864fe71c559ff78c658b39175ebce52e1c5208fd84d6fa13aede3a16b6b42068`; this plan `e39cbe81f950c80133901dcd872f297bf19ccd8adc9554f46ee64e473eff38e5`. After: module `21e95615bc58bba416b0709babbccff71e0d77bdee76c2149742775bf0be632e`; test `c04269d7541a1a9aa4c8a651d141921cb0972d5a2ab61944bc0d2375d99a0c9f`; old files absent. The post-edit plan hash is recorded in `tmp/preview-pan-zoom/preview-pan-zoom-module/post-hashes.txt` to avoid self-reference.
+**Verification**: Logs under `tmp/preview-pan-zoom/preview-pan-zoom-module/`; `mise exec -- env PATH="$(mise where node)/bin:$PATH" bunx vitest run --config vitest.config.ts src/features/preview/previewPanZoom.vitest.ts` exit 0 (19 passed), `vitest-final.log`; `bunx biome check src/features/preview/previewPanZoom.ts src/features/preview/previewPanZoom.vitest.ts --diagnostic-level=warn` exit 0, `biome-final.log`; `bun run typecheck` exit 0, `typecheck-final.log`; `! grep -rn "rightDragPan" src` exit 0 (raw grep exit 1), `grep-final-inverted.log`.
 
 ### Session: 2026-11-04
 **Tasks Completed**: Plan created

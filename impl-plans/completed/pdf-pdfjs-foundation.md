@@ -1,6 +1,6 @@
 # PDF Inline Rendering: pdf.js Dependency, Worker, Resources and CSP Implementation Plan
 
-**Status**: In Progress
+**Status**: Completed
 **Design Reference**: `design-docs/specs/design-pdf-inline-rendering.md#dependency`, `#worker-contract`, `#runtime-resources-cmaps-standard-fonts-image-decoders`, `#byte-loading-and-csp`, `#security-options`
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04
@@ -347,3 +347,13 @@ Searches `eval-search.log` and `eval-option-search.log` found no `eval(` or `new
 **Verification**: On the shared moving tree, `bunx vitest run --config vitest.config.ts src/features/preview/pdfjs.vitest.ts` passed 5 tests, `bun run typecheck` passed, scoped tsc passed, and the plan's Biome check passed; complete logs are in `tmp/pdf-inline-rendering-20261104-01/pdf-pdfjs-foundation/repair-01/` as `vitest-final.log`, `typecheck-final.log`, `tsc-final.log`, and `biome-final.log`. The earlier cargo check and resource smoke evidence above remain applicable to unchanged CSP and plugin inputs. Pre-edit snapshots and intended hunks are under `repair-01/`, including `ts-agent/`.
 
 **Security note**: `isEvalSupported: false` is retained for the contract but is not read by pdf.js 5.7.284; unchanged CSP `script-src 'self'` excludes unsafe-eval. Formal reviews and serial integration verification remain downstream.
+
+
+### Session: 2026-11-04 — session-710 foundation re-verification
+**Tasks Completed**: Re-verified the existing foundation against the amended plan and accepted shared `PDFWorker({ port })` design; no source repairs were needed. Node version: v22.23.4.
+
+**Verification**: Evidence in `tmp/pdf-inline-rendering-20261104-02/pdf-pdfjs-foundation/`: `vitest.log` (exit 0, 5 tests), `biome.log` (exit 0), `pin.log` (exit 0), `trusted-final.log` (exit 0, no trustedDependencies), `lock.log` (exit 0, integrity unchanged), `csp-final.log` (exit 0, only the two asset origins added to connect-src), and `cargo.log` (exit 0). All checks ran in the foreground on the shared moving tree; final serial verification remains downstream. The complete commands are those in the amendment; Node-based commands used `mise exec -- env PATH="$(mise where node)/bin:$PATH"`. Pre-edit source hashes are in `pre-edit.sha`; this session changed only this plan. Formal reviews, integration verification, archiving and commit remain downstream.
+
+### Session: 2026-11-04 — preview pan and zoom finalization
+
+PART A review found no material defect. The earlier Alt+wheel behavior is superseded by the preview pan and zoom plans. Runtime evidence: `tmp/pdf-inline-rendering-20261104-02/pdf-shortcuts-finalize/runtime-observed/RUNTIME-EVIDENCE.md`. Current gate evidence is recorded under `tmp/preview-pan-zoom/preview-pan-zoom-finalize/`; see the finalize plan for outcomes and any outstanding checks. Formal integration review and archiving remain downstream.

@@ -45,6 +45,8 @@ describe("PreviewPane", () => {
   afterEach(() => {
     dispose?.();
     dispose = undefined;
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     const rootStyle = document.documentElement.style;
     rootStyle.removeProperty("--markdown-surface");
     rootStyle.removeProperty("--markdown-pre-bg");
@@ -638,16 +640,16 @@ describe("PreviewPane", () => {
     const zoomIn = new WheelEvent("wheel", {
       cancelable: true,
       ctrlKey: true,
-      deltaY: -1,
+      deltaY: -100,
     });
     preview.dispatchEvent(zoomIn);
     expect(zoomIn.defaultPrevented).toBe(true);
-    expect(previewZoomText()).toBe("110%");
+    expect(previewZoomText()).toBe("116%");
 
     const zoomOut = new WheelEvent("wheel", {
       cancelable: true,
       ctrlKey: true,
-      deltaY: 1,
+      deltaY: 100,
     });
     preview.dispatchEvent(zoomOut);
     expect(zoomOut.defaultPrevented).toBe(true);
@@ -659,6 +661,41 @@ describe("PreviewPane", () => {
     });
     preview.dispatchEvent(ordinaryWheel);
     expect(ordinaryWheel.defaultPrevented).toBe(false);
+    expect(previewZoomText()).toBe("100%");
+  });
+
+  it("ignores plain and Alt wheel, smoothly zooms with Ctrl or Meta, and clamps", () => {
+    renderPreview();
+    const preview = previewBodyWithPointerCapture();
+    const wheel = (options: WheelEventInit) => {
+      const event = new WheelEvent("wheel", { ...options, cancelable: true });
+      preview.dispatchEvent(event);
+      return event;
+    };
+    expect(wheel({ altKey: true, deltaY: -100 }).defaultPrevented).toBe(false);
+    expect(wheel({ deltaY: -100 }).defaultPrevented).toBe(false);
+    expect(previewZoomText()).toBe("100%");
+    expect(wheel({ ctrlKey: true, deltaY: -100 }).defaultPrevented).toBe(true);
+    expect(previewZoomText()).toBe("116%");
+    expect(wheel({ metaKey: true, deltaY: -100 }).defaultPrevented).toBe(true);
+    expect(previewZoomText()).toBe("135%");
+    expect(wheel({ ctrlKey: true, deltaY: 0 }).defaultPrevented).toBe(false);
+    wheel({ ctrlKey: true, deltaY: -10000 });
+    expect(previewZoomText()).toBe("300%");
+    wheel({ ctrlKey: true, deltaY: 10000 });
+    expect(previewZoomText()).toBe("50%");
+  });
+
+  it("ignores Ctrl wheel on a hidden pane", () => {
+    renderPreview(undefined, false, false);
+    const preview = previewBodyWithPointerCapture();
+    const event = new WheelEvent("wheel", {
+      ctrlKey: true,
+      cancelable: true,
+      deltaY: -100,
+    });
+    preview.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
     expect(previewZoomText()).toBe("100%");
   });
 
@@ -711,7 +748,7 @@ describe("PreviewPane", () => {
       throw new Error("missing preview body");
     }
 
-    for (let step = 0; step < 70; step += 1) {
+    for (let step = 0; step < 1500; step += 1) {
       preview.dispatchEvent(ctrlWheelUp());
     }
     expect(previewZoomText()).toBe("800%");
@@ -758,7 +795,7 @@ describe("PreviewPane", () => {
     expect(preview.scrollTop).toBe(80);
   });
 
-  it("ignores non-primary mouse buttons for direct-image drag panning", () => {
+  it("pans a direct image with the right button", () => {
     renderPreview('<img src="https://example.com/image.png" />', true);
     const preview = previewBodyWithPointerCapture();
     preview.scrollLeft = 100;
@@ -769,10 +806,202 @@ describe("PreviewPane", () => {
     const pointerMove = pointerEvent("pointermove", 8, 45, 55, 2);
     preview.dispatchEvent(pointerMove);
 
-    expect(pointerDown.defaultPrevented).toBe(false);
-    expect(pointerMove.defaultPrevented).toBe(false);
-    expect(preview.scrollLeft).toBe(100);
+    expect(pointerDown.defaultPrevented).toBe(true);
+    expect(pointerMove.defaultPrevented).toBe(true);
+    expect(preview.scrollLeft).toBe(75);
+    expect(preview.scrollTop).toBe(55);
+  });
+
+  it("pans rendered content with right and middle buttons and suppresses only moved right menus", () => {
+    renderPreview();
+    const preview = previewBodyWithPointerCapture();
+    preview.scrollTop = 100;
+    preview.dispatchEvent(pointerEvent("pointerdown", 1, 0, 0, 2));
+    preview.dispatchEvent(pointerEvent("pointermove", 1, 0, 10, 2));
+    preview.dispatchEvent(pointerEvent("pointerup", 1, 0, 10, 2));
+    expect(preview.scrollTop).toBe(90);
+    const menu = new MouseEvent("contextmenu", { cancelable: true });
+    preview.dispatchEvent(menu);
+    expect(menu.defaultPrevented).toBe(true);
+    preview.dispatchEvent(pointerEvent("pointerdown", 2, 0, 0, 2));
+    preview.dispatchEvent(pointerEvent("pointerup", 2, 0, 0, 2));
+    const plain = new MouseEvent("contextmenu", { cancelable: true });
+    preview.dispatchEvent(plain);
+    expect(plain.defaultPrevented).toBe(false);
+    preview.dispatchEvent(pointerEvent("pointerdown", 3, 0, 0, 1));
+    preview.dispatchEvent(pointerEvent("pointermove", 3, 0, 10, 1));
+    preview.dispatchEvent(pointerEvent("pointerup", 3, 0, 10, 1));
     expect(preview.scrollTop).toBe(80);
+    const middle = new MouseEvent("contextmenu", { cancelable: true });
+    preview.dispatchEvent(middle);
+    expect(middle.defaultPrevented).toBe(false);
+  });
+
+  it("ends a chorded right drag when the right button is released", () => {
+    renderPreview();
+    const preview = previewBodyWithPointerCapture();
+    preview.scrollTop = 100;
+    preview.dispatchEvent(pointerEvent("pointerdown", 1, 0, 0, 2, 2));
+    preview.dispatchEvent(pointerEvent("pointermove", 1, 0, 10, 2, 2));
+    preview.dispatchEvent(pointerEvent("pointermove", 1, 0, 20, 2, 3));
+    const released = pointerEvent("pointermove", 1, 0, 30, 2, 1);
+    preview.dispatchEvent(released);
+    expect(released.defaultPrevented).toBe(false);
+    expect(preview.scrollTop).toBe(80);
+    const menu = new MouseEvent("contextmenu", { cancelable: true });
+    preview.dispatchEvent(menu);
+    expect(menu.defaultPrevented).toBe(true);
+    preview.dispatchEvent(pointerEvent("pointerdown", 2, 0, 0, 2));
+    preview.dispatchEvent(pointerEvent("pointermove", 2, 0, 10, 2));
+    expect(preview.scrollTop).toBe(70);
+  });
+
+  it("does not pan a hidden pane", () => {
+    renderPreview(undefined, false, false);
+    const preview = previewBodyWithPointerCapture();
+    preview.dispatchEvent(pointerEvent("pointerdown", 1, 0, 0, 2));
+    preview.dispatchEvent(pointerEvent("pointermove", 1, 0, 10, 2));
+    expect(preview.scrollTop).toBe(0);
+  });
+
+  it("anchors source zoom and pans the inner pre exactly once", () => {
+    const root = document.getElementById("root");
+    if (!root) throw new Error("missing root");
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath={null}
+          fileName="a"
+          layout="source"
+          selectedAnchorId={null}
+          visible={true}
+          html={
+            '<section class="file-preview--text"><pre style="padding:8px">test</pre><footer style="font-size:12px">meta</footer></section>'
+          }
+        />
+      ),
+      root,
+    );
+    const preview = previewBodyWithPointerCapture();
+    const pre = root.querySelector("pre");
+    if (!pre) throw new Error("missing pre");
+    pre.scrollTop = 100;
+    pre.scrollLeft = 100;
+    preview.dispatchEvent(pointerEvent("pointerdown", 1, 0, 0, 2));
+    preview.dispatchEvent(pointerEvent("pointermove", 1, 10, 10, 2));
+    preview.dispatchEvent(pointerEvent("pointerup", 1, 10, 10, 2));
+    expect(pre.scrollTop).toBe(90);
+    expect(pre.scrollLeft).toBe(90);
+    expect(preview.scrollTop).toBe(0);
+    const event = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      deltaY: -100,
+      clientY: 200,
+    });
+    pre.dispatchEvent(event);
+    expect(previewZoomText()).toBe("116%");
+    expect(pre.scrollTop).toBeCloseTo(
+      8 + (90 + 200 - 8) * Math.exp(0.15) - 200,
+    );
+    expect(pre.nextElementSibling?.tagName).toBe("FOOTER");
+    expect(
+      getComputedStyle(pre.nextElementSibling as HTMLElement).fontSize,
+    ).toBe("12px");
+  });
+
+  it("anchors rendered zoom to the pointer", () => {
+    renderPreview();
+    const preview = previewBodyWithPointerCapture();
+    const surface = preview.querySelector<HTMLElement>(
+      ".preview__zoom-surface",
+    );
+    if (!surface) throw new Error("missing surface");
+    preview.scrollTop = 100;
+    preview.getBoundingClientRect = () => ({ left: 0, top: 0 }) as DOMRect;
+    surface.getBoundingClientRect = () => {
+      const scale = Number(
+        surface.style.getPropertyValue("--preview-zoom-scale"),
+      );
+      return {
+        left: 0,
+        top: 20 - preview.scrollTop,
+        width: 100 * scale,
+        height: 100 * scale,
+      } as DOMRect;
+    };
+    preview.dispatchEvent(
+      new WheelEvent("wheel", {
+        ctrlKey: true,
+        deltaY: -100,
+        clientY: 200,
+        cancelable: true,
+      }),
+    );
+    expect(preview.scrollTop).toBeCloseTo(
+      20 + (100 + 200 - 20) * Math.exp(0.15) - 200,
+    );
+  });
+
+  it("flings a left-dragged image and respects reduced motion", () => {
+    const f = previewFrames(false);
+    renderPreview("<img />", true);
+    const preview = previewBodyWithPointerCapture();
+    preview.scrollTop = 100;
+    preview.dispatchEvent(pointerEvent("pointerdown", 1, 0, 0, 0, 1, 0));
+    preview.dispatchEvent(pointerEvent("pointermove", 1, 0, 20, 0, 1, 40));
+    preview.dispatchEvent(pointerEvent("pointerup", 1, 0, 20, 0, 0, 40));
+    expect(f.queue.size).toBe(1);
+    f.next(16);
+    expect(preview.scrollTop).toBeLessThan(80);
+    for (let t = 32; f.queue.size && t < 5000; t += 16) f.next(t);
+    expect(f.queue.size).toBe(0);
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    preview.dispatchEvent(pointerEvent("pointerdown", 2, 0, 0, 0, 1, 0));
+    preview.dispatchEvent(pointerEvent("pointermove", 2, 0, 20, 0, 1, 40));
+    preview.dispatchEvent(pointerEvent("pointerup", 2, 0, 20, 0, 0, 40));
+    expect(f.queue.size).toBe(0);
+  });
+
+  it("stops a source fling when its HTML replaces the pre", () => {
+    const f = previewFrames(false);
+    const root = document.getElementById("root");
+    if (!root) throw new Error("missing root");
+    const [html, setHtml] = createSignal(
+      '<section class="file-preview--text"><pre>old</pre></section>',
+    );
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath={null}
+          fileName="a"
+          layout="source"
+          selectedAnchorId={null}
+          visible={true}
+          html={html()}
+        />
+      ),
+      root,
+    );
+    const preview = previewBodyWithPointerCapture();
+    const old = root.querySelector("pre");
+    if (!old) throw new Error("missing pre");
+    old.scrollTop = 100;
+    preview.dispatchEvent(pointerEvent("pointerdown", 1, 0, 0, 2, 2, 0));
+    preview.dispatchEvent(pointerEvent("pointermove", 1, 0, 20, 2, 2, 40));
+    preview.dispatchEvent(pointerEvent("pointerup", 1, 0, 20, 2, 0, 40));
+    expect(f.queue.size).toBe(1);
+    const queued = [...f.queue.values()][0];
+    setHtml('<section class="file-preview--text"><pre>new</pre></section>');
+    const replacement = root.querySelector("pre");
+    expect(replacement).not.toBe(old);
+    expect(f.queue.size).toBe(0);
+    expect(old.scrollTop).toBe(80);
+    expect(replacement?.scrollTop).toBe(0);
+    expect(queued).toBeDefined();
   });
 
   it("ends image dragging on cancel and lost pointer capture", () => {
@@ -796,6 +1025,7 @@ describe("PreviewPane", () => {
 function renderPreview(
   html = "<p>Preview content</p>",
   dragPanEnabled = false,
+  visible = true,
 ): void {
   const root = document.getElementById("root");
 
@@ -812,7 +1042,7 @@ function renderPreview(
         dragPanEnabled={dragPanEnabled}
         html={html}
         selectedAnchorId={null}
-        visible={true}
+        visible={visible}
       />
     ),
     root,
@@ -825,10 +1055,14 @@ function pointerEvent(
   clientX: number,
   clientY: number,
   button = 0,
+  buttons = type === "pointerup" ? 0 : button === 2 ? 2 : button === 1 ? 4 : 1,
+  timeStamp = 0,
 ): Event {
   const event = new Event(type, { bubbles: true, cancelable: true });
   Object.defineProperties(event, {
     button: { value: button },
+    buttons: { value: buttons },
+    timeStamp: { value: timeStamp },
     clientX: { value: clientX },
     clientY: { value: clientY },
     isPrimary: { value: true },
@@ -903,4 +1137,27 @@ async function waitForElement<T extends Element>(
   }
 
   return element;
+}
+
+function previewFrames(reduced: boolean) {
+  const queue = new Map<number, FrameRequestCallback>();
+  let id = 0;
+  vi.stubGlobal("matchMedia", () => ({ matches: reduced }));
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    queue.set(++id, callback);
+    return id;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (handle: number) =>
+    queue.delete(handle),
+  );
+  vi.spyOn(performance, "now").mockReturnValue(0);
+  return {
+    queue,
+    next(time: number) {
+      const first = queue.entries().next().value;
+      if (!first) throw new Error("missing frame");
+      queue.delete(first[0]);
+      first[1](time);
+    },
+  };
 }

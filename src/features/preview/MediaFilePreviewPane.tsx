@@ -12,6 +12,14 @@ import { isEditableKeyboardTarget } from "../../lib/keyboard";
 import { isLinuxWebKitDesktop } from "../../lib/platform";
 import { KeymapContextProvider } from "../keymap/KeymapProvider";
 import { PreviewHeader } from "./PreviewHeader";
+import { nextPreviewZoom, RENDERED_PREVIEW_ZOOM_MAX } from "./PreviewPane";
+import {
+  anchorScrollAfterZoom,
+  applyWheelZoom,
+  attachPreviewPan,
+  measureAnchor,
+  type PreviewPanHandle,
+} from "./previewPanZoom";
 
 interface MediaFilePreviewPaneProps {
   readonly kind: "video" | "audio";
@@ -92,9 +100,12 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
     props.streamUrl !== undefined && props.streamUrl !== null && isVideo()
       ? "auto"
       : "metadata";
+  const [zoom, setZoom] = createSignal(100);
   const [playbackFailed, setPlaybackFailed] = createSignal(false);
   const [showPlayOverlay, setShowPlayOverlay] = createSignal(true);
   const [mediaSrc, setMediaSrc] = createSignal(resolvedMediaSrc());
+  let bodyRef: HTMLDivElement | undefined;
+  let panHandle: PreviewPanHandle | undefined;
   let playButtonElement: HTMLButtonElement | undefined;
   let mediaElement: HTMLMediaElement | undefined;
   let loadGeneration = 0;
@@ -141,6 +152,7 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
     setPlaybackFailed(false);
     setShowPlayOverlay(true);
     setMediaSrc(resolvedMediaSrc());
+    panHandle?.stopFling();
 
     onCleanup(() => {
       loadGeneration += 1;
@@ -192,6 +204,12 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
   };
 
   onMount(() => {
+    const isActive = () =>
+      isVideo() &&
+      bodyRef !== undefined &&
+      bodyRef.closest(".pane--hidden, [hidden], [aria-hidden='true']") === null;
+    if (bodyRef !== undefined)
+      panHandle = attachPreviewPan(bodyRef, { isActive });
     const handleKeyDown = (event: KeyboardEvent) => {
       const media = mediaElement;
       if (
@@ -257,10 +275,62 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
       }
     };
 
+    const handleZoomKeyDown = (event: KeyboardEvent) => {
+      if (
+        !isVideo() ||
+        event.defaultPrevented ||
+        event.repeat ||
+        event.isComposing ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        bodyRef?.closest(".pane--hidden, [hidden], [aria-hidden='true']") !==
+          null ||
+        document.querySelector(".shortcuts-help-layer") !== null ||
+        event
+          .composedPath()
+          .some(
+            (target) =>
+              (target instanceof Element &&
+                target.closest(
+                  '[role="dialog"], .workspace-notification, .pr-diff-retry',
+                ) !== null) ||
+              isEditableKeyboardTarget(target ?? null),
+          ) ||
+        (event.key !== "+" && event.key !== "-")
+      )
+        return;
+      event.preventDefault();
+      setZoom((current) =>
+        nextPreviewZoom(
+          current,
+          event.key === "+" ? "in" : "out",
+          RENDERED_PREVIEW_ZOOM_MAX,
+        ),
+      );
+    };
+    const handleZoomWheel = (event: WheelEvent) => {
+      const body = bodyRef;
+      if (body === undefined || !isActive()) return;
+      const old = zoom();
+      const next = applyWheelZoom(event, old, RENDERED_PREVIEW_ZOOM_MAX);
+      if (next === null) return;
+      const anchor =
+        body.querySelector<HTMLElement>(".preview-media--video") ?? body;
+      const before = measureAnchor(body, anchor);
+      setZoom(next);
+      const after = measureAnchor(body, anchor);
+      anchorScrollAfterZoom(body, event, before, after, next / old);
+    };
     window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keydown", handleZoomKeyDown);
+    bodyRef?.addEventListener("wheel", handleZoomWheel, { passive: false });
 
     onCleanup(() => {
+      panHandle?.detach();
       window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("keydown", handleZoomKeyDown);
+      bodyRef?.removeEventListener("wheel", handleZoomWheel);
     });
   });
 
@@ -268,12 +338,26 @@ export function MediaFilePreviewPane(props: MediaFilePreviewPaneProps) {
     <section class="pane">
       <PreviewHeader fileName={props.fileName}>
         <span>{isVideo() ? "Video" : "Audio"}</span>
+        <Show when={isVideo()}>
+          <span class="preview__zoom" aria-live="polite">
+            {Math.round(zoom())}%
+          </span>
+        </Show>
       </PreviewHeader>
       <div
+        ref={bodyRef}
         class={`pane__body preview ${isVideo() ? "preview--embedded-video" : "preview--embedded-audio"}${isLinuxVideoLayout ? " preview--video-external-linux" : ""}`}
       >
         <figure
           class={`preview-media ${isVideo() ? "preview-media--video" : "preview-media--audio"}`}
+          style={
+            isVideo()
+              ? {
+                  "--preview-media-zoom-scale": String(zoom() / 100),
+                  zoom: "var(--preview-media-zoom-scale)",
+                }
+              : {}
+          }
         >
           <Show when={isVideo() && showPlayOverlay() && !playbackFailed()}>
             <div class="preview-video__overlay">

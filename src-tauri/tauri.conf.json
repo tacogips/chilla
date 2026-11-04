@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' asset: http://asset.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' chilla-media: http://chilla-media.localhost asset: http://asset.localhost data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; frame-src 'self' asset: http://asset.localhost",
+      "csp": "default-src 'self' asset: http://asset.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' chilla-media: http://chilla-media.localhost asset: http://asset.localhost data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost; frame-src 'self' asset: http://asset.localhost",
       "assetProtocol": {
         "enable": true,
         "scope": ["**"]

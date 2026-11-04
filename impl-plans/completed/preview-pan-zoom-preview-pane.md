@@ -1,6 +1,6 @@
 # Preview Pan And Zoom: PreviewPane Wiring Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: preview-pan-zoom-preview-pane
 **Wave**: 2 (depends on preview-pan-zoom-module)
 **Design Reference**: design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures
@@ -196,21 +196,27 @@ Run in the foreground and record each exit code and log path under
 
 ## Completion Criteria
 
-- [ ] `attachPreviewPan` and the shared wheel zoom are wired. The old
+- [x] `attachPreviewPan` and the shared wheel zoom are wired. The old
       `dragState` code is removed.
-- [ ] The source scroll owner is the inner `pre`, and the source tests prove
+- [x] The source scroll owner is the inner `pre`, and the source tests prove
       it.
-- [ ] Alt+wheel does not zoom. `Ctrl`/`Meta` zoom smoothly and stay anchored.
+- [x] Alt+wheel does not zoom. `Ctrl`/`Meta` zoom smoothly and stay anchored.
       The clamps hold.
-- [ ] `previewZoomDirectionFromWheel` still exists but is unused in
+- [x] `previewZoomDirectionFromWheel` still exists but is unused in
       `PreviewPane`.
-- [ ] Owned tests, biome and typecheck pass. The progress log is updated.
+- [x] Owned tests, biome and typecheck pass. The progress log is updated.
 
 ## Progress Log
 
 ### Session: 2026-11-04
 **Tasks Completed**: Plan created
 **Blockers**: None
+
+### Session: 2026-11-04 — implementation
+**Tasks Completed**: Shared pan and anchored wheel zoom wiring, source scroll-owner resolution, document-change fling cancellation, and owned gesture tests. Formal review and plan archival remain downstream.
+**Verification**: `mise exec -- env PATH="$(mise where node)/bin:$PATH" bunx vitest run --config vitest.config.ts src/features/preview/PreviewPane.vitest.tsx` exit 0 (33 passed); `bunx biome check src/features/preview/PreviewPane.tsx src/features/preview/PreviewPane.vitest.tsx --diagnostic-level=warn` exit 0; `bun run typecheck` exit 0. Complete logs: `tmp/preview-pan-zoom/preview-pan-zoom-preview-pane/{vitest-final,biome-final,typecheck-final}.log`. These checks ran on the shared working tree.
+**SHA-256**: Pre-edit `PreviewPane.tsx` 58ac063f0a8a279fbef10ed51c91c5b8391f4fc4e247240cabc839193ce0ce81, `PreviewPane.vitest.tsx` 58cdddd1326d3ab881fc1fb257a85d342f189df197b915623468d15821a12fd5; post-edit respectively 0369deb1aa350478c229c8745fcac90fd886d2e152866ea3b543c4a655a340f8 and 2d03fc4c7dddd72baa277e93cfc6c9b559f48fb219687caf192e338256989507. Full records and per-edit intentions are in `tmp/preview-pan-zoom/preview-pan-zoom-preview-pane/`.
+**Blockers**: None.
 
 ## Related Plans
 

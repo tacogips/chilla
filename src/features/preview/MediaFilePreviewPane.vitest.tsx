@@ -53,6 +53,260 @@ describe("MediaFilePreviewPane", () => {
     macDesktopWebView = false;
   });
 
+  it("zooms video with keys and modifier wheel, while preserving audio and hidden panes", () => {
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing test root");
+    const [kind, setKind] = createSignal<"video" | "audio">("video");
+    dispose = render(
+      () => (
+        <MediaFilePreviewPane
+          kind={kind()}
+          path="/tmp/demo.mp4"
+          fileName="demo.mp4"
+          autoplayRequestId={0}
+        />
+      ),
+      root,
+    );
+    const body = root.querySelector<HTMLElement>(".pane__body");
+    const figure = root.querySelector<HTMLElement>("figure");
+    const video = root.querySelector("video");
+    if (!body || !figure || !video) throw new Error("missing video preview");
+    const key = (target: EventTarget, value: string) => {
+      const event = new KeyboardEvent("keydown", {
+        key: value,
+        bubbles: true,
+        cancelable: true,
+      });
+      target.dispatchEvent(event);
+      return event;
+    };
+    const wheel = (options: WheelEventInit) => {
+      const event = new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        ...options,
+      });
+      body.dispatchEvent(event);
+      return event;
+    };
+    expect(key(video, "+").defaultPrevented).toBe(true);
+    expect(root.querySelector(".preview__zoom")?.textContent).toBe("110%");
+    expect(figure.style.getPropertyValue("--preview-media-zoom-scale")).toBe(
+      "1.1",
+    );
+    expect(key(video, "-").defaultPrevented).toBe(true);
+    expect(root.querySelector(".preview__zoom")?.textContent).toBe("100%");
+    expect(wheel({ altKey: true, deltaY: -100 }).defaultPrevented).toBe(false);
+    expect(root.querySelector(".preview__zoom")?.textContent).toBe("100%");
+    expect(wheel({ ctrlKey: true, deltaY: -100 }).defaultPrevented).toBe(true);
+    expect(root.querySelector(".preview__zoom")?.textContent).toBe("116%");
+    expect(wheel({ metaKey: true, deltaY: 100 }).defaultPrevented).toBe(true);
+    expect(root.querySelector(".preview__zoom")?.textContent).toBe("100%");
+    wheel({ ctrlKey: true, deltaY: -10000 });
+    expect(root.querySelector(".preview__zoom")?.textContent).toBe("300%");
+    wheel({ ctrlKey: true, deltaY: 10000 });
+    expect(root.querySelector(".preview__zoom")?.textContent).toBe("50%");
+    expect(wheel({ deltaY: -1 }).defaultPrevented).toBe(false);
+    const input = document.createElement("input");
+    root.append(input);
+    expect(key(input, "+").defaultPrevented).toBe(false);
+    for (let i = 0; i < 30; i++) key(video, "+");
+    expect(root.querySelector(".preview__zoom")?.textContent).toBe("300%");
+    root.querySelector(".pane")?.classList.add("pane--hidden");
+    expect(wheel({ ctrlKey: true, deltaY: 1 }).defaultPrevented).toBe(false);
+    root.querySelector(".pane")?.classList.remove("pane--hidden");
+    setKind("audio");
+    expect(root.querySelector(".preview__zoom")).toBeNull();
+    expect(key(window, "+").defaultPrevented).toBe(false);
+    expect(wheel({ ctrlKey: true, deltaY: -1 }).defaultPrevented).toBe(false);
+    expect(figure.style.getPropertyValue("--preview-media-zoom-scale")).toBe(
+      "",
+    );
+  });
+
+  it("pans video with right and middle buttons, but not hidden video or audio", () => {
+    const root = document.getElementById("root");
+    if (!root) throw new Error("missing root");
+    const [kind, setKind] = createSignal<"video" | "audio">("video");
+    dispose = render(
+      () => (
+        <MediaFilePreviewPane
+          kind={kind()}
+          path="/tmp/a"
+          fileName="a"
+          autoplayRequestId={0}
+        />
+      ),
+      root,
+    );
+    const body = root.querySelector<HTMLElement>(".pane__body");
+    if (!body) throw new Error("missing body");
+    body.setPointerCapture = vi.fn();
+    body.hasPointerCapture = vi.fn(() => false);
+    const pointer = (
+      type: string,
+      button: number,
+      buttons: number,
+      x: number,
+    ) => {
+      const event = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        button,
+        buttons,
+        clientX: x,
+      });
+      Object.defineProperty(event, "pointerId", { value: 1 });
+      body.dispatchEvent(event);
+    };
+    const menu = () => {
+      const e = new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+      });
+      body.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    body.scrollLeft = 100;
+    pointer("pointerdown", 2, 2, 0);
+    pointer("pointermove", 2, 2, 4);
+    expect(body.scrollLeft).toBe(100);
+    pointer("pointermove", 2, 2, 10);
+    pointer("pointerup", 2, 0, 10);
+    expect(body.scrollLeft).toBe(90);
+    expect(menu()).toBe(true);
+    pointer("pointerdown", 2, 2, 0);
+    pointer("pointerup", 2, 0, 0);
+    expect(menu()).toBe(false);
+    pointer("pointerdown", 1, 4, 0);
+    pointer("pointermove", 1, 4, 10);
+    pointer("pointerup", 1, 0, 10);
+    expect(body.scrollLeft).toBe(80);
+    expect(menu()).toBe(false);
+    vi.mocked(body.setPointerCapture).mockClear();
+    root.querySelector(".pane")?.classList.add("pane--hidden");
+    pointer("pointerdown", 2, 2, 0);
+    pointer("pointermove", 2, 2, 10);
+    root.querySelector(".pane")?.classList.remove("pane--hidden");
+    setKind("audio");
+    pointer("pointerdown", 2, 2, 0);
+    pointer("pointermove", 2, 2, 10);
+    expect(body.scrollLeft).toBe(80);
+    expect(body.setPointerCapture).not.toHaveBeenCalled();
+  });
+
+  it("remeasures a centered video origin after wheel zoom", () => {
+    const root = document.getElementById("root");
+    if (!root) throw new Error("missing root");
+    dispose = render(
+      () => (
+        <MediaFilePreviewPane
+          kind="video"
+          path="/tmp/a"
+          fileName="a"
+          autoplayRequestId={0}
+        />
+      ),
+      root,
+    );
+    const body = root.querySelector<HTMLElement>(".pane__body");
+    const figure = root.querySelector<HTMLElement>("figure");
+    if (!body || !figure) throw new Error("missing preview");
+    body.scrollLeft = 100;
+    let measurements = 0;
+    vi.spyOn(figure, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          left: ++measurements === 1 ? 100 : 50,
+          top: 0,
+          width: 0,
+          height: 0,
+        }) as DOMRect,
+    );
+    body.dispatchEvent(
+      new WheelEvent("wheel", {
+        ctrlKey: true,
+        deltaY: -100,
+        clientX: 150,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(measurements).toBe(2);
+    expect(body.scrollLeft).toBeCloseTo(
+      100 - 50 + (150 - 100) * (Math.exp(0.15) - 1),
+    );
+  });
+
+  it("flings video and cancels on source change or reduced motion", () => {
+    const root = document.getElementById("root");
+    if (!root) throw new Error("missing root");
+    const [src, setSrc] = createSignal("one");
+    let frame: FrameRequestCallback | undefined;
+    const raf = vi.fn((callback: FrameRequestCallback) => {
+      frame = callback;
+      return 1;
+    });
+    const cancel = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", raf);
+    vi.stubGlobal("cancelAnimationFrame", cancel);
+    const media = vi.fn(() => ({ matches: false }));
+    vi.stubGlobal("matchMedia", media);
+    dispose = render(
+      () => (
+        <MediaFilePreviewPane
+          kind="video"
+          path="/tmp/a"
+          streamUrl={src()}
+          fileName="a"
+          autoplayRequestId={0}
+        />
+      ),
+      root,
+    );
+    const body = root.querySelector<HTMLElement>(".pane__body");
+    if (!body) throw new Error("missing body");
+    body.setPointerCapture = vi.fn();
+    body.hasPointerCapture = vi.fn(() => false);
+    const pointer = (
+      type: string,
+      x: number,
+      buttons: number,
+      time: number,
+    ) => {
+      const event = new MouseEvent(type, {
+        button: 2,
+        buttons,
+        clientX: x,
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperties(event, {
+        pointerId: { value: 1 },
+        timeStamp: { value: time },
+      });
+      body.dispatchEvent(event);
+    };
+    const drag = () => {
+      pointer("pointerdown", 0, 2, 10);
+      pointer("pointermove", 20, 2, 20);
+      pointer("pointerup", 20, 0, 21);
+    };
+    body.scrollLeft = 100;
+    drag();
+    expect(raf).toHaveBeenCalledTimes(1);
+    const afterDrag = body.scrollLeft;
+    frame?.(performance.now() + 16);
+    expect(body.scrollLeft).toBeLessThan(afterDrag);
+    expect(raf).toHaveBeenCalledTimes(2);
+    setSrc("two");
+    expect(cancel).toHaveBeenCalledWith(1);
+    media.mockReturnValue({ matches: true });
+    drag();
+    expect(raf).toHaveBeenCalledTimes(2);
+  });
+
   it("refreshes asset fallback URLs while preserving stream URLs", () => {
     const root = document.getElementById("root");
     if (root === null) throw new Error("missing test root");

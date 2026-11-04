@@ -1,6 +1,6 @@
 # PDF Inline Rendering: Video Preview Zoom Implementation Plan
 
-**Status**: In Progress
+**Status**: Completed
 **Design Reference**: `design-docs/specs/design-pdf-inline-rendering.md#shared-zoom-input-contract`; `design-docs/user-qa/qa-pdf-inline-rendering.md` (default: video zooms, audio does not)
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04
@@ -178,3 +178,12 @@ only partly reviewed. Keep it. Do not revert it or reimplement it.
 **Tasks Completed**: Video-only keyboard and modifier-wheel zoom, focused tests, scoped verification.
 **Blockers**: None.
 **Notes**: The 19-test media suite, `bun run typecheck`, own-file TypeScript check, and scoped Biome check exited 0. Complete logs are in `tmp/pdf-inline-rendering-20261104-01/pdf-video-zoom/`. Source and test post-edit SHA-256 hashes are `ffb86858f15570e767e8f8c6747376d798301680ae0cffe22cf33db4f3bc8c2a` and `0897c69330686ee5a74986c04f8ead829cd83f06bbb4871a0e4e662c7af623f6`; pre-edit hashes and plan hashes are recorded in the evidence directory. Formal review and the debug launch are owned by downstream workflow steps.
+
+### Session: 2026-11-04 continuation
+**Tasks Completed**: Re-verified the existing video zoom implementation and tests; no source changes required.
+**Blockers**: None.
+**Notes**: On the shared moving tree, Node v22.23.4 was used. The focused Vitest command passed 19 tests (exit 0), scoped Biome and `bun run typecheck` each exited 0. Complete logs and pre-edit hashes are in `tmp/pdf-inline-rendering-20261104-02/pdf-video-zoom/`. The source and test hashes remain `ffb86858f15570e767e8f8c6747376d798301680ae0cffe22cf33db4f3bc8c2a` and `0897c69330686ee5a74986c04f8ead829cd83f06bbb4871a0e4e662c7af623f6`; the pre-edit plan hash is `875571979e94d97b7a341016b4929ccaaf9f70a2a9bd937501872787a035b733`. Post-edit hashes are recorded in `post-hashes.txt`. Formal reviews and integration verification remain downstream.
+
+### Session: 2026-11-04 — preview pan and zoom finalization
+
+PART A review found no material defect. The earlier Alt+wheel behavior is superseded by the preview pan and zoom plans. Runtime evidence: `tmp/pdf-inline-rendering-20261104-02/pdf-shortcuts-finalize/runtime-observed/RUNTIME-EVIDENCE.md`. Current gate evidence is recorded under `tmp/preview-pan-zoom/preview-pan-zoom-finalize/`; see the finalize plan for outcomes and any outstanding checks. Formal integration review and archiving remain downstream.

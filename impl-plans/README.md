@@ -67,6 +67,17 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| [Preview Pan/Zoom Shared Module](completed/preview-pan-zoom-module.md) | 2026-11-04 | [Shared preview pan and zoom gestures](../design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures) |
+| [Preview Pan/Zoom PreviewPane Wiring](completed/preview-pan-zoom-preview-pane.md) | 2026-11-04 | [Shared preview pan and zoom gestures](../design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures) |
+| [Preview Pan/Zoom Video Pane Wiring](completed/preview-pan-zoom-media-pane.md) | 2026-11-04 | [Shared preview pan and zoom gestures](../design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures) |
+| [Preview Pan/Zoom PDF Pane Wiring](completed/preview-pan-zoom-pdf-pane.md) | 2026-11-04 | [Shared preview pan and zoom gestures](../design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures) |
+| [Preview Pan/Zoom Finalize](completed/preview-pan-zoom-finalize.md) | 2026-11-04 | [Shared preview pan and zoom gestures](../design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures) |
+| [PDF pdf.js Foundation](completed/pdf-pdfjs-foundation.md) | 2026-11-04 | [PDF inline rendering](../design-docs/specs/design-pdf-inline-rendering.md) |
+| [PDF Zoom Wheel Contract](completed/pdf-zoom-wheel-contract.md) | 2026-11-04 | [PDF inline rendering](../design-docs/specs/design-pdf-inline-rendering.md#shared-zoom-input-contract) |
+| [PDF Canvas Pane](completed/pdf-canvas-pane.md) | 2026-11-04 | [PDF inline rendering](../design-docs/specs/design-pdf-inline-rendering.md#pdffilepreviewpane) |
+| [PDF and Video Zoom](completed/pdf-video-zoom.md) | 2026-11-04 | [PDF inline rendering](../design-docs/specs/design-pdf-inline-rendering.md#shared-zoom-input-contract) |
+| [PDF Shortcuts Finalize](completed/pdf-shortcuts-finalize.md) | 2026-11-04 | [PDF inline rendering](../design-docs/specs/design-pdf-inline-rendering.md#verification) |
+| [Workspace Picker Supersession](completed/workspace-picker-supersession.md) | 2026-11-04 | [macOS file open](../design-docs/specs/design-macos-file-open.md#interactive-picker-supersession) |
 | [macOS 0.3.5 Release](completed/macos-release-0.3.5.md) | 2026-10-01 | [macOS and Apple distribution](../design-docs/specs/design-macos-dmg-release.md) |
 | [Structured Data Formatting and Syntax](completed/structured-data-format-and-syntax.md) | 2026-10-01 | [Structured previews](../design-docs/specs/design-structured-data-formatting.md) |
 | [Internal Media Protocol](completed/media-protocol.md) | 2026-10-01 | [Socket-free media delivery and keyboard follow-up](../design-docs/specs/design-media-protocol.md) |

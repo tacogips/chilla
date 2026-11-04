@@ -1,6 +1,6 @@
 # PDF Inline Rendering: Canvas PDF Preview Pane Implementation Plan
 
-**Status**: In Progress
+**Status**: Completed
 **Design Reference**: `design-docs/specs/design-pdf-inline-rendering.md#pdffilepreviewpane`, `#shared-zoom-input-contract`, `#styling-srcappappcss`, `#data-flow`; `design-docs/specs/architecture.md#revision-aware-local-refresh`
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04
@@ -283,3 +283,12 @@ only partly reviewed. Keep it. Do not revert it or reimplement it.
 Final verification (all exit 0): `BUN_INSTALL_CACHE_DIR=/tmp/chilla-pdf-canvas-bun-cache TMPDIR=/tmp bunx vitest run --config vitest.config.ts src/features/preview/PdfFilePreviewPane.vitest.tsx` (5/5; `tmp/pdf-inline-rendering-20261104-01/pdf-canvas-pane/check-agent-final-vitest.log`); `BUN_INSTALL_CACHE_DIR=/tmp/chilla-pdf-canvas-bun-cache TMPDIR=/tmp bun run typecheck` (`check-agent-final-typecheck.log`); `! bunx tsc --noEmit 2>&1 | grep -E 'src/features/preview/PdfFilePreviewPane'` (`check-agent-final-scoped-tsc.log`); `BUN_INSTALL_CACHE_DIR=/tmp/chilla-pdf-canvas-bun-cache TMPDIR=/tmp bunx biome check src/features/preview/PdfFilePreviewPane.tsx src/features/preview/PdfFilePreviewPane.vitest.tsx src/app/App.css --diagnostic-level=warn` (`check-agent-final-biome.log`); `! grep -rn -e 'preview-pdf-frame' -e 'preview--embedded-pdf' src` (`check-agent-final-stale.log`). All abbreviated log paths are under `tmp/pdf-inline-rendering-20261104-01/pdf-canvas-pane/`.
 
 SHA-256 pre -> final: source `758ea2f137639859bf66affb9e037f61e6a87c3fbcef7f7ab6064b36a397c611` -> `d7a8d1b3288948b9ebc75c7ddd8c0200a522e0da7568de6602890bb0e2a27b1c`; tests `677da5bae18e1fc9fd42b0395e95dbcd3692898e08929ecc1167534be658ccfc` -> `45fc7bb225a61c494718710d5dbf310cfca1958f8c585c1640511df336555b8b`; CSS `cf4dd40b960b76005e802e97b888a5df7e7df24ff3b15bcfcc43385c755892aa` -> `8e909e96dd772186cdce07cc58c207a8c3ed1b1413791955789109aac183ef5a`. Plan pre-edit hash: `2c30afcec6da4ac477333850798de48ac869eef1cea2bc81acc686150c49673a`; post-edit hash is recorded in `tmp/pdf-inline-rendering-20261104-01/pdf-canvas-pane/plan-post.sha`. Per-edit snapshots and intentions are in the same evidence directory.
+
+### Session: 2026-11-04 — continuation verification
+**Tasks Completed**: Re-verified the existing canvas implementation and strengthened assertions for every page's zoom rerender, independent minus and editable-target behavior, and unchanged plain-wheel zoom. All listed test cases pass.
+**Blockers**: None. Formal reviews, integration verification, and plan archiving remain downstream.
+**Evidence**: Node v22.23.4; scoped Vitest 5/5, Biome, typecheck, and both absence checks exited 0. Complete logs and pre/post hashes are under `tmp/pdf-inline-rendering-20261104-02/pdf-canvas-pane/`. Source hashes: pane `d7a8d1b3288948b9ebc75c7ddd8c0200a522e0da7568de6602890bb0e2a27b1c`, tests `9b7fed3174e6070d01ac26d025260e08933cf48d82368466b8ddd13db7b88364`, CSS `8e909e96dd772186cdce07cc58c207a8c3ed1b1413791955789109aac183ef5a`. These checks ran on the shared working tree.
+
+### Session: 2026-11-04 — preview pan and zoom finalization
+
+PART A review found no material defect. The earlier Alt+wheel behavior is superseded by the preview pan and zoom plans. Runtime evidence: `tmp/pdf-inline-rendering-20261104-02/pdf-shortcuts-finalize/runtime-observed/RUNTIME-EVIDENCE.md`. Current gate evidence is recorded under `tmp/preview-pan-zoom/preview-pan-zoom-finalize/`; see the finalize plan for outcomes and any outstanding checks. Formal integration review and archiving remain downstream.
