@@ -1,6 +1,6 @@
 # PDF Inline Rendering: Workspace Shortcut Coverage, Docs and Final Verification Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Design Reference**: `design-docs/specs/design-pdf-inline-rendering.md#goals`, `#documentation`, `#verification`, `#worker-contract`
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04
@@ -157,12 +157,12 @@ clean checkout only if needed and without git mutations in the working tree.
 
 ## Done criteria
 
-- [ ] The new PDF-open shortcut tests exist and pass.
-- [ ] README has the three edited bullets and no other changes
+- [x] The new PDF-open shortcut tests exist and pass.
+- [x] README has the three edited bullets and no other changes
   (`git diff --stat README.md` shows a small diff).
 - [ ] Steps 1-7 exit 0, with complete logs recorded.
-- [ ] The step 8 evidence is recorded, or each gap is explicitly listed.
-- [ ] The progress log is updated.
+- [x] The step 8 evidence is recorded, or each gap is explicitly listed.
+- [x] The progress log is updated.
 
 ## Concurrency and drift rules
 
@@ -171,6 +171,112 @@ clean checkout only if needed and without git mutations in the working tree.
 - On drift, stop and log it. No git operations. Commits happen in workflow
   finalization.
 
+## Amendment 2026-11-04 (blocked-wave-scope-or-contract, round 1)
+
+**Blocker addressed**: `bun run test:dom` exited 1. This amendment touches
+`src/features/workspace/WorkspaceShell.tsx` and
+`src/features/workspace/WorkspaceShell.vitest.tsx`. Evidence is
+`tmp/pdf-inline-rendering-20261104-01/pdf-shortcuts-finalize/test-dom.log` and
+`check-agent-workspace-node22.log`.
+
+**Analysis (author)**
+
+- The 9 failures in the `numeric view shortcuts` tests come from the runtime,
+  not from source:
+  - The worker ran Node 26, which logs
+    `ExperimentalWarning: localStorage is not available because
+    --localstorage-file was not provided`.
+  - `mise.toml:20` pins `node = "22.23.4"`.
+  - Under Node 22 these 9 tests pass (`check-agent-workspace-node22.log`
+    reports 61 passed and 1 failed).
+- One failure remains: `ignores a stale parent directory rejection after a
+  newer picker workspace opens` (`WorkspaceShell.vitest.tsx` about line 2727).
+  - It exercises the file-picker and open queue in `WorkspaceShell.tsx` and
+    involves no PDF.
+  - No plan in this run modified `WorkspaceShell.tsx`. The diff against
+    `cc1d40b` shows no change there.
+  - It failed at 1027ms, just past the default `waitFor` timeout of 1000ms.
+  - So it is either an existing baseline failure or a timing flake.
+    Implementation evidence must decide which. It must not be assumed.
+
+**Decisions**
+
+1. *Runtime*: every Node-based Bun/vitest gate in this plan runs under the
+   repository-pinned Node through mise, as `mise exec -- bun run test:dom`.
+   The same applies to `bun run typecheck`, `bun run test` and
+   `bun run lint:biome` when any of them invokes node. Record
+   `mise exec -- node --version` (expect `v22.23.4`) in the log. Results
+   produced under Node 26 are not valid gate evidence.
+2. *Source-matched baseline comparison (no new repository write path)*:
+   the baseline runs entirely outside the repository, with production and test
+   source both taken from `cc1d40b`. Only read-only git is used.
+   - (a) Run `BASE=$(mktemp -d)`. The directory must be outside the repo.
+   - (b) Run `git archive cc1d40b1d13cbba45c1acf25242f4289f0ca61a5 | tar -x -C "$BASE"`,
+     then `ln -s "$PWD/node_modules" "$BASE/node_modules"`. Record `$BASE`,
+     `git rev-parse cc1d40b1d13cbba45c1acf25242f4289f0ca61a5` and both exit
+     statuses. The extra pdfjs-dist package in node_modules is harmless to the
+     baseline code. Do not run any other git command: no worktree, stash,
+     checkout or reset.
+   - (c) Baseline runs, three times:
+     `(cd "$BASE" && mise exec node@22.23.4 -- bunx vitest run --config vitest.config.ts src/features/workspace/WorkspaceShell.vitest.tsx -t "ignores a stale parent directory rejection")`.
+     Pin Node explicitly so the run does not depend on mise trusting the
+     exported `mise.toml`. Log to
+     `tmp/pdf-inline-rendering-20261104-01/pdf-shortcuts-finalize/baseline-stale-picker-base-{1,2,3}.log`.
+   - (d) Current runs, three times, from the repository root:
+     `mise exec -- bunx vitest run --config vitest.config.ts src/features/workspace/WorkspaceShell.vitest.tsx -t "ignores a stale parent directory rejection"`.
+     Log to `baseline-stale-picker-current-{1,2,3}.log` in the same directory.
+   - (e) If any baseline run cannot execute the test (module resolution
+     through the symlink, a config error, or zero tests collected), record the
+     exact error. The disposition is then **undetermined**, which is a
+     blocker. Never classify it as baseline.
+   - (f) Clean up with `rm -rf "$BASE"`, then `test ! -e "$BASE"`, and record
+     both exit statuses. No file is added to the repository tree.
+3. *Disposition rules*: let b be the number of baseline failures (0-3) and c
+   the number of current failures (0-3). A failure counts only if it is the
+   assertion `expected ... to contain 'new preview'` on this test. Apply the
+   rules in order. Exactly one applies.
+   - **(A) c > b: introduced in this run.**
+     - First apply the targeted fix in `WorkspaceShell.vitest.tsx` only. Keep a
+       handle to the `getContext` spy and call `mockRestore()` on it, instead of
+       the nested `vi.restoreAllMocks()`. Keep the `close` mock semantics
+       unchanged for the other tests.
+     - Re-run (d) three times. If c becomes 0, run the full
+       `mise exec -- bun run test:dom`, which must exit 0.
+     - If c is still > 0 after the fix, record the result as a blocker. Name
+       the accepted wave-1/2 production diff as the suspect cause, with all
+       logs, and route it to integration review. Do not edit production files.
+   - **(B) b >= 1 and b >= c: baseline.** The failure reproduces with
+     production and test source at `cc1d40b`.
+     - Do not edit, skip or retry-wrap the test, and do not touch
+       `WorkspaceShell.tsx`.
+     - Run the full `mise exec -- bun run test:dom` once. If the stale-picker
+       test is the sole failure, record a `baselineReviewPending` candidate
+       with the test name, assertion text, b, c and all logs.
+     - If there is any other failure, that is a blocker.
+   - **(C) b = 0 and c = 0: does not reproduce in isolation.**
+     - Run the full `mise exec -- bun run test:dom`. If it exits 0, the gate
+       passes.
+     - If it fails only on this test, re-run the full gate up to 2 more times.
+       Any run that exits 0 passes the gate.
+     - Otherwise record a timing flake with all logs and route it as a
+       blocker. Do not edit the test.
+   - Under every disposition, any full-gate failure other than this test is a
+     blocker.
+4. *Out of scope*: `src/features/workspace/WorkspaceShell.tsx` stays
+   unauthorized. If the evidence points to a production defect there, record it
+   as a pre-existing residual risk with evidence. Do not change it.
+5. *Runtime gap*: the packaged launch (Final verification step 8) is still
+   required. Attempt it after the DOM gate disposition. If the visual or
+   inspector tools are unavailable, record an explicit gap per step 8. Do not
+   claim success.
+
+**Round-1 revision (step5 F2/F3)**: the in-tree baseline copy was replaced
+by an out-of-repo `git archive` export, and the dispositions are now
+count-based and exhaustive.
+
+**Unchanged**: plan IDs, the DAG, other plans, the README edits, and Final
+verification steps 1-7 other than the Node runtime pin.
+
 ## Progress Log
 
 ### Session: 2026-11-04
@@ -178,3 +284,10 @@ clean checkout only if needed and without git mutations in the working tree.
 **Tasks In Progress**: None
 **Blockers**: None
 **Notes**: Wave 3. Runs after `pdf-canvas-pane` and `pdf-video-zoom` join.
+
+### Session: 2026-11-04 — implementation
+**Tasks Completed**: PDF-open shortcut tests and README changes. The focused PDF tests passed 2/2 under Node 22 (`tmp/pdf-inline-rendering-20261104-01/pdf-shortcuts-finalize/check-agent-pdf-node22.log`).
+**Checks**: `bun run typecheck`, `bun run test` (67 passed), `bun run lint:biome`, `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml`, `bun run build`, and `CARGO_TERM_QUIET=true bun run tauri build --debug --no-bundle` exited 0. Complete logs are in `tmp/pdf-inline-rendering-20261104-01/pdf-shortcuts-finalize/` as `typecheck.log`, `test.log`, `lint.log`, `cargo-check.log`, `build-final.log`, and `tauri-build.log`. `assets.log` records 168 CMaps, 16 standard-font entries, the OpenJPEG fallback check and the worker asset (exit 0).
+**Blockers**: `bun run test:dom` exited 1 (447 passed, 10 failed; `test-dom.log`): Node 26 lacks localStorage and an existing stale-picker test fails. Under Node 22 the WorkspaceShell suite still fails that stale-picker test (61 passed, 1 failed; `check-agent-workspace-node22.log`); source-matched baseline comparison is unavailable. The apparent file-open queue cause is in `src/features/workspace/WorkspaceShell.tsx`, outside this plan's write scope. Resolve the failure or establish the required baseline before acceptance.
+**Runtime gap**: The three fixture PDFs were not generated, the debug executable was not launched, and rendered pixels, shortcut interaction, real worker, CSP and decoder console evidence remain unverified. The failed required DOM gate prevented completion; do not treat the build as runtime proof.
+**Hashes**: README before `16738c9e04780e7caa27e31117130f6785c495aa9c9ee279324531f1a7d04958`, after `36188dbf66305224a78e742888a230cac7200685b7d50bdb2b5d1caa2a2dbc03`; WorkspaceShell test before `e98fd29bfaf304e50e418dca6d36da15cd8552358473208d37b92af84d2993d4`, after `4aec80515eebbd8e41d670ba2062bfe50d973ce411fca8a320436d8ff4a11169`. Per-edit intent and intermediate hashes are in the same evidence directory. Formal review and finalization remain downstream.
