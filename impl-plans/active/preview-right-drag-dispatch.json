@@ -1,0 +1,197 @@
+{
+  "taskId": "preview-right-drag",
+  "workflowMode": "issue-resolution",
+  "issueReference": "local-request:opus-terra-session-713 (no GitHub issue URL/number supplied)",
+  "implementationBranch": "main",
+  "baseBranch": "main",
+  "remote": "origin",
+  "gitPush": false,
+  "originalHead": "909b106b167f4ae0d16074e9925a475660e2094b",
+  "evidenceRoot": "tmp/preview-right-drag",
+  "designDocPaths": [
+    "design-docs/specs/architecture.md",
+    "design-docs/user-qa/qa-preview-right-drag-pan.md"
+  ],
+  "reviewContext": {
+    "issueReference": "local-request:opus-terra-session-713 (no GitHub issue URL/number supplied)",
+    "userProblem": "There are two parts. PART A: the working tree holds uncommitted, already-verified work from sessions 708 and 710 that needs a review, real-defect fixes only, and a commit. That work is PDF inline pdf.js canvas rendering, Chilla shortcuts working with a PDF open, Alt/Ctrl+wheel zoom on every preview, and the picker supersession fix. PART B: right-button drag should pan every preview type like dragging a page on a touch screen. The content follows the pointer, and a plain right-click still opens the context menu.",
+    "requiredOutcomes": [
+      "Right-button drag pans Markdown/rendered, source, image (PreviewPane), video (MediaFilePreviewPane) and PDF (PdfFilePreviewPane) previews. scrollLeft/scrollTop move opposite to the pointer delta.",
+      "contextmenu is suppressed only when the right gesture moved more than 4px. A plain right-click is not prevented.",
+      "Hidden panes do not pan. Left-click, text selection, the existing left-button dragPanEnabled image pan and wheel/keyboard zoom are unchanged.",
+      "Vitest covers every preview type, contextmenu in both directions, chord release, and the button-2 to button-1 test edit.",
+      "README Keyboard Shortcuts gains one right-drag line.",
+      "PART A is reviewed with real-defect fixes only. Existing PDF shortcut, wheel zoom and picker tests still pass.",
+      "bun run typecheck, bun run lint:biome, bun run test and test:dom exit 0 with zero failures. The debug tauri build succeeds.",
+      "Everything is committed locally after an accepted integration review."
+    ],
+    "nonGoals": [
+      "No rewrite, revert or redesign of PART A work.",
+      "No platform-specific press-time contextmenu suppression (user QA Options B and C).",
+      "No middle-button or touch panning, no inertia, no keymap entry, setting, Tauri command or Rust change.",
+      "No git push."
+    ],
+    "constraints": [
+      "Do not modify unrelated files. Do not touch .riela/ or riela-lock.json.",
+      "Run Node-based vitest via: mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test:dom",
+      "Do not launch the GUI app in the foreground. PART B GUI checks are delegated to the supervising session (user-accepted gap).",
+      "PART A step-8 GUI evidence is tmp/pdf-inline-rendering-20261104-02/pdf-shortcuts-finalize/runtime-observed/RUNTIME-EVIDENCE.md. JPX fixture in GUI, Web Inspector console and video wheel at runtime are user-accepted gaps covered by vitest.",
+      "Implementers run no git mutations (no checkout/stash/restore). Commits have no AI attribution, no Co-Authored-By and no emojis.",
+      "Workers edit only their writePaths and their own plan progress log. Moving plans to impl-plans/completed/ is handled by the plan-archive node."
+    ],
+    "designDecisionsAndRationale": [
+      {
+        "decision": "One shared helper, src/features/preview/rightDragPan.ts, exports attachRightDragPan(target, isActive): () => void, RIGHT_DRAG_PAN_THRESHOLD_PX = 4 and RIGHT_DRAG_PANNING_CLASS = \"preview--right-drag-panning\".",
+        "rationale": "This keeps the threshold, the contextmenu rule and the cursor class identical across panes, as previewZoomDirectionFromWheel does for wheel zoom (architecture.md#shared-preview-right-drag-pan)."
+      },
+      {
+        "decision": "Do not call preventDefault on pointerdown. Suppress contextmenu only for an active or just-ended pan. The just-ended flag is consumed by contextmenu and cleared on every pointerdown.",
+        "rationale": "A plain right-click keeps the native menu."
+      },
+      {
+        "decision": "pointermove checks (buttons & 2) first and ends the gesture before scrolling.",
+        "rationale": "A mouse shares one pointer id across buttons. Releasing right while left is held produces a chorded move, not a pointerup."
+      },
+      {
+        "decision": "isActive is read at event time: props.visible in PreviewPane, isVideo() plus the hidden-ancestor check in the video pane, and !hidden() in the PDF pane.",
+        "rationale": "Visibility and kind are reactive."
+      },
+      {
+        "decision": "Implement user QA Option A as written.",
+        "rationale": "The user accepted that macOS WKWebView and WebKitGTK press-time contextmenu may block the pan in the real app. That GUI check is delegated."
+      }
+    ],
+    "intentionalTradeoffs": [
+      "On macOS WebKit and WebKitGTK, contextmenu fires at press, so right-drag pan may not work in the real app (user-accepted).",
+      "The App.css panning class also sets user-select: none, but only while a pan is active.",
+      "Per-plan bun run typecheck may fail transiently from a sibling's in-progress wave-2 edits. The serial integration gates are authoritative."
+    ],
+    "supportedEdgeCases": [
+      "A move at or below the threshold (4px or less) does not scroll and does not suppress contextmenu.",
+      "Chord release (right released while left is held) ends the gesture. Later left-only moves are inert.",
+      "pointercancel, lostpointercapture and a different pointerId are handled. A setPointerCapture failure does not break the gesture.",
+      "Hidden panes and audio previews do not pan. A gesture that started while visible ends normally.",
+      "The detach function removes all listeners and the class."
+    ],
+    "outOfScopeEdgeCases": [
+      "Native video controls intercepting right-button events at runtime (GUI gap).",
+      "Real-app macOS/Linux contextmenu ordering (GUI gap delegated to the supervising session).",
+      "EPUB, CSV, raw Markdown editor, HTML iframe preview and diff views."
+    ],
+    "sourcePaths": [
+      "src/features/preview/rightDragPan.ts",
+      "src/features/preview/rightDragPan.vitest.ts",
+      "src/features/preview/PreviewPane.tsx",
+      "src/features/preview/PreviewPane.vitest.tsx",
+      "src/features/preview/MediaFilePreviewPane.tsx",
+      "src/features/preview/MediaFilePreviewPane.vitest.tsx",
+      "src/features/preview/PdfFilePreviewPane.tsx",
+      "src/features/preview/PdfFilePreviewPane.vitest.tsx",
+      "src/features/preview/pdfjs.ts",
+      "src/features/preview/pdfjs.vitest.ts",
+      "src/features/workspace/WorkspaceShell.tsx",
+      "src/features/workspace/WorkspaceShell.vitest.tsx",
+      "src/app/App.css",
+      "README.md",
+      "vite.config.ts",
+      "package.json",
+      "bun.lock",
+      "src-tauri/tauri.conf.json"
+    ]
+  },
+  "acceptedDependencies": [],
+  "plans": [
+    {
+      "planId": "preview-right-drag-helper",
+      "planPath": "impl-plans/active/preview-right-drag-helper.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/preview/rightDragPan.ts",
+        "src/features/preview/rightDragPan.vitest.ts",
+        "src/app/App.css",
+        "README.md",
+        "impl-plans/active/preview-right-drag-helper.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "rightDragPan.ts exports exactly attachRightDragPan(target, isActive): () => void, RIGHT_DRAG_PAN_THRESHOLD_PX = 4 and RIGHT_DRAG_PANNING_CLASS = \"preview--right-drag-panning\".",
+        "Every vitest case in the plan exists and passes: pan, threshold, contextmenu in both directions, flag consumption and clearing, chord release, inactive, left/middle buttons, cancel/lost capture, other pointerId and detach.",
+        "App.css gains the .preview--right-drag-panning rule and README gains the right-drag bullet. PART A hunks stay byte-identical.",
+        "typecheck and scoped biome exit 0. The progress log records commands, exit statuses and log paths."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test:dom src/features/preview/rightDragPan.vitest.ts",
+        "bun run typecheck",
+        "bunx biome check src/features/preview/rightDragPan.ts src/features/preview/rightDragPan.vitest.ts src/app/App.css README.md --diagnostic-level=warn"
+      ]
+    },
+    {
+      "planId": "preview-right-drag-preview-pane",
+      "planPath": "impl-plans/active/preview-right-drag-preview-pane.md",
+      "dependsOn": ["preview-right-drag-helper"],
+      "writePaths": [
+        "src/features/preview/PreviewPane.tsx",
+        "src/features/preview/PreviewPane.vitest.tsx",
+        "impl-plans/active/preview-right-drag-preview-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "PreviewPane attaches the helper to previewRef with () => props.visible and detaches it in onCleanup.",
+        "pointerEvent gains a buttons default. The non-primary image pan test uses button 1.",
+        "The rendered, source, image, contextmenu both-ways, hidden, left-button and chord-release cases pass. All existing tests pass.",
+        "Scoped commands exit 0 with logs recorded. The progress log is updated."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test:dom src/features/preview/PreviewPane.vitest.tsx",
+        "bun run typecheck",
+        "bunx biome check src/features/preview/PreviewPane.tsx src/features/preview/PreviewPane.vitest.tsx --diagnostic-level=warn"
+      ]
+    },
+    {
+      "planId": "preview-right-drag-media-pane",
+      "planPath": "impl-plans/active/preview-right-drag-media-pane.md",
+      "dependsOn": ["preview-right-drag-helper"],
+      "writePaths": [
+        "src/features/preview/MediaFilePreviewPane.tsx",
+        "src/features/preview/MediaFilePreviewPane.vitest.tsx",
+        "impl-plans/active/preview-right-drag-media-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "The helper is attached to bodyRef with isActive gated on isVideo() and the hidden-ancestor check, and detached on cleanup.",
+        "The video pan, contextmenu both-ways, hidden-pane and audio no-pan cases pass. All existing tests pass.",
+        "Scoped commands exit 0 with logs recorded. The progress log is updated."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test:dom src/features/preview/MediaFilePreviewPane.vitest.tsx",
+        "bun run typecheck",
+        "bunx biome check src/features/preview/MediaFilePreviewPane.tsx src/features/preview/MediaFilePreviewPane.vitest.tsx --diagnostic-level=warn"
+      ]
+    },
+    {
+      "planId": "preview-right-drag-pdf-pane",
+      "planPath": "impl-plans/active/preview-right-drag-pdf-pane.md",
+      "dependsOn": ["preview-right-drag-helper"],
+      "writePaths": [
+        "src/features/preview/PdfFilePreviewPane.tsx",
+        "src/features/preview/PdfFilePreviewPane.vitest.tsx",
+        "impl-plans/active/preview-right-drag-pdf-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "The helper is attached to the PDF body with () => !hidden() and detached on cleanup.",
+        "The PDF pan, contextmenu both-ways and hidden-pane cases pass. All existing PdfFilePreviewPane tests pass with the ./pdfjs mock.",
+        "Scoped commands exit 0 with logs recorded. The progress log is updated."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test:dom src/features/preview/PdfFilePreviewPane.vitest.tsx",
+        "bun run typecheck",
+        "bunx biome check src/features/preview/PdfFilePreviewPane.tsx src/features/preview/PdfFilePreviewPane.vitest.tsx --diagnostic-level=warn"
+      ]
+    }
+  ]
+}

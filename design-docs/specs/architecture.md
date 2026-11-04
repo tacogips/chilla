@@ -780,6 +780,146 @@ is required.
 
 ---
 
+## Shared Preview Right-Drag Pan
+
+Holding the right mouse button and dragging pans a preview like dragging a page
+on a touch screen: the content follows the pointer. This is frontend-only. It
+adds no Tauri command, no payload change and no keymap entry.
+
+### Targets And Scroll Containers
+
+| Preview | Component | Scroll container |
+|---------|-----------|------------------|
+| Markdown rendered, text/source layout, direct image (SVG and raster) | `PreviewPane` | the `.pane__body` preview element (`previewRef`), the same element used by wheel zoom and the left-button image pan |
+| Video | `MediaFilePreviewPane` (`kind === "video"`) | `.pane__body` (`bodyRef`) |
+| PDF | `PdfFilePreviewPane` | `.pane__body.preview--pdf` (`body`) |
+
+Direct images are rendered by `PreviewPane` (`dragPanEnabled` is set for
+`filePreview.kind === "image"`), not by `MediaFilePreviewPane`. Audio, EPUB,
+CSV, the raw Markdown editor, the HTML iframe preview and diff views are not
+targets.
+
+### Gesture Contract
+
+- Start: `pointerdown` with `event.button === 2` on the scroll container while
+  the pane is visible. Visibility uses each pane's existing rule: `props.visible`
+  in `PreviewPane`, and `closest(".pane--hidden, [hidden], [aria-hidden='true']")
+  === null` in the video and PDF panes. The handler records the pointer id, the
+  start client coordinates and the start `scrollLeft`/`scrollTop`, and calls
+  `setPointerCapture`. It does not call `preventDefault` on `pointerdown`, so
+  native right-click behavior is untouched until the pointer moves.
+- Move: a `pointermove` with the recorded pointer id computes
+  `dx = clientX - startX`, `dy = clientY - startY`. Once
+  `Math.hypot(dx, dy) > 4` (CSS px) the gesture becomes a pan for the rest of
+  its lifetime. While panning, every move sets
+  `scrollLeft = startScrollLeft - dx` and `scrollTop = startScrollTop - dy`
+  (measured from the start, so the sub-threshold delta is not lost) and calls
+  `preventDefault`. Below the threshold, nothing scrolls and nothing is
+  prevented.
+- Right-button release while another button stays held: a mouse shares one
+  pointer id across buttons. Releasing the right button while another button
+  is still pressed produces a chorded `pointermove`, not a `pointerup`.
+  So the move handler first checks the matching pointer's `event.buttons`. If
+  `(event.buttons & 2) === 0`, it ends the gesture before any scroll or
+  `preventDefault`. That move is neither scrolled nor prevented. Ending the
+  gesture here releases the capture if it is held, removes the cursor class and
+  clears the drag state. If the gesture had become a pan, the "just ended"
+  contextmenu flag is set exactly as on `pointerup`. Later moves with only the
+  left button held do nothing in the right-drag path until a new
+  `pointerdown` with `button === 2` starts another gesture.
+- End: `pointerup` or `pointercancel` with the recorded pointer id releases the
+  capture if it is held. `lostpointercapture` clears the state without
+  releasing. All three paths remove the cursor class and set the "just ended"
+  flag when the gesture had panned.
+- Context menu: a `contextmenu` listener on the scroll container calls
+  `preventDefault` only when the active or just-ended right gesture became a
+  pan. The "just ended" flag is consumed by that `contextmenu` event and is
+  cleared by the next `pointerdown`. A plain right-click (no move, or a move of
+  4px or less) never suppresses the native menu.
+- Cursor: while a pan is active the scroll container carries the class
+  `preview--right-drag-panning`. `App.css` maps it to `cursor: grabbing`. The
+  class is removed when the gesture ends.
+- Left button, text selection and links: the right-drag logic ignores every
+  `button !== 2` `pointerdown`. The existing left-button `dragPanEnabled` image
+  pan in `PreviewPane` keeps its own state and its `button === 0`
+  / `isPrimary` checks unchanged. A mouse shares one pointer id across buttons,
+  and a second button pressed during a drag produces a chorded `pointermove`,
+  not a `pointerdown`, so the two gestures cannot both start. The
+  right-button-bit check above ends a right drag as soon as the right button is
+  released, so it never carries over into left-only movement. Left-click,
+  link clicks and text selection never enter the right-drag path.
+- Wheel zoom and keyboard zoom are unaffected.
+
+### Shared Helper
+
+One module, `src/features/preview/rightDragPan.ts`, exports
+`attachRightDragPan(target: HTMLElement, isActive: () => boolean): () => void`.
+It registers the listeners above on `target` and returns a detach function.
+The three panes call it in `onMount` and call the detach function in
+`onCleanup`. A shared helper keeps the threshold, the contextmenu rule and the
+cursor class identical across panes, in the same way
+`previewZoomDirectionFromWheel` keeps the wheel rule identical. No other
+abstraction is added.
+
+### Platform Event Order
+
+On Windows the `contextmenu` event follows the button release, so the contract
+above suppresses the menu after a pan and keeps it for a plain click. On macOS
+WebKit (the Tauri WKWebView) and on WebKitGTK, `contextmenu` is normally
+dispatched at button press, before any movement. With the contract as written,
+a press opens the native menu and the drag may not reach the page there. This
+run implements the contract as requested. Real-app behavior on macOS is a GUI
+check delegated to the supervising session. The follow-up decision is recorded
+in `design-docs/user-qa/qa-preview-right-drag-pan.md`.
+
+### Verification
+
+- `PreviewPane.vitest.tsx`: rendered Markdown, `layout="source"` and a direct
+  image (`dragPanEnabled`) each pan on a right drag (scroll moves opposite to the
+  pointer delta). A right press, a move of 4px or less, release and
+  `contextmenu` leave the `contextmenu` event not `defaultPrevented` and the
+  scroll unchanged. A right drag past the threshold followed by `contextmenu`
+  is `defaultPrevented`. A hidden pane (`visible={false}`) does not pan. A
+  left-button drag on a non-image preview still does not pan, and the
+  left-button image pan tests still pass. The existing test "ignores non-primary
+  mouse buttons for direct-image drag panning" uses button `2`, which now pans.
+  It is changed to use button `1` (middle), so it still proves that only the
+  left button starts the left-button pan.
+- Chord-release regression (`PreviewPane.vitest.tsx`, rendered Markdown with
+  `dragPanEnabled` false). On one pointer id:
+  1. `pointerdown(button=2, buttons=2)`.
+  2. A move past the threshold (`buttons=2`) pans.
+  3. `pointermove(button=0, buttons=3)` (left pressed) still pans.
+  4. `pointermove(button=2, buttons=1)` (right released, left still held) is
+     not `defaultPrevented` and leaves `scrollLeft`/`scrollTop` unchanged. The
+     cursor class is gone and `releasePointerCapture` was called.
+  5. Further `pointermove(buttons=1)` events do not scroll and are not
+     prevented.
+  6. A following `contextmenu` is `defaultPrevented`, because the gesture had
+     panned.
+  7. A new `pointerdown(button=2)` gesture pans again.
+  Test pointer events must set `buttons`. The existing `pointerEvent` test
+  helper in each vitest file gains an optional `buttons` argument. It defaults
+  to the bit for `button` on `pointerdown` and `pointermove`, and to `0` on
+  `pointerup`.
+- `MediaFilePreviewPane.vitest.tsx`: the video body pans on a right drag, and
+  the same contextmenu checks hold. Audio is not required to pan.
+- `PdfFilePreviewPane.vitest.tsx`: the PDF body pans on a right drag, and the
+  same contextmenu checks hold.
+- jsdom lacks real pointer capture and layout scrolling. Tests stub
+  `setPointerCapture`, `releasePointerCapture` and `hasPointerCapture` on the
+  container and use writable `scrollLeft`/`scrollTop`, as the existing
+  `previewBodyWithPointerCapture` helper does.
+- `README.md` keyboard and mouse section gains one line: right-button drag pans
+  Markdown/rendered, source, image, video and PDF previews, and a plain
+  right-click still opens the context menu.
+- Commands: `bun run typecheck`, `bun run lint:biome`, `bun run test`,
+  `mise exec -- env PATH="$(mise where node)/bin:$PATH" bun run test:dom` and
+  `CARGO_TERM_QUIET=true bun run tauri build --debug --no-bundle`, all in the
+  foreground with exit status and log path recorded.
+
+---
+
 ## Revision-Aware Local Refresh
 
 Local file-view refresh is a workspace refresh, not only a document-body reload.
