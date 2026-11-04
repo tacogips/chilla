@@ -11,7 +11,7 @@
 {
   "planId": "pdf-shortcuts-finalize",
   "planPath": "impl-plans/active/pdf-shortcuts-finalize.md",
-  "dependsOn": ["pdf-canvas-pane", "pdf-video-zoom"],
+  "dependsOn": ["pdf-canvas-pane", "pdf-video-zoom", "workspace-picker-supersession"],
   "writePaths": [
     "src/features/workspace/WorkspaceShell.vitest.tsx",
     "README.md",
@@ -299,41 +299,69 @@ directory.
    for broader permissions. Record the path, and the result of
    `test -e <path>`, in the progress log as a residual cleanup item for the
    user. Never modify, read or reuse the export again.
-2. *Do not repeat the baseline.* The round-1 comparison is complete: three
-   baseline and three current isolated runs fail the same assertion, so
-   disposition **B** applies. Its evidence is in
-   `tmp/pdf-inline-rendering-20261104-01/pdf-shortcuts-finalize/baseline-comparison.json`
-   and the `baseline-stale-picker-{base,current}-{1,2,3}.log` files. Reuse that
-   evidence and do not create a new export.
-3. *Branch outcome under B.* If all of the following hold, report the plan
-   with `implementation_blocked: false`:
-   - `test-dom-pinned.log` shows exactly 1 failure out of 457 tests, and that
-     failure is the stale-picker assertion;
-   - typecheck, test, lint, cargo check, build, the dist checks and the tauri
-     debug build exit 0 under Node 22.23.4, as their existing `*-pinned.log`
-     and `cargo-r2.log` files show;
-   - `WorkspaceShell.tsx` is unmodified.
-
-   In that case:
-   - Set `baselineReviewPending` to `{test: "ignores a stale parent directory
-     rejection after a newer picker workspace opens", assertion: "expected ...
-     to contain 'new preview'", b: 3, c: 3, logs: [...]}`.
-   - Report the DOM gate honestly as a nonzero exit pending baseline
-     disposition. Never describe it as passing.
-
-   If any of the conditions above is false, report a blocker.
-4. *Runtime check (step 8).* Re-check the current tree with a single
-   foreground launch attempt. If the debug executable still cannot be
-   inspected visually or through its console, record an explicit verification
-   gap, citing `runtime-launch-retry.log` (exit 130). A runtime gap alone is
-   not a blocker under this plan. It stays a residual risk for the
-   integration review.
-5. *Before reporting:* verify that the current hashes of
-   `WorkspaceShell.vitest.tsx`, `README.md` and this plan match the recorded
-   values. Make no new source edits.
+2. to 5. (Superseded by the session-710 amendment.) These decisions accepted
+   disposition B: three baseline and three current stale-picker failures, with
+   evidence in
+   `tmp/pdf-inline-rendering-20261104-01/pdf-shortcuts-finalize/baseline-comparison.json`.
+   They also allowed a nonzero DOM gate pending review, permitted a runtime
+   gap that cited `runtime-launch-retry.log` (exit 130), and required a
+   hash-match check before reporting.
 
 **Unchanged**: writePaths, artifactRoots, plan IDs, the DAG, and round-1
 Decisions 1, 3 and 4.
+
+## Amendment 2026-11-04 (session-710 continuation)
+
+This amendment supersedes these earlier decisions:
+
+- round 1, Decisions 2 to 4;
+- round 2, Decisions 2 to 5;
+- the "No production code changes" non-goal, as far as it concerns the
+  stale-picker test.
+
+Plan `workspace-picker-supersession` owns the production fix in
+`src/features/workspace/WorkspaceShell.tsx`, and this plan now depends on it.
+Disposition B ("baseline review pending") is no longer an acceptable outcome.
+The DOM gate must exit 0 with zero failures.
+
+**Decisions**
+
+1. Keep the existing PDF-open shortcut tests and README edits. Edit them only
+   to fix a defect found by a gate or by review. Do not edit
+   `WorkspaceShell.tsx`. If a remaining failure points there, report a blocker
+   against `workspace-picker-supersession`.
+2. Node pin. Every Node-based gate runs as
+   `mise exec -- env PATH="$(mise where node)/bin:$PATH" <cmd>`. Record
+   `node --version` = `v22.23.4` under that form. Plain `mise exec --` is not
+   valid gate evidence, because it selected Node 26.
+3. Do not repeat the `cc1d40b` baseline comparison, and do not touch the old
+   export at `/var/folders/wn/q3_zjgs15t9_367s8627fd0w0000gn/T/tmp.CjkYj6EYNo`.
+   It is a residual cleanup item for the user only.
+4. Final verification, all logged to
+   `tmp/pdf-inline-rendering-20261104-02/pdf-shortcuts-finalize/`:
+   - steps 1-7 of "Final verification", with the Node pin from Decision 2;
+   - step 3 (`bun run test:dom`) must exit 0 with 0 failures, and its log must
+     list the stale-picker test as passed;
+   - step 5 may be run as
+     `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml`.
+5. Runtime check, step 8. Do not use `nohup` or `&`. The node contract forbids
+   detached processes. Launch
+   `./target/debug/chilla /Users/taco/Downloads/10.1.1.69.8949.pdf` as an
+   owned foreground process with a bounded timeout. Redirect its stdout and
+   stderr to `runtime-sample.log`, and record the exit status.
+   - The fixture PDFs from round 1 may be reused if they still exist.
+     Otherwise regenerate them outside the repository, as step 8 describes.
+   - Pass only if the log contains no CSP violation, "fake worker", CMap or
+     OpenJPEG errors, and the visual or inspector evidence from step 8 is
+     recorded.
+   - If any part cannot be observed, list it as an explicit verification gap.
+     Never claim it passed.
+   - If the sample PDF is unreadable from the sandbox, record that and use the
+     plain fixture instead.
+6. Plan bookkeeping is out of scope for this plan. Do not move plans or edit
+   `impl-plans/README.md`: the workflow's `plan-archive` step does that. Set
+   this plan's **Status** to `Completed` only when steps 1-7 exit 0 and step 8
+   is passed or its gaps are listed.
 
 ## Progress Log
 
@@ -355,3 +383,8 @@ Decisions 1, 3 and 4.
 **Checks**: Explicitly prepending `$(mise where node)/bin` to PATH is necessary: plain `mise exec -- bun run test:dom` selected Homebrew Node 26 despite the separate Node version check. With pinned PATH, typecheck, unit tests (67 passed), lint, build and debug Tauri build exited 0; Cargo check exited 0 with `CARGO_TERM_QUIET=true`; asset checks exited 0; PDF-focused tests passed 2/2. Complete logs: `typecheck-pinned.log`, `test-pinned.log`, `lint-pinned.log`, `build-pinned.log`, `tauri-pinned.log`, `cargo-r2.log`, `assets-pinned.log`, `pdf-focused-pinned.log`, `test-dom-pinned.log`, and `baseline-full-dom-path22.log` in the plan evidence directory.
 **Runtime gap**: Plain, CMap and JPX fixtures were generated outside the repository; generator commands and hashes are recorded in `runtime-fixture-commands.log` and `runtime-fixture-generation.log`. The rebuilt `target/debug/chilla` was launched in the foreground and exited 130 after interruption (`runtime-launch-retry.log`), but Computer Use could not select the raw debug executable reliably. Rendering, shortcuts, worker identity and console errors remain unverified. No runtime success is claimed.
 **Cleanup**: Automatic approval review rejected the prescribed `rm -rf` of the out-of-repository baseline export; it remains at `/var/folders/wn/q3_zjgs15t9_367s8627fd0w0000gn/T/tmp.CjkYj6EYNo`. No alternate deletion was attempted.
+
+### Session: 2026-11-04 — round-2 handoff
+**Checks**: The README and test hashes match the implementation records; `git diff --quiet cc1d40b -- src/features/workspace/WorkspaceShell.tsx` exited 0. The plan hash differs from the previous recorded hash because the round-2 amendment was added; current pre-edit hashes are in `round2-pre-hashes.log`. Disposition B remains pending independent review, and the DOM gate remains nonzero.
+**Runtime gap**: `./target/debug/chilla /tmp/chilla-pdf-fixtures.KVxgGj` was launched in the foreground and interrupted with exit 130 (`runtime-launch-round2.log`). Visual rendering, interactions, worker identity and console errors remain unverified.
+**Residual cleanup**: `test -e /var/folders/wn/q3_zjgs15t9_367s8627fd0w0000gn/T/tmp.CjkYj6EYNo` exited 0 (`round2-export.log`); the export remains for user cleanup. No deletion was attempted.

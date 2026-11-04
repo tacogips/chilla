@@ -77,9 +77,11 @@ silently fall back to a fake worker and parse PDFs on the UI thread.
   separate same-origin asset (`/assets/pdf.worker-<hash>.js`), not as an
   inline or `blob:` worker. `vite.config.ts` sets `worker.format: "es"`.
 - On the first PDF load, `pdfjs.ts` constructs one dedicated `Worker` and
-  assigns it to `GlobalWorkerOptions.workerPort`. pdf.js uses an explicit port
-  as-is: it skips the same-origin check, the blob wrapper and the fake-worker
-  fallback.
+  passes it to pdf.js as an explicit port. Either form is acceptable:
+  `GlobalWorkerOptions.workerPort`, or one shared `new PDFWorker({ port })`
+  passed as the `worker` option to every `getDocument` call. The
+  implementation uses the second form. pdf.js uses an explicit port as-is: it
+  skips the same-origin check, the blob wrapper and the fake-worker fallback.
 - Ownership: the worker is a module-level singleton that lives for the life
   of the webview. Destroying a document (`loadingTask.destroy()`) releases
   per-document state in the worker but does not terminate the shared port.

@@ -1,0 +1,264 @@
+{
+  "taskId": "pdf-inline-rendering-20261104-02",
+  "workflowMode": "issue-resolution",
+  "issueReference": "local:opus-terra-design-and-implement-review-loop-session-710 (continuation of session-708; prior dispatch impl-plans/active/pdf-inline-rendering-20261104-01-dispatch.json)",
+  "implementationBranch": "main",
+  "baseBranch": "main",
+  "remote": "origin",
+  "gitPush": false,
+  "originalHead": "99954ab130eb341f626175a1baa909b24870667d",
+  "evidenceRoot": "tmp/pdf-inline-rendering-20261104-02",
+  "designDocPaths": [
+    "design-docs/specs/design-pdf-inline-rendering.md",
+    "design-docs/specs/design-macos-file-open.md",
+    "design-docs/user-qa/qa-pdf-inline-rendering.md"
+  ],
+  "reviewContext": {
+    "issueReference": "local:opus-terra-design-and-implement-review-loop-session-710 (continuation of session-708; dispatch impl-plans/active/pdf-inline-rendering-20261104-02-dispatch.json)",
+    "userProblem": "Session 708 left the PDF inline-rendering, PDF-shortcut and modifier-wheel zoom work uncommitted and only partly reviewed. The stale-picker DOM test ('ignores a stale parent directory rejection after a newer picker workspace opens') fails on both the baseline and the current tree because commit 440d902 serialized handleOpenFiles behind queueFileOpenWork, so a newer picker selection waits behind an older pick whose listDirectory promise is pending.",
+    "requiredOutcomes": [
+      "A newer interactive picker open supersedes a stale in-flight open and still awaits workspace initialization. drainNativeOpenRequests keeps its batch ordering and all native-open tests pass.",
+      "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test:dom exits 0 with zero failures, including the unmodified stale-picker test.",
+      "bun run typecheck, bun run lint:biome and bun run test exit 0.",
+      "Vitest proves that Shift+L, Cmd+O, + / -, r, Shift+D, j / k, Enter and q work with a PDF open, and that Alt/Ctrl+wheel zoom works on rendered, image, video and PDF previews.",
+      "The debug build succeeds, and target/debug/chilla renders a PDF with no CSP or pdf.js worker errors, or each unobservable part is listed as an explicit gap.",
+      "All work is committed locally after an accepted integration review."
+    ],
+    "nonGoals": [
+      "No rework or reimplementation of the session-708 PDF work; leaf plans re-verify and repair review-found defects only.",
+      "No change to native-open draining order or to queueFileOpenWork semantics for drainNativeOpenRequests.",
+      "No weakening or deletion of any existing test.",
+      "No git push.",
+      "No repeat of the cc1d40b baseline comparison."
+    ],
+    "constraints": [
+      "Keep the uncommitted session-708 work and build on it.",
+      "Do not modify unrelated files. Do not touch .riela/ or riela-lock.json.",
+      "Node-based gates run as mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" <cmd> and record node v22.23.4.",
+      "Run no detached processes. The runtime launch is an owned foreground process with a bounded timeout.",
+      "Implementers run no git mutations. Commits happen in workflow finalization, with no AI attribution, no Co-Authored-By and no emojis.",
+      "Plan archiving and impl-plans/README.md are handled by the plan-archive node."
+    ],
+    "designDecisionsAndRationale": [
+      {
+        "decision": "handleOpenFiles stops calling queueFileOpenWork; it awaits workspaceInitialized, checks disposal, then calls openSelectedFiles directly.",
+        "rationale": "openSelectedFiles already has directoryRequestId ownership checks designed for latest-wins supersession (design-docs/specs/design-macos-file-open.md#interactive-picker-supersession); the strict serial queue defeated them."
+      },
+      {
+        "decision": "drainNativeOpenRequests remains the only queueFileOpenWork caller.",
+        "rationale": "Native open batches need in-order processing; the picker does not."
+      },
+      {
+        "decision": "Session-708 leaf plans are re-verify-only with review-driven repairs.",
+        "rationale": "The work is already implemented and partly reviewed; reimplementing risks regressions."
+      },
+      {
+        "decision": "pdf.js uses a shared PDFWorker({ port }) passed as the worker option.",
+        "rationale": "Accepted form in design-docs/specs/design-pdf-inline-rendering.md#worker-contract (PDF-INT-001 repair)."
+      },
+      {
+        "decision": "Runtime launch is an owned foreground process with a timeout instead of nohup/&.",
+        "rationale": "The runner forbids detached commands; this overrides the workflowInput background-launch hint."
+      }
+    ],
+    "intentionalTradeoffs": [
+      "Picker and native opens interleave latest-start-wins (design rule 5).",
+      "pdfjs-dist 5.7.284 lists @napi-rs/canvas as an optional dependency, adding supply-chain surface.",
+      "The PDF error state's 'Open in default app' button is the only focusable element and exists only when a load fails."
+    ],
+    "supportedEdgeCases": [
+      "A newer picker selection opens while an older single-file pick's parent listDirectory is still pending; the stale rejection is ignored.",
+      "Picker open before workspace initialization waits for workspaceInitialized.",
+      "Picker open after disposal is a no-op.",
+      "Plain wheel without Alt/Ctrl is not preventDefaulted; zoom clamps hold.",
+      "Audio previews register no zoom; video Space/seek behavior is unchanged.",
+      "Shared pdf.js worker is reset after an error or construction failure."
+    ],
+    "outOfScopeEdgeCases": [
+      "Strict ordering between picker opens and concurrent native-open batches.",
+      "GUI or inspector evidence that is unobservable from the sandbox; recorded as an explicit gap.",
+      "A 'picker waits for initialization' regression test if not reachable; may be logged without production changes."
+    ],
+    "sourcePaths": [
+      "src/features/workspace/WorkspaceShell.tsx",
+      "src/features/workspace/WorkspaceShell.vitest.tsx",
+      "src/features/preview/PreviewPane.tsx",
+      "src/features/preview/PreviewPane.vitest.tsx",
+      "src/features/preview/PdfFilePreviewPane.tsx",
+      "src/features/preview/PdfFilePreviewPane.vitest.tsx",
+      "src/features/preview/MediaFilePreviewPane.tsx",
+      "src/features/preview/MediaFilePreviewPane.vitest.tsx",
+      "src/features/preview/pdfjs.ts",
+      "src/features/preview/pdfjs.vitest.ts",
+      "src/app/App.css",
+      "vite.config.ts",
+      "package.json",
+      "bun.lock",
+      "src-tauri/tauri.conf.json",
+      "README.md"
+    ]
+  },
+  "acceptedDependencies": [],
+  "plans": [
+    {
+      "planId": "pdf-zoom-wheel-contract",
+      "planPath": "impl-plans/active/pdf-zoom-wheel-contract.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/preview/PreviewPane.tsx",
+        "src/features/preview/PreviewPane.vitest.tsx",
+        "impl-plans/active/pdf-zoom-wheel-contract.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "PreviewPane vitest proves Alt+wheel and Ctrl+wheel zoom, plain wheel not prevented, and both zoom clamps.",
+        "Scoped biome check and bun run typecheck exit 0.",
+        "Owned file hashes and logs recorded in the progress log; Status set to Completed."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/PreviewPane.vitest.tsx",
+        "bunx biome check src/features/preview/PreviewPane.tsx src/features/preview/PreviewPane.vitest.tsx --diagnostic-level=warn",
+        "bun run typecheck"
+      ]
+    },
+    {
+      "planId": "pdf-pdfjs-foundation",
+      "planPath": "impl-plans/active/pdf-pdfjs-foundation.md",
+      "dependsOn": [],
+      "writePaths": [
+        "package.json",
+        "bun.lock",
+        "node_modules",
+        "dist",
+        "target",
+        "vite.config.ts",
+        "src/features/preview/pdfjs.ts",
+        "src/features/preview/pdfjs.vitest.ts",
+        "src-tauri/tauri.conf.json",
+        "impl-plans/active/pdf-pdfjs-foundation.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": ["node_modules", "dist", "target"],
+      "acceptanceCriteria": [
+        "pdfjs vitest covers resource URLs, useWasm false, enableXfa false, shared-worker reuse and worker reset after failure.",
+        "pdfjs-dist pinned to 5.7.284 with no trustedDependencies; bun.lock integrity recorded.",
+        "tauri.conf.json only adds asset: http://asset.localhost to connect-src.",
+        "Scoped biome check and cargo check exit 0; Status set to Completed."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/pdfjs.vitest.ts",
+        "bunx biome check vite.config.ts src/features/preview/pdfjs.ts src/features/preview/pdfjs.vitest.ts package.json --diagnostic-level=warn",
+        "grep -n '\"pdfjs-dist\": \"5.7.284\"' package.json",
+        "grep -n 'pdfjs-dist@5.7.284' bun.lock",
+        "git diff -U0 99954ab -- src-tauri/tauri.conf.json",
+        "CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml"
+      ]
+    },
+    {
+      "planId": "workspace-picker-supersession",
+      "planPath": "impl-plans/active/workspace-picker-supersession.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/workspace/WorkspaceShell.tsx",
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "impl-plans/active/workspace-picker-supersession.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "handleOpenFiles no longer calls queueFileOpenWork; it awaits workspaceInitialized and checks disposal first.",
+        "The unmodified stale-picker test passes in 3/3 WorkspaceShell vitest runs; all native-open tests pass.",
+        "grep -c \"queueFileOpenWork(\" returns 1 (the drainNativeOpenRequests call).",
+        "WorkspaceShell.tsx diff against 99954ab is confined to handleOpenFiles.",
+        "bun run typecheck and scoped biome check exit 0."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" node --version",
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/workspace/WorkspaceShell.vitest.tsx",
+        "bun run typecheck",
+        "bunx biome check src/features/workspace/WorkspaceShell.tsx src/features/workspace/WorkspaceShell.vitest.tsx --diagnostic-level=warn",
+        "grep -c \"queueFileOpenWork(\" src/features/workspace/WorkspaceShell.tsx",
+        "grep -n \"queueFileOpenWork\" src/features/workspace/WorkspaceShell.tsx",
+        "git diff -U0 99954ab -- src/features/workspace/WorkspaceShell.tsx"
+      ]
+    },
+    {
+      "planId": "pdf-canvas-pane",
+      "planPath": "impl-plans/active/pdf-canvas-pane.md",
+      "dependsOn": ["pdf-zoom-wheel-contract", "pdf-pdfjs-foundation"],
+      "writePaths": [
+        "src/features/preview/PdfFilePreviewPane.tsx",
+        "src/features/preview/PdfFilePreviewPane.vitest.tsx",
+        "src/app/App.css",
+        "impl-plans/active/pdf-canvas-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "PdfFilePreviewPane vitest covers every case in the plan's Test cases section.",
+        "No iframe or legacy embedded-pdf classes remain; the pane imports only ./pdfjs, never pdfjs-dist.",
+        "Scoped biome check exits 0; Status set to Completed."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/PdfFilePreviewPane.vitest.tsx",
+        "bunx biome check src/features/preview/PdfFilePreviewPane.tsx src/features/preview/PdfFilePreviewPane.vitest.tsx src/app/App.css --diagnostic-level=warn",
+        "! grep -rn -e 'preview-pdf-frame' -e 'preview--embedded-pdf' -e '<iframe' src/features/preview/PdfFilePreviewPane.tsx src/app/App.css",
+        "! grep -n 'pdfjs-dist' src/features/preview/PdfFilePreviewPane.tsx"
+      ]
+    },
+    {
+      "planId": "pdf-video-zoom",
+      "planPath": "impl-plans/active/pdf-video-zoom.md",
+      "dependsOn": ["pdf-zoom-wheel-contract"],
+      "writePaths": [
+        "src/features/preview/MediaFilePreviewPane.tsx",
+        "src/features/preview/MediaFilePreviewPane.vitest.tsx",
+        "impl-plans/active/pdf-video-zoom.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "MediaFilePreviewPane vitest proves video +/- and Alt/Ctrl+wheel zoom, plain wheel not prevented, audio has no zoom, Space and seek unchanged.",
+        "Scoped biome check and bun run typecheck exit 0; Status set to Completed."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/MediaFilePreviewPane.vitest.tsx",
+        "bunx biome check src/features/preview/MediaFilePreviewPane.tsx src/features/preview/MediaFilePreviewPane.vitest.tsx --diagnostic-level=warn",
+        "bun run typecheck"
+      ]
+    },
+    {
+      "planId": "pdf-shortcuts-finalize",
+      "planPath": "impl-plans/active/pdf-shortcuts-finalize.md",
+      "dependsOn": ["pdf-canvas-pane", "pdf-video-zoom", "workspace-picker-supersession"],
+      "writePaths": [
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "README.md",
+        "dist",
+        "target",
+        "impl-plans/active/pdf-shortcuts-finalize.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": ["dist", "target"],
+      "acceptanceCriteria": [
+        "bun run typecheck, bun run test and bun run lint:biome exit 0 under the Node pin.",
+        "bun run test:dom exits 0 with zero failures and lists the stale-picker test as passed.",
+        "WorkspaceShell vitest covers Shift+L, Cmd+O, + / -, r, Shift+D, j / k, Enter and q with a PDF open.",
+        "cargo check, bun run build with dist pdfjs resource checks, and the debug tauri build exit 0.",
+        "target/debug/chilla launched as an owned foreground process with a timeout; log has no CSP, fake worker, CMap or OpenJPEG errors, or every unobservable part is listed as a gap."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" node --version",
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run typecheck",
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test",
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test:dom",
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run lint:biome",
+        "CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml",
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run build",
+        "test -f dist/pdfjs/wasm/openjpeg_nowasm_fallback.js",
+        "CARGO_TERM_QUIET=true bun run tauri build --debug --no-bundle"
+      ]
+    }
+  ]
+}

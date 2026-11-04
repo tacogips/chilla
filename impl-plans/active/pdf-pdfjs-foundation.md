@@ -1,6 +1,6 @@
 # PDF Inline Rendering: pdf.js Dependency, Worker, Resources and CSP Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Design Reference**: `design-docs/specs/design-pdf-inline-rendering.md#dependency`, `#worker-contract`, `#runtime-resources-cmaps-standard-fonts-image-decoders`, `#byte-loading-and-csp`, `#security-options`
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04
@@ -261,16 +261,16 @@ in the progress log:
 
 ## Done criteria
 
-- [ ] Exact pin is present, and the `bun.lock` integrity entry is recorded.
-- [ ] `pdfjs.ts` exports the pinned contract, and its tests pass.
-- [ ] The Vite plugin serves the resources in dev and copies them on build.
+- [x] Exact pin is present, and the `bun.lock` integrity entry is recorded.
+- [x] `pdfjs.ts` exports the pinned API, and its tests pass with the caller-owned worker correction recorded below.
+- [x] The Vite plugin serves the resources in dev and copies them on build.
   The step 5 smoke check shows the three `dist/pdfjs` directories, or any
   sibling-noise failure is logged. Authoritative gate:
   `pdf-shortcuts-finalize` step 6.
-- [ ] Steps 1, 3, 4 and 6 exit 0. Step 2 shows no errors in this plan's files,
+- [x] Steps 1, 3, 4 and 6 exit 0. Step 2 shows no errors in this plan's files,
   with any sibling noise logged.
-- [ ] CSP `connect-src` contains `asset: http://asset.localhost`, and nothing else in the CSP changed.
-- [ ] Every verification step produces its stated result under the
+- [x] CSP `connect-src` contains `asset: http://asset.localhost`, and nothing else in the CSP changed.
+- [x] Every verification step produces its stated result under the
   sibling-noise rules above. Exit codes are logged.
 
 ## Concurrency and drift rules
@@ -281,6 +281,41 @@ in the progress log:
 - `node_modules` is an artifact root: record its digest/count only, never its
   content. No git operations.
 
+## Amendment 2026-11-04 (session-710 continuation)
+
+The implementation from session 708 is in the working tree, uncommitted and
+only partly reviewed. That includes the PDF-INT-001 shared-`PDFWorker`
+repair. Keep it. Do not revert it or reimplement it.
+
+- Scope: re-verify only. Edit a file only to fix a defect that a scoped check
+  or the Opus review of this plan finds, and only inside this plan's
+  `writePaths`. Do not re-run `bun add`, and do not change the pin.
+- Design alignment: the Worker Contract now names the shared
+  `PDFWorker({ port })` plus the `worker` option as an accepted form
+  (`design-docs/specs/design-pdf-inline-rendering.md#worker-contract`). No
+  code change is needed for this.
+- Verification: run in the foreground, logging to
+  `tmp/pdf-inline-rendering-20261104-02/pdf-pdfjs-foundation/`.
+  1. `mise exec -- env PATH="$(mise where node)/bin:$PATH" bunx vitest run --config vitest.config.ts src/features/preview/pdfjs.vitest.ts`
+     -> exit 0. The log must cover:
+     - the resource URLs;
+     - `useWasm: false`;
+     - `enableXfa: false`;
+     - shared-worker reuse across loads;
+     - worker reset after an error or a construction failure.
+  2. `bunx biome check vite.config.ts src/features/preview/pdfjs.ts src/features/preview/pdfjs.vitest.ts package.json --diagnostic-level=warn`
+     -> exit 0.
+  3. `grep -n '"pdfjs-dist": "5.7.284"' package.json` -> one match.
+     `grep -c trustedDependencies package.json` -> `0`.
+     `grep -n 'pdfjs-dist@5.7.284' bun.lock` -> matches, and the integrity
+     value equals the one recorded below.
+  4. `git diff -U0 99954ab -- src-tauri/tauri.conf.json` -> the only change is
+     `connect-src` gaining `asset: http://asset.localhost`.
+  5. `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml`
+     -> exit 0.
+- Done when all five results hold and the hashes are recorded. Then set
+  **Status** to `Completed`.
+
 ## Progress Log
 
 ### Session: 2026-11-04
@@ -288,3 +323,27 @@ in the progress log:
 **Tasks In Progress**: None
 **Blockers**: None
 **Notes**: Wave 1. `pdf-canvas-pane` depends on the `pdfjs.ts` contract.
+
+### Session: 2026-11-04 — foundation implementation
+**Tasks Completed**: Exact pdfjs-dist pin, worker contract, Vite resources, CSP connect-src and focused tests. Formal reviews and downstream canvas integration remain pending.
+**Blockers**: None.
+**Notes**: `npm view pdfjs-dist@5 version` returned latest 5.x 5.7.284; `bun add pdfjs-dist@5.7.284 --exact` exited 0 (`install.log`). No lifecycle script ran; no trustedDependencies. Lock integrity: `sha512-h4EdYQczmGhbOlqc3PPZwxevn7ApdWPbovAuWXOB/DjIyigSnwfy2oze7c6mRcSr9XgLp3eN3EeL4DyySTPMFw==`. Installed legacy build and worker, cmaps, standard_fonts and wasm/openjpeg_nowasm_fallback.js confirmed. Installed types expose wasmUrl, useWasm, cMapUrl, cMapPacked, standardFontDataUrl, enableXfa and workerPort. Version 5.7.284 removed isEvalSupported from the published API; the fixed false property is still passed for the pinned interface, and a search of the legacy build found no JavaScript eval or dynamic Function constructor.
+
+Evidence directory: `tmp/pdf-inline-rendering-20261104-01/pdf-pdfjs-foundation/`. Pre-edit contents and hashes, intended edits, and post-edit hashes are recorded there (`install-pre.sha`, `*.before`, `*.intent`, `*.pre.sha`, `*.post.sha`, `post.sha`). Node modules path digest and file count are recorded in `node-modules-paths.sha` and `node-modules-count.txt`.
+
+Verification in the shared moving tree (all exit 0): `bunx vitest run --config vitest.config.ts src/features/preview/pdfjs.vitest.ts` (4 tests, `vitest.log`); `bun run typecheck` (`typecheck.log`); `! bunx tsc --noEmit 2>&1 | grep -E "src/features/preview/pdfjs"` (`tsc-scoped.log`); `bunx biome check vite.config.ts src/features/preview/pdfjs.ts src/features/preview/pdfjs.vitest.ts package.json --diagnostic-level=warn` (`biome.log`); `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml` (`cargo.log`); `bunx vite build` (`vite-build.log`); `grep -n '\"pdfjs-dist\": \"[0-9]' package.json` (`pin.log`). Smoke: 168 bcmap files (`cmaps.log`), 16 standard fonts (`fonts.log`), fallback present (`wasm.log`). `ls dist/assets | grep -i pdf.worker` exited 1 (`worker-asset.log`): expected before downstream imports. Serial final build and packaged runtime verification remain owned by pdf-shortcuts-finalize. CSP diff changes only connect-src; package manifest diff adds only the dependency.
+
+### Self-check finding: shared PDFWorker lifetime
+**Blocker**: pdf.js 5.7.284 caches its `PDFWorker` wrapper by port (`node_modules/pdfjs-dist/legacy/build/pdf.mjs`, `PDFWorker.create`) and `PDFDocumentLoadingTask.destroy()` destroys that wrapper. Thus one document can invalidate another, and a replacement load can encounter a pending destroy. The pinned plan requires `getDocument(buildPdfDocumentParams(url))` with exactly the prescribed parameter object; avoiding this defect requires either passing a separately owned shared `PDFWorker` in an additional `worker` option or revising worker/lifecycle ownership. Clarify and approve the contract change before correcting and testing this behavior. The existing focused tests mock pdf.js and do not establish shared-wrapper behavior.
+
+Searches `eval-search.log` and `eval-option-search.log` found no `eval(` or `new Function(` expressions in the legacy main and worker modules and no `isEvalSupported` option in those modules or published types. This is source inspection, not proof of every possible dynamic execution path.
+
+
+### Session: 2026-11-04 — integration review repair PDF-INT-001
+**Tasks Completed**: Resolved the shared-worker lifecycle blocker. This review-directed correction supersedes the workerPort assignment and exact getDocument invocation above while preserving the exported API and resource parameters. One dedicated Worker and one caller-owned PDFWorker are reused; getDocument receives the wrapper explicitly. Destroying a document leaves the wrapper and port intact; a worker error or construction failure resets and cleans up both.
+
+**Evidence and rationale**: In pdf.js 5.7.284 `legacy/build/pdf.mjs` lines 21510 and 21558–21563 distinguish a supplied worker from the cached port-created wrapper; lines 21659–21675 destroy task-owned workers and lines 22459–22477 remove and reject a pending-destroy wrapper. Explicit caller ownership avoids the reload race while retaining the dedicated port, without blob URLs or fake-worker fallback. The constructor's generated TypeScript declaration incorrectly limits port to null, so the local constructor type assertion reflects its runtime Worker support. The previous blocker is resolved.
+
+**Verification**: On the shared moving tree, `bunx vitest run --config vitest.config.ts src/features/preview/pdfjs.vitest.ts` passed 5 tests, `bun run typecheck` passed, scoped tsc passed, and the plan's Biome check passed; complete logs are in `tmp/pdf-inline-rendering-20261104-01/pdf-pdfjs-foundation/repair-01/` as `vitest-final.log`, `typecheck-final.log`, `tsc-final.log`, and `biome-final.log`. The earlier cargo check and resource smoke evidence above remain applicable to unchanged CSP and plugin inputs. Pre-edit snapshots and intended hunks are under `repair-01/`, including `ts-agent/`.
+
+**Security note**: `isEvalSupported: false` is retained for the contract but is not read by pdf.js 5.7.284; unchanged CSP `script-src 'self'` excludes unsafe-eval. Formal reviews and serial integration verification remain downstream.

@@ -1,6 +1,6 @@
 # PDF Inline Rendering: Canvas PDF Preview Pane Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Design Reference**: `design-docs/specs/design-pdf-inline-rendering.md#pdffilepreviewpane`, `#shared-zoom-input-contract`, `#styling-srcappappcss`, `#data-flow`; `design-docs/specs/architecture.md#revision-aware-local-refresh`
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04
@@ -220,12 +220,12 @@ in the progress log:
 
 ## Done criteria
 
-- [ ] No `<iframe>` in `PdfFilePreviewPane.tsx`. It imports only from
+- [x] No `<iframe>` in `PdfFilePreviewPane.tsx`. It imports only from
   `./pdfjs`, never from `pdfjs-dist`.
-- [ ] All listed test cases are present and pass.
-- [ ] The stale PDF iframe CSS is removed, and the new PDF canvas CSS is
+- [x] All listed test cases are present and pass.
+- [x] The stale PDF iframe CSS is removed, and the new PDF canvas CSS is
   present.
-- [ ] All verification commands produce the stated results. The progress log
+- [x] All verification commands produce the stated results. The progress log
   is updated.
 
 ## Concurrency and drift rules
@@ -237,6 +237,35 @@ in the progress log:
 - On unexpected drift, stop, log it, and leave the repair for the serial join.
   No git operations.
 
+## Amendment 2026-11-04 (session-710 continuation)
+
+The implementation from session 708 is in the working tree, uncommitted and
+only partly reviewed. Keep it. Do not revert it or reimplement it.
+
+- Scope: re-verify only. Edit a file only to fix a defect that a scoped check
+  or the Opus review of this plan finds, and only inside this plan's
+  `writePaths`. Add no new features and do no refactoring.
+- Design note: the Worker Contract now accepts a shared
+  `PDFWorker({ port })` passed as the `worker` option
+  (`design-docs/specs/design-pdf-inline-rendering.md#worker-contract`). The
+  pane still imports only `./pdfjs`.
+- Known accepted deviation: the error state's "Open in default app" button is
+  the only focusable element, and it exists only when a load fails. The
+  ready and loading states must contain no focusable element and no iframe.
+- Verification: run in the foreground, logging to
+  `tmp/pdf-inline-rendering-20261104-02/pdf-canvas-pane/`.
+  1. `mise exec -- env PATH="$(mise where node)/bin:$PATH" bunx vitest run --config vitest.config.ts src/features/preview/PdfFilePreviewPane.vitest.tsx`
+     -> exit 0. The log must cover every test case listed in this plan's
+     "Test cases to add" section.
+  2. `bunx biome check src/features/preview/PdfFilePreviewPane.tsx src/features/preview/PdfFilePreviewPane.vitest.tsx src/app/App.css --diagnostic-level=warn`
+     -> exit 0.
+  3. `grep -rn -e 'preview-pdf-frame' -e 'preview--embedded-pdf' -e '<iframe' src/features/preview/PdfFilePreviewPane.tsx src/app/App.css`
+     -> no matches (exit 1).
+  4. `grep -n "pdfjs-dist" src/features/preview/PdfFilePreviewPane.tsx`
+     -> no matches (exit 1).
+- Done when all four results hold and the hashes are recorded. Then set
+  **Status** to `Completed`.
+
 ## Progress Log
 
 ### Session: 2026-11-04
@@ -244,3 +273,13 @@ in the progress log:
 **Tasks In Progress**: None
 **Blockers**: None
 **Notes**: Wave 2. Runs in parallel with `pdf-video-zoom` (disjoint files).
+
+### Session: 2026-11-04 — implementation
+**Tasks Completed**: Canvas PDF pane, shared zoom input, guarded reload and render cancellation, error recovery, CSS, and scoped tests.
+**Tasks In Progress**: Formal reviews and serial integration belong to downstream workflow steps.
+**Blockers**: None.
+**Notes**: The ready/loading pane has no focusable elements; the detailed plan explicitly requires a focusable error-only recovery button despite the dispatch's unqualified no-focusable-elements wording. Synchronous worker construction failure and rapid render cancellation have regression coverage.
+
+Final verification (all exit 0): `BUN_INSTALL_CACHE_DIR=/tmp/chilla-pdf-canvas-bun-cache TMPDIR=/tmp bunx vitest run --config vitest.config.ts src/features/preview/PdfFilePreviewPane.vitest.tsx` (5/5; `tmp/pdf-inline-rendering-20261104-01/pdf-canvas-pane/check-agent-final-vitest.log`); `BUN_INSTALL_CACHE_DIR=/tmp/chilla-pdf-canvas-bun-cache TMPDIR=/tmp bun run typecheck` (`check-agent-final-typecheck.log`); `! bunx tsc --noEmit 2>&1 | grep -E 'src/features/preview/PdfFilePreviewPane'` (`check-agent-final-scoped-tsc.log`); `BUN_INSTALL_CACHE_DIR=/tmp/chilla-pdf-canvas-bun-cache TMPDIR=/tmp bunx biome check src/features/preview/PdfFilePreviewPane.tsx src/features/preview/PdfFilePreviewPane.vitest.tsx src/app/App.css --diagnostic-level=warn` (`check-agent-final-biome.log`); `! grep -rn -e 'preview-pdf-frame' -e 'preview--embedded-pdf' src` (`check-agent-final-stale.log`). All abbreviated log paths are under `tmp/pdf-inline-rendering-20261104-01/pdf-canvas-pane/`.
+
+SHA-256 pre -> final: source `758ea2f137639859bf66affb9e037f61e6a87c3fbcef7f7ab6064b36a397c611` -> `d7a8d1b3288948b9ebc75c7ddd8c0200a522e0da7568de6602890bb0e2a27b1c`; tests `677da5bae18e1fc9fd42b0395e95dbcd3692898e08929ecc1167534be658ccfc` -> `45fc7bb225a61c494718710d5dbf310cfca1958f8c585c1640511df336555b8b`; CSS `cf4dd40b960b76005e802e97b888a5df7e7df24ff3b15bcfcc43385c755892aa` -> `8e909e96dd772186cdce07cc58c207a8c3ed1b1413791955789109aac183ef5a`. Plan pre-edit hash: `2c30afcec6da4ac477333850798de48ac869eef1cea2bc81acc686150c49673a`; post-edit hash is recorded in `tmp/pdf-inline-rendering-20261104-01/pdf-canvas-pane/plan-post.sha`. Per-edit snapshots and intentions are in the same evidence directory.

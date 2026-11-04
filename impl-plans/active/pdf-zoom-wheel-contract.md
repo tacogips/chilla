@@ -1,6 +1,6 @@
 # PDF Inline Rendering: Shared Modifier-Wheel Zoom Contract Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Design Reference**: `design-docs/specs/design-pdf-inline-rendering.md#shared-zoom-input-contract`, `design-docs/specs/architecture.md#shared-rendered-preview-zoom`
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04
@@ -121,11 +121,11 @@ location in the progress log:
 
 ## Done criteria
 
-- [ ] `grep -n "export function previewZoomDirectionFromWheel" src/features/preview/PreviewPane.tsx` matches.
-- [ ] `grep -n "export type PreviewZoomDirection" src/features/preview/PreviewPane.tsx` matches.
-- [ ] `PREVIEW_ZOOM_MIN`, `RENDERED_PREVIEW_ZOOM_MAX` and `IMAGE_PREVIEW_ZOOM_MAX` are exported.
-- [ ] All three verification commands exit 0.
-- [ ] The progress log is updated.
+- [x] `grep -n "export function previewZoomDirectionFromWheel" src/features/preview/PreviewPane.tsx` matches.
+- [x] `grep -n "export type PreviewZoomDirection" src/features/preview/PreviewPane.tsx` matches.
+- [x] `PREVIEW_ZOOM_MIN`, `RENDERED_PREVIEW_ZOOM_MAX` and `IMAGE_PREVIEW_ZOOM_MAX` are exported.
+- [x] All three dispatched scoped verification commands exit 0.
+- [x] The progress log is updated.
 
 ## Concurrency and drift rules
 
@@ -136,6 +136,30 @@ location in the progress log:
   drift. Do not overwrite; repair happens serially after the join.
 - Edit only the `writePaths`. No git operations.
 
+## Amendment 2026-11-04 (session-710 continuation)
+
+The implementation from session 708 is in the working tree, uncommitted and
+only partly reviewed. Keep it. Do not revert it or reimplement it.
+
+- Scope: re-verify only. Edit a file only to fix a defect that a scoped check
+  or the Opus review of this plan finds, and only inside this plan's
+  `writePaths`. Add no new features and do no refactoring.
+- Verification: run in the foreground, logging to
+  `tmp/pdf-inline-rendering-20261104-02/pdf-zoom-wheel-contract/`.
+  1. `mise exec -- env PATH="$(mise where node)/bin:$PATH" bunx vitest run --config vitest.config.ts src/features/preview/PreviewPane.vitest.tsx`
+     -> exit 0. The log must show cases that prove:
+     - Alt+wheel zooms in and out;
+     - Ctrl+wheel zooms;
+     - a plain wheel is not `preventDefault`ed;
+     - both zoom clamps hold.
+  2. `bunx biome check src/features/preview/PreviewPane.tsx src/features/preview/PreviewPane.vitest.tsx --diagnostic-level=warn`
+     -> exit 0.
+  3. `bun run typecheck` -> exit 0. If it fails on files outside this plan,
+     log that as sibling noise.
+- Done when all three results hold and each owned file's `shasum -a 256` is
+  recorded. Then set **Status** to `Completed`. Archiving is done by the
+  workflow.
+
 ## Progress Log
 
 ### Session: 2026-11-04
@@ -143,3 +167,14 @@ location in the progress log:
 **Tasks In Progress**: None
 **Blockers**: None
 **Notes**: Wave 1. `pdf-canvas-pane` and `pdf-video-zoom` depend on the exported helper and constants.
+
+
+### Session: 2026-11-04 — implementation
+**Tasks Completed**: Exported the shared modifier-wheel contract and existing bounds; updated pane handling and focused tests.
+**Blockers**: None.
+**Verification**: Scoped vitest passed 27 tests, own-file typecheck filter passed, and scoped Biome passed; complete logs are in `tmp/pdf-inline-rendering-20261104-01/pdf-zoom-wheel-contract/` with `-final.log` suffix. The dispatch specifies the own-file typecheck gate during concurrent work; workspace-wide gates belong to the serial finalization plan. Initial Biome formatting failure is retained in `biome-attempt1.log` and was corrected.
+**SHA-256 before / after**:
+- `src/features/preview/PreviewPane.tsx`: `e67ed3d6ede190ad3d3d4427317e285d8f71c0897280e241920c3ec643e93c70` / `58ac063f0a8a279fbef10ed51c91c5b8391f4fc4e247240cabc839193ce0ce81`.
+- `src/features/preview/PreviewPane.vitest.tsx`: `724213e339bc3c21686c98031378e08bc74c9072370cde154f5a49a1afe1ae5f` / `58cdddd1326d3ab881fc1fb257a85d342f189df197b915623468d15821a12fd5`.
+- This plan before editing: `fe50973b1b1b2125c5807a39b4419bdea6371629b332537a1c82edda96996cae`; its final hash is recorded in plan-local evidence `final-hashes.txt` to avoid a self-referential hash.
+**Notes**: Formal reviews and downstream PDF/video integration remain assigned to later workflow steps.

@@ -1,6 +1,6 @@
 # PDF Inline Rendering: Video Preview Zoom Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Design Reference**: `design-docs/specs/design-pdf-inline-rendering.md#shared-zoom-input-contract`; `design-docs/user-qa/qa-pdf-inline-rendering.md` (default: video zooms, audio does not)
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04
@@ -132,15 +132,39 @@ in the progress log:
 
 ## Done criteria
 
-- [ ] Video zoom works via keys and wheel. Audio has none.
-- [ ] Tests for all of the cases above pass.
-- [ ] Verification commands exit 0. The progress log is updated.
+- [x] Video zoom works via keys and wheel. Audio has none.
+- [x] Tests for all of the cases above pass.
+- [x] Verification commands exit 0. The progress log is updated.
 
 ## Concurrency and drift rules
 
 - Before each edit, read the target file fresh. Record pre- and post-edit
   `shasum -a 256` hashes in the progress log.
 - On unexpected drift, stop and log it. No git operations.
+
+## Amendment 2026-11-04 (session-710 continuation)
+
+The implementation from session 708 is in the working tree, uncommitted and
+only partly reviewed. Keep it. Do not revert it or reimplement it.
+
+- Scope: re-verify only. Edit a file only to fix a defect that a scoped check
+  or the Opus review of this plan finds, and only inside this plan's
+  `writePaths`. Add no new features and do no refactoring.
+- Verification: run in the foreground, logging to
+  `tmp/pdf-inline-rendering-20261104-02/pdf-video-zoom/`.
+  1. `mise exec -- env PATH="$(mise where node)/bin:$PATH" bunx vitest run --config vitest.config.ts src/features/preview/MediaFilePreviewPane.vitest.tsx`
+     -> exit 0. The log must show cases that prove:
+     - video zooms with `+`/`-`;
+     - video zooms with Alt+wheel and Ctrl+wheel;
+     - a plain wheel is not prevented;
+     - audio registers no zoom;
+     - Space and seek behavior are unchanged.
+  2. `bunx biome check src/features/preview/MediaFilePreviewPane.tsx src/features/preview/MediaFilePreviewPane.vitest.tsx --diagnostic-level=warn`
+     -> exit 0.
+  3. `bun run typecheck` -> exit 0. If it fails on files outside this plan,
+     log that as sibling noise.
+- Done when all three results hold and the hashes are recorded. Then set
+  **Status** to `Completed`.
 
 ## Progress Log
 
@@ -149,3 +173,8 @@ in the progress log:
 **Tasks In Progress**: None
 **Blockers**: None
 **Notes**: Wave 2. Runs in parallel with `pdf-canvas-pane`.
+
+### Session: 2026-11-04 implementation
+**Tasks Completed**: Video-only keyboard and modifier-wheel zoom, focused tests, scoped verification.
+**Blockers**: None.
+**Notes**: The 19-test media suite, `bun run typecheck`, own-file TypeScript check, and scoped Biome check exited 0. Complete logs are in `tmp/pdf-inline-rendering-20261104-01/pdf-video-zoom/`. Source and test post-edit SHA-256 hashes are `ffb86858f15570e767e8f8c6747376d798301680ae0cffe22cf33db4f3bc8c2a` and `0897c69330686ee5a74986c04f8ead829cd83f06bbb4871a0e4e662c7af623f6`; pre-edit hashes and plan hashes are recorded in the evidence directory. Formal review and the debug launch are owned by downstream workflow steps.
