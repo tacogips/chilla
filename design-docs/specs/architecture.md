@@ -958,24 +958,57 @@ clamping.
   `installNativeContextMenuGuard`): the `contextmenu` listener that
   `attachPreviewPan` registers on each pan target decides at event time, with
   no dependence on pointer movement, so it is correct when WebKit dispatches
-  `contextmenu` at right-button press. Rules, in order:
+  `contextmenu` at right-button press. Definitions:
+  - "Editable target": the event target, or its parent element when the
+    target is a text node, has an ancestor-or-self matching `input`,
+    `textarea`, or `[contenteditable]` whose `contenteditable` value is not
+    `"false"` (`Element.closest`, light DOM only; `composedPath()` is not
+    used).
+  - "Non-empty selection": `window.getSelection()?.toString()` is a non-empty
+    string (any selection in the window, as in the reference).
+  - "Press record" (`hadSelection: boolean`, or none): the selection state
+    captured at right-button press time, before WebKit's press default action
+    (see "Press-time selection record" below).
+  Rules, in order:
   1. If the active right-button gesture is panning, or the just-ended flag is
      set (a right gesture that panned has just ended), call `preventDefault()`.
-  2. Otherwise, if the event keeps the native menu, do nothing. It keeps the
-     native menu when either (a) `window.getSelection()?.toString()` is a
-     non-empty string (any selection in the window, as in the reference), or
-     (b) the event target, or its parent element when the target is a text
-     node, has an ancestor-or-self matching `input`, `textarea`, or
-     `[contenteditable]` whose `contenteditable` value is not `"false"`
-     (`Element.closest`, light DOM only; `composedPath()` is not used).
-  3. Otherwise call `preventDefault()`. This covers a plain right-click, a
-     right press before any move, and clicks after middle or left gestures.
+  2. Otherwise, if the target is editable, do nothing (native menu kept; the
+     selection is never touched).
+  3. Otherwise, if a press record exists: when `hadSelection` is true, do
+     nothing (native menu kept for a selection the user made before the
+     press). When `hadSelection` is false, the press itself created any
+     current selection (macOS WebKit selects the word under the pointer
+     between `mousedown` and `contextmenu`): if the selection is non-empty,
+     call `window.getSelection().removeAllRanges()`; then call
+     `preventDefault()`. The pan then proceeds on later `pointermove`s.
+  4. Otherwise (no press record: a press while `isActive()` is false, a
+     keyboard-invoked menu, or Windows where `contextmenu` follows the release
+     that already reset the record), the event-time rule is unchanged: a
+     non-empty selection keeps the native menu, else call `preventDefault()`.
+     This covers a plain Windows right-click and clicks after middle or left
+     gestures.
+  Press-time selection record (follow-up to commit 77c1236):
+  - Captured on a `pointerdown` with `button === 2` while `isActive()` is
+    true. That `pointerdown` always replaces any previous record (the next
+    press resets it). A `mousedown` with `button === 2` on the same target
+    captures it only when no record exists, so the record is idempotent per
+    press whichever of the two events WebKit delivers first or alone.
+  - The record is cleared on `pointerup`, `pointercancel`, `detach()` and
+    after it is read by `contextmenu` (rule 3).
+  - A separate `mousedown` listener (registered and removed with the others)
+    calls `preventDefault()` when `button === 2`, `isActive()` is true, the
+    target is not editable and the record has `hadSelection` false, so WebKit
+    does not create the word selection. `preventDefault()` on `pointerdown` is
+    not relied on to suppress the `mousedown` selection default, so the rule 3
+    `removeAllRanges()` stays as the fallback. A pre-existing selection,
+    editable targets, other buttons and inactive panes are never
+    `preventDefault`ed on `mousedown`, so focus and selection there behave as
+    before.
   The just-ended flag is consumed by any `contextmenu` event and cleared by
-  the next `pointerdown`, as before. The guard does not depend on `isActive()`
-  or on the press button, and has no platform or user-agent branch. It is not
-  installed anywhere outside the preview pan targets (Markdown/rendered,
-  source, image, video, PDF). Pointer start, slop, pan, chord release, fling
-  and wheel zoom are unchanged.
+  the next `pointerdown`, as before. The guard has no platform or user-agent
+  branch. It is not installed anywhere outside the preview pan targets
+  (Markdown/rendered, source, image, video, PDF). Pointer start, `PAN_SLOP`,
+  pan, middle-button pan, chord release, fling and wheel zoom are unchanged.
 - Cursor: `App.css` keeps `.preview--right-drag-panning { cursor: grabbing;
   user-select: none; }`. The class is present only while a gesture is panning.
 - Left click, links and text selection: without `dragPanEnabled` a left press
@@ -1055,6 +1088,18 @@ behavior on macOS is a GUI check delegated to the supervising session and a
 user-accepted gap for this run. The decision is recorded in
 `design-docs/user-qa/qa-preview-right-drag-pan.md`.
 
+The macOS GUI re-check of commit 77c1236 on a Markdown preview found a second
+order problem: a right press runs `mousedown`, then selects the word under the
+pointer, then fires `contextmenu`. The event-time selection check therefore saw
+the selection the press itself had made, kept the native menu (Look Up / Copy /
+Inspect Element) and the pan never started over text; PDF canvases have no
+text and panned. The press-time selection record above fixes this: only a
+selection that existed before the press keeps the native menu, and a
+press-created selection is prevented on `mousedown` and, as a fallback,
+cleared in `contextmenu`. jsdom has no selection-on-`mousedown` default, so
+tests simulate it; the real-app result is again a supervising-session GUI
+check and a user-accepted gap.
+
 ### Verification
 
 - `previewPanZoom.vitest.ts`, numeric reference-parity cases:
@@ -1087,7 +1132,25 @@ user-accepted gap for this run. The decision is recorded in
     selection is cleared it is prevented again.
   - After a right gesture that panned, the following `contextmenu` is
     prevented (unchanged), including when a selection is present.
-  Test `contextmenu` events that must reach a descendant use
+  - macOS-order regression (a): with an empty selection, dispatch
+    `pointerdown(button=2, buttons=2)` and `mousedown(button=2)` on a text
+    descendant; the `mousedown` is `defaultPrevented`. Then make the selection
+    non-empty (`selectAllChildren`/`addRange`, simulating WebKit's word
+    select), then dispatch `contextmenu`: it is `defaultPrevented` and
+    `window.getSelection().toString()` is `""`. Later `pointermove`s past the
+    slop pan the scroll container.
+  - macOS-order regression (b): with a pre-existing non-empty selection,
+    the same `pointerdown`/`mousedown`/`contextmenu` sequence leaves the
+    `mousedown` and the `contextmenu` not prevented and the selection text
+    unchanged.
+  - Editable press: the same sequence on an `input`/`[contenteditable]`
+    descendant leaves `mousedown` and `contextmenu` not prevented and does not
+    clear a selection.
+  - Record reset: after `pointerdown(button=2)` then `pointerup` (Windows
+    order), a `contextmenu` with a non-empty selection is not prevented and
+    the selection is untouched (rule 4); after `detach()` no `mousedown` is
+    prevented.
+  Test `contextmenu` and `mousedown` events that must reach a descendant use
   `bubbles: true`.
 - `PreviewPane.vitest.tsx` (rendered, `layout="source"`, direct image),
   `MediaFilePreviewPane.vitest.tsx` (video) and `PdfFilePreviewPane.vitest.tsx`:
@@ -1130,6 +1193,13 @@ user-accepted gap for this run. The decision is recorded in
 - The PDF shortcut tests (`Shift+L`, `Cmd+O`, `+`/`-`, `r`, `Shift+D`,
   `j`/`k`, `Enter`, `q`) and the picker supersession tests in
   `WorkspaceShell.vitest.tsx` keep passing.
+- Rendered Markdown macOS-order regression (`PreviewPane.vitest.tsx`,
+  rendered layout with a text paragraph, `dragPanEnabled` false): with no
+  prior selection, `pointerdown(button=2)` and `mousedown(button=2)` on the
+  paragraph, then a simulated word selection, then `contextmenu` is
+  `defaultPrevented` with the selection cleared, and `pointermove`s past the
+  slop scroll the preview. Other pane vitest files change only if an
+  assertion breaks.
 - Chord-release regression (`PreviewPane.vitest.tsx`, rendered Markdown with
   `dragPanEnabled` false). On one pointer id:
   1. `pointerdown(button=2, buttons=2)`.

@@ -37,4 +37,9 @@ default planning assumption below applies unless the user decides otherwise.
   preview therefore no longer shows Reload or Inspect Element. See
   "Pan Gesture Contract" and "Platform Event Order" in
   `design-docs/specs/architecture.md`.
+- Follow-up (macOS GUI re-check of 77c1236): the selection exemption now uses
+  the selection state recorded at right-button press time, because WebKit
+  selects the word under the pointer before `contextmenu`. Only a selection
+  that existed before the press keeps the native menu. This refines the
+  decision above and opens no new question.
 - Option C is not pursued. No open question remains for this topic.
