@@ -1,0 +1,244 @@
+{
+  "taskId": "pdf-inline-rendering-20261104-01",
+  "workflowMode": "issue-resolution",
+  "implementationBranch": "main",
+  "baseBranch": "main",
+  "remote": "origin",
+  "originalHead": "ef2299d779aeff2fbb99d5123bc2527616303a6d",
+  "evidenceRoot": "tmp/pdf-inline-rendering-20261104-01",
+  "designDocPaths": [
+    "design-docs/specs/design-pdf-inline-rendering.md",
+    "design-docs/specs/architecture.md",
+    "design-docs/user-qa/qa-pdf-inline-rendering.md",
+    "design-docs/user-qa/README.md"
+  ],
+  "reviewContext": {
+    "issueReference": "workflowInput:opus-terra-design-and-implement-review-loop-session-708 (no GitHub issue URL/number supplied)",
+    "userProblem": "PdfFilePreviewPane renders PDFs in an <iframe> with the WebKit built-in viewer, which captures keyboard focus so the app keymap (KeymapProvider, WorkspaceShell, workspaceShortcuts) and the +/- zoom handler never run while a PDF is open. Previews also lack Alt (Option)+wheel zoom.",
+    "requiredOutcomes": [
+      "With a PDF open, Shift+L, Cmd+O/Ctrl+O, +/-, r, Shift+D, j/k (document scroll, or file-list selection when it has focus), Enter and q behave exactly as for other previews, covered by vitest tests.",
+      "Alt+wheel and Ctrl+wheel (including trackpad pinch) zoom Markdown/rendered, image, video and PDF previews using the same pane-local zoom state as +/-; wheel up zooms in; default scroll is prevented only when zooming.",
+      "PDF still reloads on explicit refresh and on revision or localResourceGeneration change.",
+      "README shortcut documentation mentions Alt+wheel zoom.",
+      "bun run typecheck, bun run test, bun run test:dom, bun run lint:biome and CARGO_TERM_QUIET=true cargo check pass; debug build launches and renders a PDF."
+    ],
+    "nonGoals": [
+      "PDF text layer, text selection, links, outline, forms, annotation editing, search and printing (canvas-only rendering).",
+      "PDF scripting (always disabled).",
+      "Persisted zoom or zoom shared across panes/windows.",
+      "Any change to keymap bindings or keymap.toml semantics.",
+      "Audio zoom."
+    ],
+    "constraints": [
+      "Do not modify unrelated files.",
+      "Do not touch .riela/ or riela-lock.json.",
+      "Keep existing shortcut behavior for non-PDF previews unchanged.",
+      "Follow AGENTS.md: Bun scripts for verification, CARGO_TERM_QUIET=true for cargo, no emojis, commit messages without AI attribution.",
+      "pdfjs-dist is pinned to an exact version with no trustedDependencies; the worker and resources are bundled/served via Vite from the app origin.",
+      "Rust/src-tauri changes are limited to the connect-src CSP directive in src-tauri/tauri.conf.json; worker-src only via a runtime-evidenced blocker.",
+      "Each plan edits only its writePaths; no git operations by implementers; workspace-wide gates run only in serial wave-3 pdf-shortcuts-finalize."
+    ],
+    "designDecisionsAndRationale": [
+      {
+        "decision": "Replace the PDF iframe with pdf.js (legacy build) canvases rendered inside the normal .pane__body scroll container, with no iframe and no focusable elements.",
+        "rationale": "Keeps key events in the main document so the existing keymap and activeDocumentNavigation j/k scrolling work without new wiring."
+      },
+      {
+        "decision": "Worker loaded via Vite ?worker import and a workerPort singleton that resets on failure; cMapUrl, standardFontDataUrl and wasmUrl point at app-origin resources copied by a pdfjsResources Vite plugin; useWasm:false, isEvalSupported:false, enableXfa:false.",
+        "rationale": "Avoids fake-worker fallback and remote resources, and minimizes the attack surface for untrusted PDF parsing in the app origin."
+      },
+      {
+        "decision": "A single exported pure predicate previewZoomDirectionFromWheel (Alt or Ctrl + nonzero deltaY) plus exported zoom bounds in PreviewPane.tsx, reused by the PDF and video panes.",
+        "rationale": "One shared zoom input contract instead of copied literals; callers decide preventDefault."
+      },
+      {
+        "decision": "PDF re-renders at zoom*devicePixelRatio with a 50-300% clamp; reload is guarded by a load generation and render-task cancellation.",
+        "rationale": "Sharp output at any zoom and race-free rapid zoom/reload."
+      },
+      {
+        "decision": "Video gains pane-local 50-300% zoom; audio has none.",
+        "rationale": "Accepted QA default in design-docs/user-qa/qa-pdf-inline-rendering.md; images are already zoomed by PreviewPane."
+      },
+      {
+        "decision": "Three waves: (1) pdf-zoom-wheel-contract || pdf-pdfjs-foundation, (2) pdf-canvas-pane || pdf-video-zoom, (3) pdf-shortcuts-finalize serial.",
+        "rationale": "Disjoint writePaths within each wave; workspace-wide gates and the packaged runtime check run once serially after all writes."
+      }
+    ],
+    "intentionalTradeoffs": [
+      "connect-src is widened to the asset protocol so pdf.js can fetch local PDF bytes; script in the app origin can now fetch local files through it.",
+      "Untrusted PDF parsing moves from WebKit's isolated viewer into an app-origin worker (mitigated by disabled eval/scripting/XFA and canvas-only output).",
+      "Eager rendering of all pages: memory grows with pages times scale squared; lazy rendering deferred.",
+      "Concurrent wave plans gate typecheck only on their own files (sibling-noise rule); authoritative gates are in pdf-shortcuts-finalize steps 1-7."
+    ],
+    "supportedEdgeCases": [
+      "Rapid zoom and reload races (render-task cancellation plus load-generation guard).",
+      "Worker initialization failure resets the singleton so a later load can retry.",
+      "CMap (non-embedded CJK) and JPX image PDFs via bundled cmaps, standard fonts and the OpenJPEG nowasm fallback.",
+      "Hidden panes ignore wheel zoom; zoom clamps at the bounds; plain wheel scrolls normally.",
+      "File-list focus: j/k move selection and Enter opens while a PDF is previewed."
+    ],
+    "outOfScopeEdgeCases": [
+      "Text selection, links, forms, search and printing within PDFs.",
+      "Lazy/virtualized page rendering for very large PDFs.",
+      "Audio element zoom."
+    ],
+    "residualRisks": [
+      "Worker CSP on tauri://localhost and CMap/JPX fixture rendering are known only at pdf-shortcuts-finalize runtime check (step 8).",
+      "README wording 'under the pointer' slightly exceeds the design text (low).",
+      "vite.config.ts is not covered by bun run typecheck; the pdfjsResources plugin is proven by the foundation smoke check and finalize step 6 (low).",
+      "Sibling-noise rules depend on own-file grep; authoritative serial gates in finalize steps 1-7 catch anything masked (low)."
+    ],
+    "sourcePaths": [
+      "src/features/preview/PdfFilePreviewPane.tsx",
+      "src/features/preview/PreviewPane.tsx",
+      "src/features/preview/MediaFilePreviewPane.tsx",
+      "src/features/keymap/KeymapProvider.tsx",
+      "src/features/workspace/WorkspaceShell.tsx",
+      "src/features/workspace/workspaceShortcuts.tsx",
+      "src/app/App.css",
+      "vite.config.ts",
+      "src-tauri/tauri.conf.json",
+      "README.md"
+    ]
+  },
+  "plans": [
+    {
+      "planId": "pdf-zoom-wheel-contract",
+      "planPath": "impl-plans/active/pdf-zoom-wheel-contract.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/preview/PreviewPane.tsx",
+        "src/features/preview/PreviewPane.vitest.tsx",
+        "impl-plans/active/pdf-zoom-wheel-contract.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "previewZoomDirectionFromWheel and PreviewZoomDirection are exported from PreviewPane.tsx; the predicate returns null unless (altKey || ctrlKey) && deltaY !== 0, 'in' for deltaY < 0, 'out' for deltaY > 0, and never calls preventDefault.",
+        "PREVIEW_ZOOM_MIN, RENDERED_PREVIEW_ZOOM_MAX and IMAGE_PREVIEW_ZOOM_MAX are exported with unchanged values.",
+        "PreviewPane handleWheel zooms on Alt or Ctrl wheel, prevents default only when zooming, ignores plain wheel and hidden panes, and clamps.",
+        "Scoped vitest, own-file typecheck and biome checks exit 0; progress log updated."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/preview/PreviewPane.vitest.tsx",
+        "! bunx tsc --noEmit 2>&1 | grep -E \"src/features/preview/PreviewPane\"",
+        "bunx biome check src/features/preview/PreviewPane.tsx src/features/preview/PreviewPane.vitest.tsx --diagnostic-level=warn"
+      ]
+    },
+    {
+      "planId": "pdf-pdfjs-foundation",
+      "planPath": "impl-plans/active/pdf-pdfjs-foundation.md",
+      "dependsOn": [],
+      "writePaths": [
+        "package.json",
+        "bun.lock",
+        "node_modules",
+        "dist",
+        "target",
+        "vite.config.ts",
+        "src/features/preview/pdfjs.ts",
+        "src/features/preview/pdfjs.vitest.ts",
+        "src-tauri/tauri.conf.json",
+        "impl-plans/active/pdf-pdfjs-foundation.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": ["node_modules", "dist", "target"],
+      "acceptanceCriteria": [
+        "pdfjs-dist is pinned to an exact version in package.json with a bun.lock integrity entry and no trustedDependencies.",
+        "src/features/preview/pdfjs.ts exports the pinned contract (?worker workerPort singleton with failure reset, cMapUrl/standardFontDataUrl/wasmUrl, useWasm:false, isEvalSupported:false, enableXfa:false) and its tests pass.",
+        "The Vite pdfjsResources plugin serves cmaps, standard_fonts and wasm resources in dev and copies them to dist/pdfjs on build.",
+        "src-tauri/tauri.conf.json CSP change is limited to connect-src; cargo check passes.",
+        "Scoped verification steps 1, 3, 4 and 6 exit 0; step 2 shows no errors in this plan's files; step 5 smoke results recorded; progress log updated."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/preview/pdfjs.vitest.ts",
+        "! bunx tsc --noEmit 2>&1 | grep -E \"src/features/preview/pdfjs\"",
+        "bunx biome check vite.config.ts src/features/preview/pdfjs.ts src/features/preview/pdfjs.vitest.ts package.json --diagnostic-level=warn",
+        "CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml",
+        "grep -n '\"pdfjs-dist\": \"[0-9]' package.json"
+      ]
+    },
+    {
+      "planId": "pdf-canvas-pane",
+      "planPath": "impl-plans/active/pdf-canvas-pane.md",
+      "dependsOn": ["pdf-zoom-wheel-contract", "pdf-pdfjs-foundation"],
+      "writePaths": [
+        "src/features/preview/PdfFilePreviewPane.tsx",
+        "src/features/preview/PdfFilePreviewPane.vitest.tsx",
+        "src/app/App.css",
+        "impl-plans/active/pdf-canvas-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "PdfFilePreviewPane.tsx contains no <iframe> or focusable elements and imports pdf.js only through ./pdfjs.",
+        "Pages render to canvases inside .pane__body at zoom*devicePixelRatio with 50-300% clamp via +/- and Alt/Ctrl wheel using the shared helper and constants.",
+        "Reload on refresh/revision/localResourceGeneration change is generation-guarded with render-task cancellation.",
+        "Stale PDF iframe CSS (preview-pdf-frame, preview--embedded-pdf) removed from src; new PDF canvas CSS present in App.css.",
+        "Scoped vitest, own-file typecheck, biome and stale-selector checks pass; progress log updated."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/preview/PdfFilePreviewPane.vitest.tsx",
+        "! bunx tsc --noEmit 2>&1 | grep -E \"src/features/preview/PdfFilePreviewPane\"",
+        "bunx biome check src/features/preview/PdfFilePreviewPane.tsx src/features/preview/PdfFilePreviewPane.vitest.tsx src/app/App.css --diagnostic-level=warn",
+        "! grep -rn -e \"preview-pdf-frame\" -e \"preview--embedded-pdf\" src"
+      ]
+    },
+    {
+      "planId": "pdf-video-zoom",
+      "planPath": "impl-plans/active/pdf-video-zoom.md",
+      "dependsOn": ["pdf-zoom-wheel-contract"],
+      "writePaths": [
+        "src/features/preview/MediaFilePreviewPane.tsx",
+        "src/features/preview/MediaFilePreviewPane.vitest.tsx",
+        "impl-plans/active/pdf-video-zoom.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Video previews gain pane-local 50-300% zoom via +/- and Alt/Ctrl wheel using the shared helper; audio has no zoom handlers or header percentage.",
+        "Space play/pause, Ctrl+D/Ctrl+U seeks and autoplay behavior unchanged.",
+        "Scoped vitest, own-file typecheck and biome checks exit 0; progress log updated."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/preview/MediaFilePreviewPane.vitest.tsx",
+        "! bunx tsc --noEmit 2>&1 | grep -E \"src/features/preview/MediaFilePreviewPane\"",
+        "bunx biome check src/features/preview/MediaFilePreviewPane.tsx src/features/preview/MediaFilePreviewPane.vitest.tsx --diagnostic-level=warn"
+      ]
+    },
+    {
+      "planId": "pdf-shortcuts-finalize",
+      "planPath": "impl-plans/active/pdf-shortcuts-finalize.md",
+      "dependsOn": ["pdf-canvas-pane", "pdf-video-zoom"],
+      "writePaths": [
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "README.md",
+        "dist",
+        "target",
+        "impl-plans/active/pdf-shortcuts-finalize.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": ["dist", "target"],
+      "acceptanceCriteria": [
+        "WorkspaceShell vitest tests prove L, Cmd+O, +/-, r, D, j/k (document scroll and file-list selection), Enter and q work with a PDF open.",
+        "README shortcut table documents Alt+wheel (and Ctrl+wheel/pinch) zoom.",
+        "Final verification steps 1-7 exit 0 with complete logs recorded; dist contains pdfjs cmaps, standard_fonts, wasm fallback and the pdf.worker asset.",
+        "Packaged debug runtime check (step 8) renders plain, CMap and JPX fixture PDFs with no CSP, fake-worker, CMap or OpenJPEG console errors, or records an explicit verification gap.",
+        "No production code changes; defects are reported to the owning plan."
+      ],
+      "verification": [
+        "bun run typecheck",
+        "bun run test",
+        "bun run test:dom",
+        "bun run lint:biome",
+        "CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml",
+        "bun run build",
+        "test \"$(ls dist/pdfjs/cmaps | grep -c bcmap)\" -gt 0",
+        "test -f dist/pdfjs/wasm/openjpeg_nowasm_fallback.js",
+        "test \"$(ls dist/pdfjs/standard_fonts | wc -l)\" -gt 0",
+        "ls dist/assets | grep -i pdf.worker",
+        "CARGO_TERM_QUIET=true bun run tauri build --debug --no-bundle"
+      ]
+    }
+  ]
+}

@@ -753,8 +753,11 @@ not change the Rust preview payload or introduce a Tauri command.
 
 - `+` increases the active rendered preview zoom by 10 percentage points.
 - `-` decreases the active rendered preview zoom by 10 percentage points.
-- `Ctrl` plus mouse-wheel up or down applies the same increment or decrement
-  while the pointer is over the rendered preview.
+- `Alt` (Option) or `Ctrl` plus mouse-wheel up or down applies the same
+  increment or decrement while the pointer is over the preview. This includes
+  macOS trackpad pinch, which arrives as `ctrlKey` wheel events. Wheel events
+  without a modifier keep normal scrolling. A single shared helper decides
+  whether a wheel event zooms (see `design-pdf-inline-rendering.md`).
 - Preview zoom is clamped from 50% through 300% for Markdown and other rendered
   content, and from 50% through 800% for direct SVG and raster image previews.
 - Keyboard zoom is ignored while the user is typing in an editable control.
@@ -767,9 +770,13 @@ image previews grow beyond the pane width with normal pane scrolling.
 
 ### Scope Boundary
 
-Raw Markdown and CSV editors are not zoom targets. PDF keeps its embedded viewer
-controls, EPUB keeps its pagination model, and audio/video playback shortcuts are
-unchanged. No persisted preference or cross-window synchronization is required.
+Raw Markdown and CSV editors are not zoom targets. EPUB keeps its pagination
+model, and audio has no zoom. PDF and video previews use the same keyboard and
+wheel zoom contract, each with its own pane-local zoom state. PDF pages are
+rendered in-app with pdf.js, which re-renders the canvases at the zoomed scale.
+See `design-docs/specs/design-pdf-inline-rendering.md`. Audio/video playback
+shortcuts are unchanged. No persisted preference or cross-window synchronization
+is required.
 
 ---
 
@@ -790,13 +797,13 @@ reordered entries can appear without navigating away and back.
   filter, and selection when those paths still exist.
 - Browser-rendered resources whose URL would otherwise remain stable use the
   file revision supplied by the backend to invalidate WebView caches. Image HTML
-  and PDF iframe URLs must therefore change when the source file modification
-  marker changes.
+  and the PDF document URL loaded by pdf.js must therefore change when the
+  source file modification marker changes.
 - A direct image preview, including SVG, applies its own revision to the
   resolved image URL. Relative images embedded in Markdown continue to use
   their own resource resolution without inheriting the document revision.
 - An explicit workspace refresh advances a local resource generation even if
-  the filesystem modification marker is unchanged. Direct images, PDF frames,
+  the filesystem modification marker is unchanged. Direct images, PDF documents,
   local assets embedded in Markdown, and asset-protocol audio/video fallbacks
   receive a fresh URL. Remote links keep their existing URLs. Streamed audio
   and video already receive newly registered URLs on each preview request.
