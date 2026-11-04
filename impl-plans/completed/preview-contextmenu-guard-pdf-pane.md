@@ -1,6 +1,6 @@
 # Preview Context-Menu Guard PDF Pane Tests Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: preview-contextmenu-guard-pdf-pane
 **Wave**: 2
 **Depends On**: preview-contextmenu-guard-module
@@ -42,8 +42,8 @@ assertion.
 
 ## Acceptance Criteria
 
-- [ ] No `contextmenu` event in the file is asserted `defaultPrevented === false`.
-- [ ] The file passes against the module change.
+- [x] No `contextmenu` event in the file is asserted `defaultPrevented === false`.
+- [x] The file passes against the module change.
 
 ## Verification
 
@@ -70,3 +70,8 @@ Mirrors `impl-plans/active/preview-contextmenu-guard-dispatch.json`.
 ### Session: 2026-11-04 (planning)
 **Tasks Completed**: plan authored
 **Notes**: Implementation pending.
+
+### Session: 2026-11-04 (implementation)
+**Tasks Completed**: Changed the plain PDF contextmenu assertion to expect prevention; the moved-right assertion and gesture checks remain unchanged. Other false expectations concern wheel events.
+**Evidence**: `tmp/preview-contextmenu-guard/preview-contextmenu-guard-pdf-pane/` contains pre/post hashes, edit intentions and complete logs. Test SHA-256 before: `8db37407337dfd2d9150137db99a8e7a3cb4ffc7f78a2b14ad759ff1a4263f1d`; after: `84618c23bbc82f1c113b71c60d122bc87e0a77647d44fb83e4b43f24edac4974`. Plan pre/post hashes are recorded separately in `pre-sha256.txt` and `post-sha256.txt`.
+**Verification**: `mise exec -- env PATH="$(mise where node)/bin:$PATH" bunx vitest run --config vitest.config.ts src/features/preview/PdfFilePreviewPane.vitest.tsx` exited 0 (9 passed; `vitest.log`); `bunx biome check src/features/preview/PdfFilePreviewPane.vitest.tsx --diagnostic-level=warn` exited 0 (`biome.log`). These checks ran on the shared tree; final integration review remains downstream.

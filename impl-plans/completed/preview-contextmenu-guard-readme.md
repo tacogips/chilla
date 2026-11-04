@@ -1,6 +1,6 @@
 # Preview Context-Menu Guard README Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: preview-contextmenu-guard-readme
 **Wave**: 1 (no dependencies)
 **Depends On**: none
@@ -39,8 +39,8 @@ edit the line where it is found. If it is not found, stop and report.
 
 ## Acceptance Criteria
 
-- [ ] `grep -n "plain right-click opens the context menu" README.md` finds nothing (exit 1).
-- [ ] `grep -n "native context menu is suppressed over previews except on selected text or editable fields" README.md` finds one line.
+- [x] `grep -n "plain right-click opens the context menu" README.md` finds nothing (exit 1).
+- [x] `grep -n "native context menu is suppressed over previews except on selected text or editable fields" README.md` finds one line.
 
 ## Verification
 
@@ -67,3 +67,7 @@ Mirrors `impl-plans/active/preview-contextmenu-guard-dispatch.json`.
 ### Session: 2026-11-04 (planning)
 **Tasks Completed**: plan authored
 **Notes**: Implementation pending.
+
+### Session: 2026-11-04 (implementation)
+**Tasks Completed**: Updated the single README pan line to match the accepted context-menu contract.
+**Notes**: Plan-local pre/post SHA-256 and verification logs are under `tmp/preview-contextmenu-guard/preview-contextmenu-guard-readme/`. Formal review and plan archiving remain downstream.

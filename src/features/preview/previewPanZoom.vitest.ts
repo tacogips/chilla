@@ -15,6 +15,7 @@ import {
 } from "./previewPanZoom";
 
 afterEach(() => {
+  window.getSelection()?.removeAllRanges();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -57,7 +58,14 @@ function setup(
     target.dispatchEvent(event);
     return event;
   };
-  const menu = () => send(new Event("contextmenu", { cancelable: true }));
+  const menu = (dispatchTarget: Node = target) => {
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+    });
+    dispatchTarget.dispatchEvent(event);
+    return event;
+  };
   return { target, handle, send, menu };
 }
 function frames(reduced = false) {
@@ -200,7 +208,7 @@ describe("fling math", () => {
   });
 });
 describe("pan", () => {
-  it("respects slop and suppresses only a moved right menu", () => {
+  it("respects slop and suppresses right menus", () => {
     const { target, send, menu } = setup();
     expect(PAN_SLOP).toBe(4);
     expect(send(pointer("pointerdown")).defaultPrevented).toBe(true);
@@ -211,10 +219,10 @@ describe("pan", () => {
     expect(target.classList.contains(PREVIEW_PANNING_CLASS)).toBe(true);
     send(pointer("pointerup", 10));
     expect(menu().defaultPrevented).toBe(true);
-    expect(menu().defaultPrevented).toBe(false);
+    expect(menu().defaultPrevented).toBe(true);
     send(pointer("pointerdown"));
     send(pointer("pointerup"));
-    expect(menu().defaultPrevented).toBe(false);
+    expect(menu().defaultPrevented).toBe(true);
   });
   it("supports middle and optional primary left, respects active and owner", () => {
     const owner = document.createElement("div");
@@ -229,7 +237,7 @@ describe("pan", () => {
     send(pointer("pointerup", 10, 0, 1, 1, 0));
     expect(owner.scrollLeft).toBe(90);
     expect(target.scrollLeft).toBe(100);
-    expect(menu().defaultPrevented).toBe(false);
+    expect(menu().defaultPrevented).toBe(true);
     send(pointer("pointerdown", 0, 0, 0, 0, 1));
     send(pointer("pointermove", 10, 0, 1, 0, 1));
     expect(owner.scrollLeft).toBe(80);
@@ -278,6 +286,76 @@ describe("pan", () => {
     send(pointer("pointerdown"));
     send(pointer("pointermove", 10));
     expect(target.scrollLeft).toBe(90);
+  });
+});
+describe("native context menu guard", () => {
+  it("prevents the press-time menu and permits subsequent panning", () => {
+    const { target, send, menu } = setup();
+    send(pointer("pointerdown"));
+    expect(menu().defaultPrevented).toBe(true);
+    expect(send(pointer("pointermove", 10)).defaultPrevented).toBe(true);
+    expect(target.scrollLeft).toBe(90);
+    expect(target.classList.contains(PREVIEW_PANNING_CLASS)).toBe(true);
+    send(pointer("pointerup", 10));
+    expect(menu().defaultPrevented).toBe(true);
+  });
+
+  it("prevents a menu without a gesture", () => {
+    expect(setup().menu().defaultPrevented).toBe(true);
+  });
+
+  it("keeps native menus for editable targets and their children", () => {
+    const { target, menu } = setup();
+    for (const tag of ["input", "textarea"]) {
+      const editable = document.createElement(tag);
+      target.append(editable);
+      expect(menu(editable).defaultPrevented).toBe(false);
+    }
+    const editable = document.createElement("div");
+    editable.setAttribute("contenteditable", "true");
+    const child = document.createElement("span");
+    const text = document.createTextNode("text");
+    child.append(text);
+    editable.append(child);
+    target.append(editable);
+    expect(menu(child).defaultPrevented).toBe(false);
+    expect(menu(text).defaultPrevented).toBe(false);
+    const empty = document.createElement("div");
+    empty.setAttribute("contenteditable", "");
+    target.append(empty);
+    expect(menu(empty).defaultPrevented).toBe(false);
+    const disabled = document.createElement("div");
+    disabled.setAttribute("contenteditable", "false");
+    target.append(disabled);
+    expect(menu(disabled).defaultPrevented).toBe(true);
+  });
+
+  it("keeps the native menu for a selection, except during or just after a right pan", () => {
+    const { target, send, menu } = setup();
+    const text = document.createTextNode("selected text");
+    target.append(text);
+    document.body.append(target);
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    const selection = window.getSelection();
+    if (!selection) throw new Error("selection unavailable");
+    selection.addRange(range);
+    expect(menu().defaultPrevented).toBe(false);
+    send(pointer("pointerdown"));
+    send(pointer("pointermove", 10));
+    expect(menu().defaultPrevented).toBe(true);
+    send(pointer("pointerup", 10));
+    expect(menu().defaultPrevented).toBe(true);
+    expect(menu().defaultPrevented).toBe(false);
+    selection.removeAllRanges();
+    expect(menu().defaultPrevented).toBe(true);
+    target.remove();
+  });
+
+  it("removes the menu listener on detach", () => {
+    const { handle, menu } = setup();
+    handle.detach();
+    expect(menu().defaultPrevented).toBe(false);
   });
 });
 describe("fling", () => {

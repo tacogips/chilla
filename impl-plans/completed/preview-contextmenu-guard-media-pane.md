@@ -1,6 +1,6 @@
 # Preview Context-Menu Guard Video Pane Tests Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: preview-contextmenu-guard-media-pane
 **Wave**: 2
 **Depends On**: preview-contextmenu-guard-module
@@ -43,8 +43,8 @@ assertions.
 
 ## Acceptance Criteria
 
-- [ ] `grep -n "expect(menu()).toBe(false)" src/features/preview/MediaFilePreviewPane.vitest.tsx` finds nothing.
-- [ ] The file passes against the module change.
+- [x] `grep -n "expect(menu()).toBe(false)" src/features/preview/MediaFilePreviewPane.vitest.tsx` finds nothing.
+- [x] The file passes against the module change.
 
 ## Verification
 
@@ -71,3 +71,8 @@ Mirrors `impl-plans/active/preview-contextmenu-guard-dispatch.json`.
 ### Session: 2026-11-04 (planning)
 **Tasks Completed**: plan authored
 **Notes**: Implementation pending.
+
+### Session: 2026-11-04 (implementation)
+**Tasks Completed**: Updated the two video context-menu expectations; retained all other assertions. Formal review and archiving remain downstream.
+**Evidence**: `tmp/preview-contextmenu-guard/preview-contextmenu-guard-media-pane/` contains pre/post hashes, edit intentions and complete logs. Source SHA-256 before: `4623d8dc9e39b3eae6b7561348ad8b263dbcad11e616fba0746bb3b486e5036d`; after: `f0f77d3742dfa5d31ce3dc5194a9a3df2f055cd42a051ec316a9adf392e8cbad`. Plan before: `b6ca195c096897564bc6d9d3ccacbca49b934ef9ea6f560ba2c854bb4672154a`; final plan hash is recorded in `post-sha256.txt`.
+**Verification**: `mise exec -- env PATH="$(mise where node)/bin:$PATH" bunx vitest run --config vitest.config.ts src/features/preview/MediaFilePreviewPane.vitest.tsx` exited 0 (22/22 tests; `vitest.log`). `bunx biome check src/features/preview/MediaFilePreviewPane.vitest.tsx --diagnostic-level=warn` exited 0 (`biome.log`). `rg -n 'contextmenu|expect\(menu\(\)\)' src/features/preview/MediaFilePreviewPane.vitest.tsx` exited 0 and shows one helper and three true assertions (`assertions.log`). Tests ran on the shared working tree.

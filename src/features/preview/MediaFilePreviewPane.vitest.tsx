@@ -178,12 +178,12 @@ describe("MediaFilePreviewPane", () => {
     expect(menu()).toBe(true);
     pointer("pointerdown", 2, 2, 0);
     pointer("pointerup", 2, 0, 0);
-    expect(menu()).toBe(false);
+    expect(menu()).toBe(true);
     pointer("pointerdown", 1, 4, 0);
     pointer("pointermove", 1, 4, 10);
     pointer("pointerup", 1, 0, 10);
     expect(body.scrollLeft).toBe(80);
-    expect(menu()).toBe(false);
+    expect(menu()).toBe(true);
     vi.mocked(body.setPointerCapture).mockClear();
     root.querySelector(".pane")?.classList.add("pane--hidden");
     pointer("pointerdown", 2, 2, 0);

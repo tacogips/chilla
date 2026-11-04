@@ -251,7 +251,7 @@ Default global shortcuts:
 - `Shift+C`: toggle syntax highlighting for text, CSV/TSV raw, and Markdown previews
 - `+` / `-`: native preview zoom, from 50%-300% for rendered content, PDF and video or 50%-800% for direct SVG/raster images, in 10% steps (not configured by keymap.toml)
 - `Ctrl`/`Cmd`+mouse wheel or trackpad pinch: smooth preview zoom under the pointer for Markdown/rendered, source, image, video and PDF previews (not configured by keymap.toml)
-- Right- or middle-button drag pans Markdown/rendered, source, image, video and PDF previews with momentum; a plain right-click opens the context menu.
+- Right- or middle-button drag pans Markdown/rendered, source, image, video and PDF previews with momentum; the native context menu is suppressed over previews except on selected text or editable fields.
 - `Shift+D`: toggle light/dark theme, including while browsing files
 
 Theme switching uses `Shift+D` so `Shift+S` remains dedicated to content search.

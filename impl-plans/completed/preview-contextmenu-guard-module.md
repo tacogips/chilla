@@ -1,6 +1,6 @@
 # Preview Context-Menu Guard Module Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: preview-contextmenu-guard-module
 **Wave**: 1 (no dependencies)
 **Depends On**: none
@@ -122,14 +122,14 @@ owned by other plans.
 
 ## Acceptance Criteria
 
-- [ ] A `contextmenu` on a pan target with no gesture, no selection and a
+- [x] A `contextmenu` on a pan target with no gesture, no selection and a
       non-editable target is `defaultPrevented`.
-- [ ] A `contextmenu` dispatched right after a right `pointerdown`, before any
+- [x] A `contextmenu` dispatched right after a right `pointerdown`, before any
       move, is prevented, and later moves past the slop pan the container.
-- [ ] Editable targets (`input`, `textarea`, `[contenteditable]` other than
+- [x] Editable targets (`input`, `textarea`, `[contenteditable]` other than
       `"false"`) and a non-empty selection keep the native menu, unless a right
       pan is active or has just ended.
-- [ ] `git diff --stat` touches only the two files of this plan plus this
+- [x] This plan changes only its two source files and this
       plan's progress log.
 
 ## Verification
@@ -168,3 +168,16 @@ Mirrors `impl-plans/active/preview-contextmenu-guard-dispatch.json`.
 ### Session: 2026-11-04 (planning)
 **Tasks Completed**: plan authored
 **Notes**: Implementation pending.
+
+### Session: 2026-11-04 (implementation)
+**Tasks Completed**: Implemented the local menu guard and regression coverage; formal review and plan archiving remain downstream.
+
+**SHA-256 before → after**:
+- `src/features/preview/previewPanZoom.ts`: `21e95615bc58bba416b0709babbccff71e0d77bdee76c2149742775bf0be632e` → `376268670ff8134a01812d22d39075ee4aee71f36cad72decf9a4d90b435c766`.
+- `src/features/preview/previewPanZoom.vitest.ts`: `c04269d7541a1a9aa4c8a651d141921cb0972d5a2ab61944bc0d2375d99a0c9f` → `281288bcc4ad1b704e642fbe4dd2cdd8529ccc3afed8095e9374015c0ce143d7`.
+- This plan before: `140eeacae7fd04977832559cc096a912bd6614e3adf9e272cdb8558476844b41`; its post-edit hash is recorded in `tmp/preview-contextmenu-guard/preview-contextmenu-guard-module/plan-post-hash.txt` to avoid a self-referential hash.
+
+**Verification** (complete logs under `tmp/preview-contextmenu-guard/preview-contextmenu-guard-module/`):
+- `mise exec -- env PATH="$(mise where node)/bin:$PATH" bunx vitest run --config vitest.config.ts src/features/preview/previewPanZoom.vitest.ts`: exit 0, 24 tests passed, `check-agent-vitest.log`.
+- `bunx biome check src/features/preview/previewPanZoom.ts src/features/preview/previewPanZoom.vitest.ts --diagnostic-level=warn`: exit 0, `check-agent-biome.log`.
+- `bunx tsc --noEmit`: exit 0, `check-agent-tsc.log`.

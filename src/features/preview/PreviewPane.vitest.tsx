@@ -812,7 +812,7 @@ describe("PreviewPane", () => {
     expect(preview.scrollTop).toBe(55);
   });
 
-  it("pans rendered content with right and middle buttons and suppresses only moved right menus", () => {
+  it("pans rendered content with right and middle buttons and suppresses the native menu", () => {
     renderPreview();
     const preview = previewBodyWithPointerCapture();
     preview.scrollTop = 100;
@@ -827,14 +827,14 @@ describe("PreviewPane", () => {
     preview.dispatchEvent(pointerEvent("pointerup", 2, 0, 0, 2));
     const plain = new MouseEvent("contextmenu", { cancelable: true });
     preview.dispatchEvent(plain);
-    expect(plain.defaultPrevented).toBe(false);
+    expect(plain.defaultPrevented).toBe(true);
     preview.dispatchEvent(pointerEvent("pointerdown", 3, 0, 0, 1));
     preview.dispatchEvent(pointerEvent("pointermove", 3, 0, 10, 1));
     preview.dispatchEvent(pointerEvent("pointerup", 3, 0, 10, 1));
     expect(preview.scrollTop).toBe(80);
     const middle = new MouseEvent("contextmenu", { cancelable: true });
     preview.dispatchEvent(middle);
-    expect(middle.defaultPrevented).toBe(false);
+    expect(middle.defaultPrevented).toBe(true);
   });
 
   it("ends a chorded right drag when the right button is released", () => {

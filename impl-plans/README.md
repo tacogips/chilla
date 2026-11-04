@@ -62,16 +62,16 @@ Large features are split into multiple related plans with cross-references.
 | ---- | ------- | ---------------- |
 | `macos-app-store-release.md` | 2026-09-09 | `design-docs/specs/design-macos-dmg-release.md#mac-app-store-distribution` |
 | `official-homebrew-cask.md` | 2026-07-15 | `design-docs/specs/design-macos-dmg-release.md#official-homebrew-cask-distribution` |
-| `preview-contextmenu-guard-module.md` | 2026-11-04 | `design-docs/specs/architecture.md#pan-gesture-contract` |
-| `preview-contextmenu-guard-readme.md` | 2026-11-04 | `design-docs/specs/architecture.md#verification` |
-| `preview-contextmenu-guard-preview-pane.md` | 2026-11-04 | `design-docs/specs/architecture.md#verification` |
-| `preview-contextmenu-guard-media-pane.md` | 2026-11-04 | `design-docs/specs/architecture.md#verification` |
-| `preview-contextmenu-guard-pdf-pane.md` | 2026-11-04 | `design-docs/specs/architecture.md#verification` |
 
 ## Completed Plans
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| [Preview Context-Menu Guard Module](completed/preview-contextmenu-guard-module.md) | 2026-11-04 | [Pan gesture contract](../design-docs/specs/architecture.md#pan-gesture-contract) |
+| [Preview Context-Menu Guard README](completed/preview-contextmenu-guard-readme.md) | 2026-11-04 | [Verification](../design-docs/specs/architecture.md#verification) |
+| [Preview Context-Menu Guard PreviewPane Tests](completed/preview-contextmenu-guard-preview-pane.md) | 2026-11-04 | [Verification](../design-docs/specs/architecture.md#verification) |
+| [Preview Context-Menu Guard Video Pane Tests](completed/preview-contextmenu-guard-media-pane.md) | 2026-11-04 | [Verification](../design-docs/specs/architecture.md#verification) |
+| [Preview Context-Menu Guard PDF Pane Tests](completed/preview-contextmenu-guard-pdf-pane.md) | 2026-11-04 | [Verification](../design-docs/specs/architecture.md#verification) |
 | [Preview Pan/Zoom Shared Module](completed/preview-pan-zoom-module.md) | 2026-11-04 | [Shared preview pan and zoom gestures](../design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures) |
 | [Preview Pan/Zoom PreviewPane Wiring](completed/preview-pan-zoom-preview-pane.md) | 2026-11-04 | [Shared preview pan and zoom gestures](../design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures) |
 | [Preview Pan/Zoom Video Pane Wiring](completed/preview-pan-zoom-media-pane.md) | 2026-11-04 | [Shared preview pan and zoom gestures](../design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures) |

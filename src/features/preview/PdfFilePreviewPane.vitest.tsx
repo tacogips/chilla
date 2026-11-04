@@ -301,7 +301,7 @@ describe("PdfFilePreviewPane", () => {
     pointer("pointerup", 2, 0, 100);
     const plain = new MouseEvent("contextmenu", { cancelable: true });
     body.dispatchEvent(plain);
-    expect(plain.defaultPrevented).toBe(false);
+    expect(plain.defaultPrevented).toBe(true);
     pointer("pointerdown", 1, 4, 100);
     vi.advanceTimersByTime(20);
     pointer("pointermove", 1, 4, 70);

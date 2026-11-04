@@ -139,6 +139,22 @@ export function applyWheelZoom(
   return Math.min(max, Math.max(50, current * factor));
 }
 
+const keepsNativeContextMenu = (event: MouseEvent): boolean => {
+  if (window.getSelection?.()?.toString()) return true;
+  const target = event.target;
+  const element =
+    target instanceof Element
+      ? target
+      : target instanceof Text
+        ? target.parentElement
+        : null;
+  return (
+    element?.closest(
+      'input, textarea, [contenteditable]:not([contenteditable="false"])',
+    ) != null
+  );
+};
+
 export function attachPreviewPan(
   target: HTMLElement,
   options: PreviewPanOptions,
@@ -282,6 +298,7 @@ export function attachPreviewPan(
   const contextMenu = (event: MouseEvent): void => {
     if ((drag?.bit === 2 && drag.panning) || suppressMenu)
       event.preventDefault();
+    else if (!keepsNativeContextMenu(event)) event.preventDefault();
     suppressMenu = false;
   };
   target.addEventListener("pointerdown", pointerDown);

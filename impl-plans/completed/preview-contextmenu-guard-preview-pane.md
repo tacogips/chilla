@@ -1,6 +1,6 @@
 # Preview Context-Menu Guard PreviewPane Tests Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: preview-contextmenu-guard-preview-pane
 **Wave**: 2
 **Depends On**: preview-contextmenu-guard-module
@@ -49,8 +49,8 @@ assertions.
 
 ## Acceptance Criteria
 
-- [ ] `grep -n "defaultPrevented).toBe(false)" src/features/preview/PreviewPane.vitest.tsx` shows no line belonging to a `contextmenu` event.
-- [ ] The PreviewPane vitest file passes against the module change.
+- [x] `grep -n "defaultPrevented).toBe(false)" src/features/preview/PreviewPane.vitest.tsx` shows no line belonging to a `contextmenu` event.
+- [x] The PreviewPane vitest file passes against the module change.
 
 ## Verification
 
@@ -77,3 +77,9 @@ Mirrors `impl-plans/active/preview-contextmenu-guard-dispatch.json`.
 ### Session: 2026-11-04 (planning)
 **Tasks Completed**: plan authored
 **Notes**: Implementation pending.
+
+### Session: 2026-11-04 (implementation)
+**Tasks Completed**: Renamed the pan test and changed the plain right-click and post-middle context-menu assertions to `true`; the chord-release test is unchanged.
+**Verification**: Scoped Vitest passed 33/33 (exit 0, `tmp/preview-contextmenu-guard/preview-contextmenu-guard-preview-pane/vitest.log`); scoped Biome passed (exit 0, `tmp/preview-contextmenu-guard/preview-contextmenu-guard-preview-pane/biome.log`).
+**Hashes**: Test pre-edit `2d03fc4c7dddd72baa277e93cfc6c9b559f48fb219687caf192e338256989507`, post-edit `7ea04a66a9556b874a0f86ce9eb266927d4b9f72cc6d47399600172834a96e27`. Plan pre-edit `33646abc3653cb60848239a44e62e55b22fdb381c08a2b24c1b1b317e5bd832e`; post-edit hash is recorded in `tmp/preview-contextmenu-guard/preview-contextmenu-guard-preview-pane/plan-post-hash.txt`.
+**Notes**: Formal review and plan archiving remain downstream. Verification used the shared tree.
