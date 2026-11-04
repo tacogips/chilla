@@ -67,6 +67,8 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| [Preview Selection Guard Module](completed/preview-selection-guard-module.md) | 2026-11-04 | [Pan gesture contract](../design-docs/specs/architecture.md#pan-gesture-contract) |
+| [Preview Selection Guard PreviewPane Test](completed/preview-selection-guard-preview-pane.md) | 2026-11-04 | [Verification](../design-docs/specs/architecture.md#verification) |
 | [Preview Context-Menu Guard Module](completed/preview-contextmenu-guard-module.md) | 2026-11-04 | [Pan gesture contract](../design-docs/specs/architecture.md#pan-gesture-contract) |
 | [Preview Context-Menu Guard README](completed/preview-contextmenu-guard-readme.md) | 2026-11-04 | [Verification](../design-docs/specs/architecture.md#verification) |
 | [Preview Context-Menu Guard PreviewPane Tests](completed/preview-contextmenu-guard-preview-pane.md) | 2026-11-04 | [Verification](../design-docs/specs/architecture.md#verification) |

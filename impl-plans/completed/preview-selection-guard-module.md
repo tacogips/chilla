@@ -1,6 +1,6 @@
 # Preview Press-Time Selection Guard Module Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: preview-selection-guard-module
 **Wave**: 1 (no dependencies)
 **Depends On**: none
@@ -143,13 +143,13 @@ selection cases and remove it at the end, as in the existing selection test.
 
 ## Acceptance Criteria
 
-- [ ] Case (a): mousedown and contextmenu are prevented, the press-created
+- [x] Case (a): mousedown and contextmenu are prevented, the press-created
       selection is cleared, and later moves pan.
-- [ ] Case (b): a pre-existing selection keeps the native menu and stays
+- [x] Case (b): a pre-existing selection keeps the native menu and stays
       untouched.
-- [ ] Editable, Windows-order, next-press, inactive and detach cases pass.
-- [ ] All previous `previewPanZoom.vitest.ts` cases pass unchanged.
-- [ ] Only this plan's writePaths changed. The progress log records pre/post
+- [x] Editable, Windows-order, next-press, inactive and detach cases pass.
+- [x] All previous `previewPanZoom.vitest.ts` cases pass unchanged.
+- [x] Only this plan's writePaths changed. The progress log records pre/post
       sha256, commands, exit codes and log paths.
 
 ## Verification
@@ -188,3 +188,18 @@ These mirror `impl-plans/active/preview-selection-guard-dispatch.json`.
 ### Session: 2026-11-04 (planning)
 **Tasks Completed**: plan authored
 **Notes**: Implementation pending.
+
+### Session: 2026-11-04 (implementation)
+**Tasks Completed**: Press-time selection guard and scoped regression tests.
+**Notes**: Formal review and the sibling rendered-pane regression remain downstream.
+Pre-edit SHA-256: module `376268670ff8134a01812d22d39075ee4aee71f36cad72decf9a4d90b435c766`, tests `281288bcc4ad1b704e642fbe4dd2cdd8529ccc3afed8095e9374015c0ce143d7`, plan `e4b0865865b851f3bc037d0afa75500b9eb4d2a6310a56c76c22ecf4985e2e2b`. Post-edit SHA-256: module `d2c29ce96c88c81828a7ca3c143c5d647394bacf00a5393c2c496ae98401d268`, tests `6e6025ef76c3cc93f7c75f2eae30c899b590adcd74653b6d5a518529abe6fc6e`; plan post-edit hash is recorded in `tmp/preview-selection-guard/preview-selection-guard-module/post-sha256.txt` to avoid self-reference.
+
+Final foreground checks (complete logs under `tmp/preview-selection-guard/preview-selection-guard-module/`):
+- `mise exec -- env PATH="$(mise where node)/bin:$PATH" bunx vitest run --config vitest.config.ts src/features/preview/previewPanZoom.vitest.ts`: exit 0, 31 passed, `vitest-final.log`.
+- `bunx biome check src/features/preview/previewPanZoom.ts src/features/preview/previewPanZoom.vitest.ts --diagnostic-level=warn`: exit 0, `biome-final.log`.
+- `bunx tsc --noEmit`: exit 0, `tsc-final.log`.
+Initial fixture and formatting failures are retained in `vitest.log` and `biome.log`; the fixtures and formatting were corrected before the final checks.
+
+### Session: 2026-11-04 (step8 completion)
+**Tasks Completed**: Adversarial and test-integrity reviews accepted; integration checks on the combined tree passed.
+**Notes**: Integration logs in `tmp/preview-selection-guard/reconcile-wave-002/`: `typecheck.log` (bun run typecheck, exit 0), `lint-biome.log` (bun run lint:biome, exit 0, 101 files), `test.log` (bun run test, 67 pass, 0 fail), `test-dom.log` (bun run test:dom, 504 passed). Step 7b E2E skipped (no browser E2E; the Linux-only Tauri E2E does not apply on darwin). Remaining non-blocking gap: the supervising session's macOS WebKit GUI re-check (user-accepted). Archived to `impl-plans/completed/`.

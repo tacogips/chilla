@@ -837,6 +837,44 @@ describe("PreviewPane", () => {
     expect(middle.defaultPrevented).toBe(true);
   });
 
+  it("clears a press-created selection and pans rendered text", () => {
+    renderPreview("<p>Right drag text and more</p>");
+    const preview = previewBodyWithPointerCapture();
+    const paragraph = preview.querySelector("p");
+    if (paragraph === null) throw new Error("missing preview paragraph");
+    const selection = window.getSelection();
+    if (selection === null) throw new Error("missing window selection");
+    selection.removeAllRanges();
+
+    try {
+      preview.scrollTop = 100;
+      paragraph.dispatchEvent(pointerEvent("pointerdown", 1, 0, 0, 2));
+      const mouseDown = new MouseEvent("mousedown", {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+      });
+      paragraph.dispatchEvent(mouseDown);
+      expect(mouseDown.defaultPrevented).toBe(true);
+
+      selection.selectAllChildren(paragraph);
+      expect(selection.toString()).not.toBe("");
+      const menu = new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+      });
+      paragraph.dispatchEvent(menu);
+      expect(menu.defaultPrevented).toBe(true);
+      expect(selection.toString()).toBe("");
+
+      preview.dispatchEvent(pointerEvent("pointermove", 1, 0, 10, 2));
+      expect(preview.scrollTop).toBe(90);
+      preview.dispatchEvent(pointerEvent("pointerup", 1, 0, 10, 2));
+    } finally {
+      selection.removeAllRanges();
+    }
+  });
+
   it("ends a chorded right drag when the right button is released", () => {
     renderPreview();
     const preview = previewBodyWithPointerCapture();

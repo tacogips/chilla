@@ -139,9 +139,10 @@ export function applyWheelZoom(
   return Math.min(max, Math.max(50, current * factor));
 }
 
-const keepsNativeContextMenu = (event: MouseEvent): boolean => {
-  if (window.getSelection?.()?.toString()) return true;
-  const target = event.target;
+const hasSelection = (): boolean =>
+  Boolean(window.getSelection?.()?.toString());
+
+const isEditableTarget = (target: EventTarget | null): boolean => {
   const element =
     target instanceof Element
       ? target
@@ -171,6 +172,7 @@ export function attachPreviewPan(
     samples: PanSample[];
   } | null = null;
   let suppressMenu = false;
+  let press: { hadSelection: boolean } | null = null;
   let frame: number | null = null;
   const stopFling = (): void => {
     if (frame !== null) cancelAnimationFrame(frame);
@@ -232,6 +234,8 @@ export function attachPreviewPan(
   const pointerDown = (event: PointerEvent): void => {
     stopFling();
     suppressMenu = false;
+    if (event.button === 2 && options.isActive())
+      press = { hadSelection: hasSelection() };
     const bit =
       event.button === 2
         ? 2
@@ -260,6 +264,12 @@ export function attachPreviewPan(
     }
     event.preventDefault();
   };
+  const mouseDown = (event: MouseEvent): void => {
+    if (event.button !== 2 || !options.isActive()) return;
+    if (press === null) press = { hadSelection: hasSelection() };
+    if (!press.hadSelection && !isEditableTarget(event.target))
+      event.preventDefault();
+  };
   const pointerMove = (event: PointerEvent): void => {
     if (!drag || drag.id !== event.pointerId) return;
     if ((event.buttons & drag.bit) === 0) {
@@ -287,9 +297,11 @@ export function attachPreviewPan(
     }
   };
   const pointerUp = (event: PointerEvent): void => {
+    press = null;
     if (drag?.id === event.pointerId) end(true, event.timeStamp);
   };
   const pointerCancel = (event: PointerEvent): void => {
+    press = null;
     if (drag?.id === event.pointerId) end(true);
   };
   const lostCapture = (event: PointerEvent): void => {
@@ -298,10 +310,19 @@ export function attachPreviewPan(
   const contextMenu = (event: MouseEvent): void => {
     if ((drag?.bit === 2 && drag.panning) || suppressMenu)
       event.preventDefault();
-    else if (!keepsNativeContextMenu(event)) event.preventDefault();
+    else if (isEditableTarget(event.target)) {
+      // Keep the native menu for editable targets.
+    } else if (press !== null) {
+      if (!press.hadSelection) {
+        if (hasSelection()) window.getSelection()?.removeAllRanges();
+        event.preventDefault();
+      }
+    } else if (!hasSelection()) event.preventDefault();
     suppressMenu = false;
+    press = null;
   };
   target.addEventListener("pointerdown", pointerDown);
+  target.addEventListener("mousedown", mouseDown);
   target.addEventListener("pointermove", pointerMove);
   target.addEventListener("pointerup", pointerUp);
   target.addEventListener("pointercancel", pointerCancel);
@@ -312,6 +333,7 @@ export function attachPreviewPan(
     stopFling,
     detach: () => {
       target.removeEventListener("pointerdown", pointerDown);
+      target.removeEventListener("mousedown", mouseDown);
       target.removeEventListener("pointermove", pointerMove);
       target.removeEventListener("pointerup", pointerUp);
       target.removeEventListener("pointercancel", pointerCancel);
@@ -321,6 +343,7 @@ export function attachPreviewPan(
       stopFling();
       end(true);
       suppressMenu = false;
+      press = null;
     },
   };
 }

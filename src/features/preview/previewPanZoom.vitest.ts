@@ -27,7 +27,7 @@ function pointer(
   button = 2,
   buttons = 2,
 ): Event {
-  const event = new Event(type, { cancelable: true });
+  const event = new Event(type, { bubbles: true, cancelable: true });
   Object.defineProperties(event, {
     pointerId: { value: 1 },
     clientX: { value: x },
@@ -37,6 +37,15 @@ function pointer(
     buttons: { value: buttons },
     isPrimary: { value: true },
   });
+  return event;
+}
+function mouse(target: Node, type = "mousedown", button = 2): MouseEvent {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    button,
+  });
+  target.dispatchEvent(event);
   return event;
 }
 function setup(
@@ -289,6 +298,106 @@ describe("pan", () => {
   });
 });
 describe("native context menu guard", () => {
+  it("clears a selection created after the right press and pans", () => {
+    const { target, send, menu } = setup();
+    target.append(document.createTextNode("selected text"));
+    document.body.append(target);
+    const selection = window.getSelection();
+    if (!selection) throw new Error("selection unavailable");
+    send(pointer("pointerdown"));
+    expect(mouse(target).defaultPrevented).toBe(true);
+    selection.selectAllChildren(target);
+    expect(menu().defaultPrevented).toBe(true);
+    expect(selection.toString()).toBe("");
+    send(pointer("pointermove", 10));
+    expect(target.scrollLeft).toBe(90);
+    expect(target.classList.contains(PREVIEW_PANNING_CLASS)).toBe(true);
+    target.remove();
+  });
+
+  it("preserves a selection that predates the press", () => {
+    const { target, send, menu } = setup();
+    target.textContent = "selected text";
+    document.body.append(target);
+    const selection = window.getSelection();
+    if (!selection) throw new Error("selection unavailable");
+    selection.selectAllChildren(target);
+    send(pointer("pointerdown"));
+    expect(mouse(target).defaultPrevented).toBe(false);
+    expect(menu().defaultPrevented).toBe(false);
+    expect(selection.toString()).toBe("selected text");
+    target.remove();
+  });
+
+  it.each(["input", "contenteditable"])(
+    "keeps editable %s presses and selections",
+    (kind) => {
+      const { target, menu } = setup();
+      target.append(document.createTextNode("selected text"));
+      const editable = document.createElement(
+        kind === "input" ? "input" : "div",
+      );
+      if (kind === "contenteditable")
+        editable.setAttribute("contenteditable", "true");
+      target.append(editable);
+      document.body.append(target);
+      const selection = window.getSelection();
+      if (!selection) throw new Error("selection unavailable");
+      editable.dispatchEvent(pointer("pointerdown"));
+      expect(mouse(editable).defaultPrevented).toBe(false);
+      const range = document.createRange();
+      range.selectNodeContents(target.firstChild as Text);
+      selection.addRange(range);
+      expect(selection.toString()).toBe("selected text");
+      expect(menu(editable).defaultPrevented).toBe(false);
+      expect(selection.toString()).toBe("selected text");
+      target.remove();
+    },
+  );
+
+  it("falls back to event-time selection after pointerup", () => {
+    const { target, send, menu } = setup();
+    target.textContent = "selected text";
+    document.body.append(target);
+    const selection = window.getSelection();
+    if (!selection) throw new Error("selection unavailable");
+    send(pointer("pointerdown"));
+    send(pointer("pointerup"));
+    selection.selectAllChildren(target);
+    expect(menu().defaultPrevented).toBe(false);
+    expect(selection.toString()).toBe("selected text");
+    target.remove();
+  });
+
+  it("captures a fresh selection state on the next press", () => {
+    const { target, send } = setup();
+    target.textContent = "selected text";
+    document.body.append(target);
+    const selection = window.getSelection();
+    if (!selection) throw new Error("selection unavailable");
+    selection.selectAllChildren(target);
+    send(pointer("pointerdown"));
+    send(pointer("pointerup"));
+    selection.removeAllRanges();
+    send(pointer("pointerdown"));
+    expect(mouse(target).defaultPrevented).toBe(true);
+    target.remove();
+  });
+
+  it("does not record or prevent an inactive press", () => {
+    const { target, send, menu } = setup({ isActive: () => false });
+    target.textContent = "selected text";
+    document.body.append(target);
+    const selection = window.getSelection();
+    if (!selection) throw new Error("selection unavailable");
+    send(pointer("pointerdown"));
+    expect(mouse(target).defaultPrevented).toBe(false);
+    selection.selectAllChildren(target);
+    expect(menu().defaultPrevented).toBe(false);
+    expect(selection.toString()).toBe("selected text");
+    target.remove();
+  });
+
   it("prevents the press-time menu and permits subsequent panning", () => {
     const { target, send, menu } = setup();
     send(pointer("pointerdown"));
@@ -353,8 +462,9 @@ describe("native context menu guard", () => {
   });
 
   it("removes the menu listener on detach", () => {
-    const { handle, menu } = setup();
+    const { target, handle, menu } = setup();
     handle.detach();
+    expect(mouse(target).defaultPrevented).toBe(false);
     expect(menu().defaultPrevented).toBe(false);
   });
 });

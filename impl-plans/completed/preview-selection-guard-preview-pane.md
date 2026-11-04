@@ -1,6 +1,6 @@
 # Preview Press-Time Selection Guard PreviewPane Test Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: preview-selection-guard-preview-pane
 **Wave**: 2
 **Depends On**: preview-selection-guard-module
@@ -60,10 +60,10 @@ Pitfall: the `p` must be inside the attached listener target
 
 ## Acceptance Criteria
 
-- [ ] The new rendered macOS-order test passes. Mousedown and contextmenu
+- [x] The new rendered macOS-order test passes. Mousedown and contextmenu
       are prevented, the selection is cleared and the preview scrolls by
       the drag delta.
-- [ ] Only this plan's writePaths changed. The progress log records pre/post
+- [x] Only this plan's writePaths changed. The progress log records pre/post
       sha256, commands, exit codes and log paths.
 
 ## Verification
@@ -95,3 +95,15 @@ These mirror `impl-plans/active/preview-selection-guard-dispatch.json`.
 ### Session: 2026-11-04 (planning)
 **Tasks Completed**: plan authored
 **Notes**: Implementation pending (wave 2, after preview-selection-guard-module).
+
+### Session: 2026-11-04 (implementation)
+**Tasks Completed**: Added rendered Markdown macOS-order regression; selection is cleared in a finally block. Existing tests remain unchanged.
+**Evidence**: `tmp/preview-selection-guard/preview-selection-guard-preview-pane/` contains per-edit snapshots, intentions and hashes. Before SHA-256: test `7ea04a66a9556b874a0f86ce9eb266927d4b9f72cc6d47399600172834a96e27`, plan `4b37326c6235120c12a73cf3a348916ad8995105e5f113176030cc5edf52ea5c`. After test SHA-256: `29df2a2ce030440b871c37b9c3d0897abe1ccac6f0e337dc669f707a5167b5e2`; final plan hash is recorded in `post-sha256.txt`.
+**Verification**:
+- `mise exec -- env PATH="$(mise where node)/bin:$PATH" bunx vitest run --config vitest.config.ts src/features/preview/PreviewPane.vitest.tsx`: exit 0, 34 tests passed; `vitest.log`.
+- `bunx biome check src/features/preview/PreviewPane.vitest.tsx --diagnostic-level=warn`: exit 0; `biome.log`.
+**Notes**: Formal review, workspace-wide verification and local commit remain with the serial integration workflow. No GUI launch.
+
+### Session: 2026-11-04 (step8 completion)
+**Tasks Completed**: Adversarial and test-integrity reviews accepted; integration checks on the combined tree passed.
+**Notes**: Integration logs in `tmp/preview-selection-guard/reconcile-wave-002/`: `typecheck.log` (exit 0), `lint-biome.log` (exit 0), `test.log` (67 pass, 0 fail), `test-dom.log` (504 passed). Remaining non-blocking gap: the supervising session's macOS WebKit GUI re-check (user-accepted). Archived to `impl-plans/completed/`.
