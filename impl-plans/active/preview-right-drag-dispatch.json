@@ -1,5 +1,7 @@
 {
   "taskId": "preview-right-drag",
+  "status": "superseded",
+  "supersededBy": ["preview-pan-zoom-module", "preview-pan-zoom-preview-pane", "preview-pan-zoom-media-pane", "preview-pan-zoom-pdf-pane", "preview-pan-zoom-finalize"],
   "workflowMode": "issue-resolution",
   "issueReference": "local-request:opus-terra-session-713 (no GitHub issue URL/number supplied)",
   "implementationBranch": "main",

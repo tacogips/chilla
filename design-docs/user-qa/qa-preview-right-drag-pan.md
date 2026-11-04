@@ -1,7 +1,10 @@
 # Preview Right-Drag Pan Questions
 
-These questions relate to the "Shared Preview Right-Drag Pan" section of
-`design-docs/specs/architecture.md`. They do not block implementation. The
+These questions relate to the "Shared Preview Pan And Zoom Gestures" section
+of `design-docs/specs/architecture.md` (formerly "Shared Preview Right-Drag
+Pan"). Middle-button drag pans with the same momentum and does not depend on
+the context menu, so it stays available on macOS and Linux whatever is decided
+here. They do not block implementation. The
 default planning assumption below applies unless the user decides otherwise.
 
 ## Questions

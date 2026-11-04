@@ -1,6 +1,6 @@
 # Preview Right-Drag Pan Helper Implementation Plan
 
-**Status**: Ready
+**Status**: Superseded by preview-pan-zoom-module (design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures); do not dispatch
 **Plan ID**: preview-right-drag-helper
 **Wave**: 1 (no dependencies)
 **Design Reference**: design-docs/specs/architecture.md#shared-preview-right-drag-pan

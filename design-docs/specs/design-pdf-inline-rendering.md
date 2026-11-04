@@ -27,7 +27,9 @@ those sections that keep PDF in an embedded viewer.
   the selected entry), and `q` (quit).
 - `Alt`+wheel and `Ctrl`+wheel (which includes the macOS trackpad pinch, sent as
   `ctrlKey` wheel events) zoom Markdown/rendered, image, video, and PDF
-  previews. Wheel up zooms in.
+  previews. Wheel up zooms in. (Superseded for the wheel rule: `Alt`+wheel no
+  longer zooms; see "Shared Preview Pan And Zoom Gestures" in
+  `architecture.md`.)
 - A PDF still reloads on explicit refresh and on a change of `revision` or
   `localResourceGeneration`.
 
@@ -219,6 +221,11 @@ rendered previews), the video branch of `MediaFilePreviewPane`, and
   Ctrl/Meta/Alt and an event target that is not editable zoom by one step, and
   the event is `preventDefault`ed. PDF and video panes register the same
   window `keydown` rule while visible.
+- Superseded: the wheel bullet below and the `previewZoomDirectionFromWheel`
+  bullet are replaced by "Shared Preview Pan And Zoom Gestures" in
+  `design-docs/specs/architecture.md` (smooth `Ctrl`/`Cmd`+wheel zoom about the
+  pointer, no `Alt`+wheel zoom, PDF CSS resize plus debounced re-render). They
+  are kept only as the record of the PART A behavior.
 - Wheel: a non-passive `wheel` listener on the pane's `.pane__body` handles the
   event when `event.altKey || event.ctrlKey` and `deltaY !== 0`. It calls
   `preventDefault()` (this suppresses both the page scroll and native WebView

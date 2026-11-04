@@ -1,6 +1,6 @@
 # Preview Right-Drag Pan: Video Pane Wiring Implementation Plan
 
-**Status**: Ready
+**Status**: Superseded by preview-pan-zoom-media-pane (design-docs/specs/architecture.md#shared-preview-pan-and-zoom-gestures); do not dispatch
 **Plan ID**: preview-right-drag-media-pane
 **Wave**: 2 (depends on preview-right-drag-helper)
 **Design Reference**: design-docs/specs/architecture.md#shared-preview-right-drag-pan

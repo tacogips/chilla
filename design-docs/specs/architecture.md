@@ -753,11 +753,11 @@ not change the Rust preview payload or introduce a Tauri command.
 
 - `+` increases the active rendered preview zoom by 10 percentage points.
 - `-` decreases the active rendered preview zoom by 10 percentage points.
-- `Alt` (Option) or `Ctrl` plus mouse-wheel up or down applies the same
-  increment or decrement while the pointer is over the preview. This includes
-  macOS trackpad pinch, which arrives as `ctrlKey` wheel events. Wheel events
-  without a modifier keep normal scrolling. A single shared helper decides
-  whether a wheel event zooms (see `design-pdf-inline-rendering.md`).
+- `Ctrl` or `Cmd` (Meta) plus mouse-wheel, and macOS trackpad pinch (which
+  arrives as `ctrlKey` wheel events), zoom smoothly about the pointer while the
+  pointer is over the preview. The exact rule is in "Shared Preview Pan And
+  Zoom Gestures" below. `Alt` (Option)+wheel does not zoom; it is a normal
+  scroll. Wheel events without `Ctrl`/`Cmd` keep normal scrolling.
 - Preview zoom is clamped from 50% through 300% for Markdown and other rendered
   content, and from 50% through 800% for direct SVG and raster image previews.
 - Keyboard zoom is ignored while the user is typing in an editable control.
@@ -773,93 +773,252 @@ image previews grow beyond the pane width with normal pane scrolling.
 Raw Markdown and CSV editors are not zoom targets. EPUB keeps its pagination
 model, and audio has no zoom. PDF and video previews use the same keyboard and
 wheel zoom contract, each with its own pane-local zoom state. PDF pages are
-rendered in-app with pdf.js, which re-renders the canvases at the zoomed scale.
+rendered in-app with pdf.js, which re-renders the canvases at the zoomed scale
+(during a wheel gesture the canvases are CSS-resized first and re-rendered
+after a debounce; see "Shared Preview Pan And Zoom Gestures").
 See `design-docs/specs/design-pdf-inline-rendering.md`. Audio/video playback
 shortcuts are unchanged. No persisted preference or cross-window synchronization
 is required.
 
 ---
 
-## Shared Preview Right-Drag Pan
+## Shared Preview Pan And Zoom Gestures
 
-Holding the right mouse button and dragging pans a preview like dragging a page
-on a touch screen: the content follows the pointer. This is frontend-only. It
-adds no Tauri command, no payload change and no keymap entry.
+This section replaces the earlier "Shared Preview Right-Drag Pan" design
+(checkpointed in commit `7583025`) and the one-step modifier-wheel rule of
+`design-pdf-inline-rendering.md` ("Shared Zoom Input Contract", wheel bullet
+only). It follows the read-only nodetto-cloud reference
+(`nodetto-app/packages/ui-solid/src/page-tab-scroll.ts`, `PageTabs.tsx`,
+`interaction/pointer.ts`, `interaction/events.ts`). Content follows the
+pointer like dragging a page on a touch screen, and keeps moving with momentum
+after release. The behavior is frontend-only: no Tauri command, no payload
+change and no keymap entry.
 
 ### Targets And Scroll Containers
 
-| Preview | Component | Scroll container |
-|---------|-----------|------------------|
-| Markdown rendered, text/source layout, direct image (SVG and raster) | `PreviewPane` | the `.pane__body` preview element (`previewRef`), the same element used by wheel zoom and the left-button image pan |
-| Video | `MediaFilePreviewPane` (`kind === "video"`) | `.pane__body` (`bodyRef`) |
-| PDF | `PdfFilePreviewPane` | `.pane__body.preview--pdf` (`body`) |
+Each target has an event target (where listeners are registered, stable for
+the pane's lifetime), a scroll owner (the element whose `scrollLeft`/`scrollTop`
+pan, fling and zoom anchoring write) and an anchor element (whose top-left
+content origin is measured before and after a zoom).
 
-Direct images are rendered by `PreviewPane` (`dragPanEnabled` is set for
-`filePreview.kind === "image"`), not by `MediaFilePreviewPane`. Audio, EPUB,
-CSV, the raw Markdown editor, the HTML iframe preview and diff views are not
-targets.
+| Preview | Component | Event target | Scroll owner | Anchor element | Zoom max |
+|---------|-----------|--------------|--------------|----------------|----------|
+| Markdown rendered | `PreviewPane` | `.pane__body` (`previewRef`) | `previewRef` | `.preview__zoom-surface` | 300% |
+| Direct image (SVG and raster) | `PreviewPane` with `dragPanEnabled` | `previewRef` | `previewRef` | `.preview__zoom-surface` | 800% |
+| Text/source layout (`layout="source"`) | `PreviewPane` | `previewRef` | the inner `.preview__source-content > .file-preview--text > pre` (the outer `.pane__body.preview--source` is `overflow: hidden`, `App.css` lines 2709-2747) | that `pre` (origin = its 8px padding) | 300% |
+| Video | `MediaFilePreviewPane` (`kind === "video"`) | `.pane__body` (`bodyRef`) | `bodyRef` | the `.preview-media--video` figure | 300% |
+| PDF | `PdfFilePreviewPane` | `.pane__body.preview--pdf` (`body`) | `body` | the page canvas under the pointer (see PDF anchoring) | 300% |
 
-### Gesture Contract
+Source scroll owner rules:
 
-- Start: `pointerdown` with `event.button === 2` on the scroll container while
-  the pane is visible. Visibility uses each pane's existing rule: `props.visible`
-  in `PreviewPane`, and `closest(".pane--hidden, [hidden], [aria-hidden='true']")
-  === null` in the video and PDF panes. The handler records the pointer id, the
-  start client coordinates and the start `scrollLeft`/`scrollTop`, and calls
-  `setPointerCapture`. It does not call `preventDefault` on `pointerdown`, so
-  native right-click behavior is untouched until the pointer moves.
-- Move: a `pointermove` with the recorded pointer id computes
-  `dx = clientX - startX`, `dy = clientY - startY`. Once
-  `Math.hypot(dx, dy) > 4` (CSS px) the gesture becomes a pan for the rest of
-  its lifetime. While panning, every move sets
-  `scrollLeft = startScrollLeft - dx` and `scrollTop = startScrollTop - dy`
-  (measured from the start, so the sub-threshold delta is not lost) and calls
-  `preventDefault`. Below the threshold, nothing scrolls and nothing is
-  prevented.
-- Right-button release while another button stays held: a mouse shares one
-  pointer id across buttons. Releasing the right button while another button
-  is still pressed produces a chorded `pointermove`, not a `pointerup`.
-  So the move handler first checks the matching pointer's `event.buttons`. If
-  `(event.buttons & 2) === 0`, it ends the gesture before any scroll or
-  `preventDefault`. That move is neither scrolled nor prevented. Ending the
-  gesture here releases the capture if it is held, removes the cursor class and
-  clears the drag state. If the gesture had become a pan, the "just ended"
-  contextmenu flag is set exactly as on `pointerup`. Later moves with only the
-  left button held do nothing in the right-drag path until a new
-  `pointerdown` with `button === 2` starts another gesture.
-- End: `pointerup` or `pointercancel` with the recorded pointer id releases the
-  capture if it is held. `lostpointercapture` clears the state without
-  releasing. All three paths remove the cursor class and set the "just ended"
-  flag when the gesture had panned.
-- Context menu: a `contextmenu` listener on the scroll container calls
-  `preventDefault` only when the active or just-ended right gesture became a
-  pan. The "just ended" flag is consumed by that `contextmenu` event and is
-  cleared by the next `pointerdown`. A plain right-click (no move, or a move of
-  4px or less) never suppresses the native menu.
-- Cursor: while a pan is active the scroll container carries the class
-  `preview--right-drag-panning`. `App.css` maps it to `cursor: grabbing`. The
-  class is removed when the gesture ends.
-- Left button, text selection and links: the right-drag logic ignores every
-  `button !== 2` `pointerdown`. The existing left-button `dragPanEnabled` image
-  pan in `PreviewPane` keeps its own state and its `button === 0`
-  / `isPrimary` checks unchanged. A mouse shares one pointer id across buttons,
-  and a second button pressed during a drag produces a chorded `pointermove`,
-  not a `pointerdown`, so the two gestures cannot both start. The
-  right-button-bit check above ends a right drag as soon as the right button is
-  released, so it never carries over into left-only movement. Left-click,
-  link clicks and text selection never enter the right-drag path.
-- Wheel zoom and keyboard zoom are unaffected.
+- `PreviewPane` resolves the scroll owner with a function, not a stored
+  reference: `layout === "source"` returns the `pre` above when it exists, and
+  otherwise returns `previewRef`. It is passed to the module as
+  `scrollOwner()`.
+- Listeners stay on `previewRef` only. Pointer and wheel events from the `pre`
+  bubble to it, so `props.html` or `layout` replacing the `pre` needs no
+  reattachment and no listener is ever registered on the `pre`. That rules out
+  duplicate wheel handling.
+- A gesture resolves the scroll owner once at `pointerdown` and keeps it for
+  that gesture and its fling. A wheel zoom resolves it per event. Replacing the
+  `pre` changes `props.html` or `layout`, and the document-change effect
+  calls `stopFling()` before the old element is used again, so no fling frame
+  writes to a detached `pre`.
+- Plain-wheel scrolling of the `pre` stays native (not prevented). The source
+  metadata footer stays outside the `pre` and is never scrolled or scaled.
 
-### Shared Helper
+Zoom min is 50% everywhere. Direct images are rendered by `PreviewPane`
+(`dragPanEnabled` is set for `filePreview.kind === "image"`), not by
+`MediaFilePreviewPane`. Audio, EPUB, CSV, the raw Markdown editor, the HTML
+iframe preview and diff views are not targets. Visibility (`isActive`) uses
+each pane's existing rule: `props.visible` in `PreviewPane`, and
+`closest(".pane--hidden, [hidden], [aria-hidden='true']") === null` in the
+video and PDF panes.
 
-One module, `src/features/preview/rightDragPan.ts`, exports
-`attachRightDragPan(target: HTMLElement, isActive: () => boolean): () => void`.
-It registers the listeners above on `target` and returns a detach function.
-The three panes call it in `onMount` and call the detach function in
-`onCleanup`. A shared helper keeps the threshold, the contextmenu rule and the
-cursor class identical across panes, in the same way
-`previewZoomDirectionFromWheel` keeps the wheel rule identical. No other
-abstraction is added.
+### Shared Module
+
+One module, `src/features/preview/previewPanZoom.ts`, replaces the partial
+`rightDragPan.ts` / `rightDragPan.vitest.ts` left by the interrupted run (both
+are deleted; their still-valid tests move to `previewPanZoom.vitest.ts`). No
+pane imports `rightDragPan.ts` today, so there is no other stray code to
+revert. It exports:
+
+- Constants: `PAN_SLOP = 4` (CSS px), `FLING_WINDOW_MS = 80`,
+  `FLING_DECAY = 0.998` (per ms), `FLING_MIN_VELOCITY = 0.02` (px/ms),
+  `WHEEL_ZOOM_SENSITIVITY = 0.0015`, and
+  `PREVIEW_PANNING_CLASS = "preview--right-drag-panning"` (the class already in
+  the working-tree `App.css` is kept so no CSS rename is needed).
+- Pure functions, unit-tested without DOM:
+  - `wheelPixels(delta, deltaMode)`: matches nodetto
+    `interaction/events.ts` lines 48-49. `deltaMode` 0 returns `delta`, and
+    every nonzero mode (1 line, 2 page) returns `delta * 16`.
+  - `flingVelocity(samples, releaseTime)`: keeps the `{t, x, y}` samples whose
+    `t >= releaseTime - FLING_WINDOW_MS`, and returns `{vx, vy}` in px/ms from
+    the oldest to the newest kept sample. It returns `null` when fewer than two
+    samples remain, their time span is 0, or
+    `Math.hypot(vx, vy) < FLING_MIN_VELOCITY`. A pointer that rested for more
+    than 80 ms before release therefore produces no fling.
+  - `flingStep(velocity, dtMs)`: matches nodetto `pageTabFlingStep`
+    (`page-tab-scroll.ts` lines 53-60). The per-axis displacement uses the
+    incoming velocity, `velocity * dtMs`, and the returned next velocity is
+    `velocity * FLING_DECAY ** dtMs`. Example: velocity 1 px/ms and
+    `dt = 16` gives a 16 px displacement and next velocity `0.998 ** 16`.
+  - `wheelZoomFactor(event)`: returns `null` unless
+    `(event.ctrlKey || event.metaKey) && event.deltaY !== 0`. Otherwise it
+    returns `Math.exp(-wheelPixels(event.deltaY, event.deltaMode) *
+    WHEEL_ZOOM_SENSITIVITY)`. `altKey` is ignored. Example: `deltaY = 1`,
+    `deltaMode = 2` gives `Math.exp(-16 * 0.0015)` (about 0.9762857).
+  - `anchoredZoomScroll(scroll, pointerOffset, originBefore, originAfter,
+    ratio)`: one axis,
+    `originAfter + (scroll + pointerOffset - originBefore) * ratio -
+    pointerOffset`. `pointerOffset` is the pointer client position minus the
+    scroll owner's client rect edge. `originBefore` and `originAfter` are the
+    anchor element's content origin in the scroll owner's scroll coordinates
+    (`anchorRect.left - ownerRect.left + owner.scrollLeft`, same for top),
+    measured before and after the zoom is applied. `ratio` is the anchor
+    element's size ratio after/before (equal to `newZoom / oldZoom` for
+    uniformly scaled anchors). Measuring the origin after the zoom covers
+    centered content whose origin moves, such as a margin-centered video
+    figure or PDF page.
+- `attachPreviewPan(target, options): PreviewPanHandle`, with
+  `options = { isActive(): boolean; leftButton?(): boolean; scrollOwner?():
+  HTMLElement }` (`scrollOwner` defaults to `target`) and
+  `PreviewPanHandle = { detach(): void; stopFling(): void }`. Panes call it in
+  `onMount` and call `detach` in `onCleanup`. Listeners and pointer capture
+  are on `target`, and scroll writes go to the gesture's resolved scroll owner.
+- `applyWheelZoom(event, current, max): number | null`: the shared wheel
+  decision. It returns `null` and does nothing else when `wheelZoomFactor` is
+  `null`. Otherwise it calls `preventDefault()` and returns
+  `clamp(current * factor, 50, max)`.
+- `anchorScrollAfterZoom(owner, event, before, after)`: writes both axes of
+  `owner` from `anchoredZoomScroll`. `before` and `after` are
+  `{originX, originY, width, height}` snapshots of the anchor element, taken by
+  `measureAnchor(owner, anchorElement)` before the zoom signal changes and
+  after Solid has applied it synchronously. The ratio per axis is
+  `after.width / before.width` and `after.height / before.height`, falling back
+  to `newZoom / oldZoom` when a size is 0. When the anchor element is the
+  scroll owner itself (source `pre`), the origin on each axis is the owner's
+  computed padding (8px) before and after, and the ratio is
+  `newZoom / oldZoom`: the font-size scaling grows the content uniformly
+  inside a fixed padding. The browser clamps out-of-range
+  scroll values at the scroll edges. That clamp is the only accepted deviation
+  from an exact anchor.
+
+`previewZoomDirectionFromWheel` is removed from `PreviewPane.tsx`.
+`nextPreviewZoom`, the 10-point keyboard step and the clamp constants stay.
+Zoom values may become fractional: the header shows `Math.round(zoom)%`, and
+`nextPreviewZoom` keeps adding or subtracting 10 from the current value before
+clamping.
+
+### Pan Gesture Contract
+
+- Start: every `pointerdown` on the target first calls `stopFling()`. A gesture
+  then starts only while `isActive()` is true and the press is `button === 2`
+  (right), `button === 1` (middle), or `button === 0` with `isPrimary` when
+  `leftButton?.()` is true (the direct-image `dragPanEnabled` pan). The
+  gesture records the pointer id, its button bit (`1` left, `2` right, `4`
+  middle), the start client coordinates, the start `scrollLeft`/`scrollTop`
+  and a first sample `{t: event.timeStamp, x, y}`. It calls
+  `setPointerCapture` and `preventDefault()` on the press, as the reference
+  does for a right press. This stops text-selection start and middle-button
+  autoscroll; it does not cancel the `contextmenu` event, which is governed
+  by the context-menu rule below.
+- Move: for the recorded pointer id, if `(event.buttons & buttonBit) === 0`
+  the gesture ends first (chord release: that move is neither scrolled nor
+  prevented, and no fling starts; the just-ended context-menu flag is set if
+  a right gesture had panned). Otherwise a sample is appended and samples
+  older than `FLING_WINDOW_MS` before the newest are dropped. Once
+  `Math.hypot(dx, dy) > PAN_SLOP`, measured from the start, the gesture is
+  panning for the rest of its life and the target gets `PREVIEW_PANNING_CLASS`.
+  While panning, every move sets `scrollLeft = startScrollLeft - dx` and
+  `scrollTop = startScrollTop - dy` and calls `preventDefault()`. Below the
+  slop nothing scrolls and nothing is prevented.
+- End: `pointerup` releases capture, removes the class and, if the gesture
+  panned, starts a fling from `flingVelocity(samples, event.timeStamp)`.
+  `pointercancel` and `lostpointercapture` end the gesture without a fling.
+- Fling: skipped when `matchMedia("(prefers-reduced-motion: reduce)").matches`
+  at release, when `matchMedia` or `requestAnimationFrame` is unavailable, or
+  when the velocity is `null`. Otherwise a `requestAnimationFrame` loop runs.
+  Each frame uses `dt = frameTime - lastFrameTime`, applies `flingStep`
+  (displacement from the incoming velocity, then decay), and subtracts the
+  displacement from the scroll owner's `scrollLeft`/`scrollTop`, so content
+  keeps moving in the pointer's last direction. An axis whose scroll value does not change after the write has
+  hit an edge, and its velocity becomes 0. The loop ends when
+  `Math.hypot(vx, vy) < FLING_MIN_VELOCITY`. `stopFling()` cancels the pending
+  frame. At most one fling per target runs.
+- Fling stop triggers: any `pointerdown` on the target, any `wheel` on the
+  target, any window `keydown` while a fling runs (this covers `j`/`k`,
+  arrows, Page Up/Down, Space and Home/End without listing keys), `detach()`,
+  and a document change. Each pane signals a document change by calling
+  `stopFling()` from an effect on its document identity: `PreviewPane` on
+  `props.html` and `props.layout`, video on its source URL, PDF on its load
+  generation.
+- Context menu: a `contextmenu` listener calls `preventDefault()` only when
+  the active or just-ended right-button gesture panned. The just-ended flag is
+  consumed by that `contextmenu` event and cleared by the next `pointerdown`.
+  A plain right-click (no move past the slop) keeps the native menu. Middle and
+  left gestures never touch the context menu.
+- Cursor: `App.css` keeps `.preview--right-drag-panning { cursor: grabbing;
+  user-select: none; }`. The class is present only while a gesture is panning.
+- Left click, links and text selection: without `dragPanEnabled` a left press
+  only runs `stopFling()`, so text selection and link clicks are unchanged.
+  The direct-image left pan moves from `PreviewPane`'s own `dragState` code
+  into `attachPreviewPan` with `leftButton: () => props.dragPanEnabled ===
+  true`, and so gains the slop and the fling. A mouse shares one pointer id
+  across buttons, so a second button pressed during a gesture is a chorded
+  `pointermove`, never a second start.
+
+### Wheel Zoom Contract
+
+- Each target registers exactly one non-passive `wheel` listener on its event
+  target (for source this is `previewRef`, never the `pre`). It calls `stopFling()` first and returns when the pane is not
+  active. With `Ctrl` or `Cmd` held (or a trackpad pinch), `applyWheelZoom`
+  zooms by the smooth factor about the pointer and prevents the default, so
+  there is no page scroll and no native WebView zoom. Without `Ctrl`/`Cmd`,
+  including `Alt`+wheel, the event is not prevented and scrolls normally.
+- Order per zoom event: resolve the scroll owner and the anchor element,
+  `measureAnchor` (before), set the zoom signal, `measureAnchor` (after), then
+  `anchorScrollAfterZoom`.
+- `PreviewPane` uses max 800 when `dragPanEnabled` is true, else 300. The
+  source layout keeps its font-size scaling on the `pre` and the rendered and
+  image layouts keep their `transform: scale` surface, whose top-left origin
+  is fixed by `transform-origin: top left`. Video keeps its CSS `zoom` on the
+  figure, and its origin is re-measured after the zoom because the figure may
+  be centered.
+- PDF anchoring is page-local, because canvases resize while the 12px
+  inter-page gaps (`.preview-pdf-page { margin: 0 auto 12px }`) and the 16px
+  body padding stay fixed, and pages are horizontally centered:
+  1. Before resizing, pick the anchor page: the last canvas whose content top
+     is less than or equal to the pointer's content y
+     (`scrollTop + pointerOffsetY`), or the first canvas if there is none.
+  2. Record the page-local fractions
+     `fx = (scrollLeft + pointerOffsetX - pageLeft) / pageWidth` and
+     `fy = (scrollTop + pointerOffsetY - pageTop) / pageHeight`, each clamped
+     to `[0, 1]`. A pointer in a gap, in padding or beside a narrow page
+     anchors to the nearest point on that page's edge.
+  3. Resize the canvases, re-measure that page's `pageLeft`, `pageTop`,
+     `pageWidth` and `pageHeight`, and set
+     `scrollLeft = pageLeft' + fx * pageWidth' - pointerOffsetX` and
+     `scrollTop = pageTop' + fy * pageHeight' - pointerOffsetY`. These are
+     `anchoredZoomScroll` applied to that page's before and after measurements.
+  4. Fixed gaps, centering and mixed page widths are thereby accounted for.
+     Worked example: two 1000px-high pages, 16px padding, 12px gap,
+     `scrollTop = 1200`, pointer y 200, zoom from 100% to 200%. Page 2 top
+     moves 1028 to 2028, `fy = 0.372`, and the result is `scrollTop = 2572`.
+     Only the browser's scroll-edge clamp can move the point off the pointer.
+- PDF splits zoom into `zoom` (live, shown in the header) and `renderZoom`
+  (the scale pdf.js renders at). A wheel zoom updates `zoom`, synchronously
+  sets every canvas `style.width`/`style.height` to exactly the CSS size the
+  render path assigns, `page.getViewport({ scale: zoom / 100 })` width and
+  height in px (the existing bitmap is stretched; no pdf.js render call),
+  applies the page-local anchor, and restarts a 150 ms debounce timer. Because
+  the debounced render assigns the same CSS size, it does not change layout,
+  and the anchor stays where the wheel left it. When the timer
+  fires, `renderZoom` becomes `zoom` and the existing render effect, now keyed
+  on `renderZoom`, re-renders every page and cancels in-flight tasks as it
+  does today. Keyboard `+`/`-` sets both signals at once, so it re-renders
+  immediately as today. Unmount and a new load clear the timer. A canvas whose
+  page has not rendered yet keeps its default size until its first render.
 
 ### Platform Event Order
 
@@ -868,23 +1027,67 @@ above suppresses the menu after a pan and keeps it for a plain click. On macOS
 WebKit (the Tauri WKWebView) and on WebKitGTK, `contextmenu` is normally
 dispatched at button press, before any movement. With the contract as written,
 a press opens the native menu and the drag may not reach the page there. This
-run implements the contract as requested. Real-app behavior on macOS is a GUI
-check delegated to the supervising session. The follow-up decision is recorded
-in `design-docs/user-qa/qa-preview-right-drag-pan.md`.
+run implements the contract as requested. Middle-button pan does not depend on
+the context menu, so it remains the reliable pan button on those platforms.
+Real-app behavior on macOS is a GUI check delegated to the supervising session
+and a user-accepted gap for this run. The follow-up decision is recorded in
+`design-docs/user-qa/qa-preview-right-drag-pan.md`.
 
 ### Verification
 
-- `PreviewPane.vitest.tsx`: rendered Markdown, `layout="source"` and a direct
-  image (`dragPanEnabled`) each pan on a right drag (scroll moves opposite to the
-  pointer delta). A right press, a move of 4px or less, release and
-  `contextmenu` leave the `contextmenu` event not `defaultPrevented` and the
-  scroll unchanged. A right drag past the threshold followed by `contextmenu`
-  is `defaultPrevented`. A hidden pane (`visible={false}`) does not pan. A
-  left-button drag on a non-image preview still does not pan, and the
-  left-button image pan tests still pass. The existing test "ignores non-primary
-  mouse buttons for direct-image drag panning" uses button `2`, which now pans.
-  It is changed to use button `1` (middle), so it still proves that only the
-  left button starts the left-button pan.
+- `previewPanZoom.vitest.ts`, numeric reference-parity cases:
+  `wheelPixels(5, 0) === 5`, `wheelPixels(1, 1) === 16`,
+  `wheelPixels(1, 2) === 16`. `wheelZoomFactor` is `null` for plain and `Alt`
+  wheels, and for `Ctrl` or `Meta` with `deltaY = 1, deltaMode = 2` it is
+  close to `0.9762857` (`Math.exp(-16 * 0.0015)`). `flingStep(1, 16)` returns
+  displacement `16` and next velocity `0.998 ** 16`. `flingVelocity` covers the
+  window, rest-before-release and minimum-velocity cases.
+  `anchoredZoomScroll` keeps the content point under the pointer for a fixed
+  origin and for a moved (centered) origin. With a stubbed `requestAnimationFrame` and controlled frame times:
+  the slop; right, middle and left (`leftButton`) start rules; pointer capture;
+  the cursor class; chord release; a fling that decays and stops below the
+  minimum velocity; a fling that stops at an edge; a fling stopped by
+  `pointerdown`, `wheel`, `keydown`, `stopFling()` and `detach()`; no fling
+  under reduced motion; `contextmenu` prevented only after a right gesture
+  that panned.
+- `PreviewPane.vitest.tsx` (rendered, `layout="source"`, direct image),
+  `MediaFilePreviewPane.vitest.tsx` (video) and `PdfFilePreviewPane.vitest.tsx`:
+  right and middle drag pan past the slop; a release fling moves the scroll
+  and then stops; a plain right-click is not prevented; a hidden pane does not
+  pan; `Ctrl`+wheel and `Meta`+wheel zoom smoothly, keep the pointer anchor and
+  respect the per-type clamps; `Alt`+wheel and a plain wheel are not prevented
+  and do not change zoom; keyboard `+`/`-` still step by 10; a document change
+  stops a fling. The PART A Alt+wheel zoom assertions become "Alt+wheel does
+  not zoom". A left drag on a non-image preview does not pan. The existing
+  direct-image left-pan tests still pass; only assertions that relied on a
+  sub-slop move scrolling are adjusted. The existing test "ignores non-primary
+  mouse buttons for direct-image drag panning" uses button `2`, which now pans;
+  it changes to assert that buttons other than `0` do not start the left pan
+  path when `dragPanEnabled` is false.
+- Source-specific (`PreviewPane.vitest.tsx`, `layout="source"`, overflowing
+  `pre`):
+  - Right and middle drag, the fling and `Ctrl`+wheel anchoring change the
+    inner `pre`'s `scrollLeft`/`scrollTop`, with the expected values computed
+    from the `pre`'s stubbed rect and 8px padding. The outer `.preview--source`
+    offsets stay 0.
+  - The metadata footer stays the `pre`'s next sibling with a 12px font size,
+    and the existing source layout test keeps passing unchanged.
+  - Replacing `props.html` during a running fling stops it. Later frames
+    write neither the detached old `pre` nor the new one, and exactly one
+    wheel listener handles each wheel event (no double zoom).
+- PDF-specific (`PdfFilePreviewPane.vitest.tsx`, stubbed page geometry):
+  - The two-page worked example yields `scrollTop = 2572`.
+  - With centered pages of mixed widths, the page-local x point stays under
+    the pointer.
+  - A pointer in the inter-page gap anchors to the clamped page edge.
+  - A burst of `Ctrl`+wheel events resizes canvases without calling
+    `page.render`. Exactly one render pass at the final zoom runs after
+    150 ms, and `scrollLeft`/`scrollTop` and the canvas CSS sizes are
+    unchanged by that render.
+  - Keyboard `+`/`-` still re-renders immediately.
+- The PDF shortcut tests (`Shift+L`, `Cmd+O`, `+`/`-`, `r`, `Shift+D`,
+  `j`/`k`, `Enter`, `q`) and the picker supersession tests in
+  `WorkspaceShell.vitest.tsx` keep passing.
 - Chord-release regression (`PreviewPane.vitest.tsx`, rendered Markdown with
   `dragPanEnabled` false). On one pointer id:
   1. `pointerdown(button=2, buttons=2)`.
@@ -902,17 +1105,20 @@ in `design-docs/user-qa/qa-preview-right-drag-pan.md`.
   helper in each vitest file gains an optional `buttons` argument. It defaults
   to the bit for `button` on `pointerdown` and `pointermove`, and to `0` on
   `pointerup`.
-- `MediaFilePreviewPane.vitest.tsx`: the video body pans on a right drag, and
-  the same contextmenu checks hold. Audio is not required to pan.
-- `PdfFilePreviewPane.vitest.tsx`: the PDF body pans on a right drag, and the
-  same contextmenu checks hold.
-- jsdom lacks real pointer capture and layout scrolling. Tests stub
+- jsdom lacks real pointer capture, layout and `matchMedia`. Tests stub
   `setPointerCapture`, `releasePointerCapture` and `hasPointerCapture` on the
-  container and use writable `scrollLeft`/`scrollTop`, as the existing
-  `previewBodyWithPointerCapture` helper does.
-- `README.md` keyboard and mouse section gains one line: right-button drag pans
-  Markdown/rendered, source, image, video and PDF previews, and a plain
-  right-click still opens the context menu.
+  container, use writable `scrollLeft`/`scrollTop` (with optional max values
+  to simulate edges), stub `getBoundingClientRect`, `clientHeight`,
+  `matchMedia` and `requestAnimationFrame`, as the existing
+  `previewBodyWithPointerCapture` helper does for capture. Pointer events set
+  `timeStamp` through the helper so fling samples are deterministic.
+- `README.md` shortcut section: the wheel line becomes "`Ctrl`/`Cmd`+mouse
+  wheel or trackpad pinch: smooth preview zoom under the pointer for
+  Markdown/rendered, source, image, video and PDF previews (not configured by
+  keymap.toml)". The pan line becomes "Right- or middle-button drag pans
+  Markdown/rendered, source, image, video and PDF previews with momentum; a
+  plain right-click opens the context menu". The image left-drag feature line
+  mentions momentum.
 - Commands: `bun run typecheck`, `bun run lint:biome`, `bun run test`,
   `mise exec -- env PATH="$(mise where node)/bin:$PATH" bun run test:dom` and
   `CARGO_TERM_QUIET=true bun run tauri build --debug --no-bundle`, all in the
