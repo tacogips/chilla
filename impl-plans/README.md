@@ -2,7 +2,7 @@
 
 This directory contains implementation plans that translate design documents into actionable implementation specifications.
 
-- [macOS 0.3.7 Release](active/macos-release-0.3.7.md): PDF shortcuts, pointer-anchored zoom and momentum drag pan; signed public assets, Homebrew cask and Apple review submission.
+- [macOS 0.3.7 Release](completed/macos-release-0.3.7.md): PDF shortcuts, pointer-anchored zoom and momentum drag pan; signed public assets, Homebrew cask and Apple review submission.
 
 - [macOS 0.3.6 Release](completed/macos-release-0.3.6.md): signed public assets, verified Homebrew cask, and Apple review submission.
 
