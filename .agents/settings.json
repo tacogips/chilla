@@ -1,0 +1,46 @@
+{
+  "extraKnownMarketplaces": {
+    "local": {
+      "source": {
+        "source": "directory",
+        "path": ".claude/marketplace"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "rust-lsp@local": true,
+    "ts-lsp@local": true
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cargo fmt"
+          },
+          {
+            "type": "command",
+            "command": "bash .agents/scripts/format-ts.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cargo fmt"
+          },
+          {
+            "type": "command",
+            "command": "bash .agents/scripts/format-ts.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
