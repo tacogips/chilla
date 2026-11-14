@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nix-flake-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+      - name: Flake check
+        run: nix flake check -L
+
+  bun-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+      - name: Typecheck and Bun tests
+        run: nix develop -c bash -euo pipefail -c 'bun install --frozen-lockfile && bun run typecheck && bun run test:dom && bun run test'
+
+  tauri-e2e-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+      - name: Cache Cargo home (tauri-driver)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: tauri-e2e-linux-cargo-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}-v1
+          restore-keys: |
+            tauri-e2e-linux-cargo-${{ runner.os }}-
+
+      - name: Linux Tauri WebDriver smoke
+        run: |
+          nix develop -c bash -euo pipefail -c "bun install --frozen-lockfile && export PATH=\"$HOME/.cargo/bin:$PATH\" && if ! command -v tauri-driver >/dev/null 2>&1; then CARGO_TERM_QUIET=true cargo install tauri-driver --locked; fi && bun run test:tauri:e2e:linux"
