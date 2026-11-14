@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks staged secret scan
+        entry: mise exec -- gitleaks git --pre-commit --staged --redact --verbose
+        language: system
+        pass_filenames: false
