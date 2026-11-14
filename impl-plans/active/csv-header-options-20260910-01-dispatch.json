@@ -1,0 +1,210 @@
+{
+  "taskId": "csv-header-options-20260910-01",
+  "workflowMode": "issue-resolution",
+  "implementationBranch": "main",
+  "baseBranch": "main",
+  "remote": "origin",
+  "originalHead": "ca23d3af9dec06e370ab29ef813259fe800ae2cc",
+  "evidenceRoot": "tmp/csv-header-options-20260910-01",
+  "designDocPaths": [
+    "design-docs/specs/design-csv-viewer.md",
+    "design-docs/specs/command.md"
+  ],
+  "plans": [
+    {
+      "planId": "csv-header-contract",
+      "planPath": "impl-plans/active/csv-header-contract.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src-tauri/src/viewer/types.rs",
+        "src-tauri/src/viewer/service.rs",
+        "src-tauri/src/viewer/service/tests.rs",
+        "src-tauri/src/viewer/csv.rs",
+        "src-tauri/src/commands/document.rs",
+        "src/lib/tauri/document.ts",
+        "src/lib/tauri/document.vitest.ts",
+        "src/lib/tauri/document-invoke.vitest.ts",
+        "src/features/workspace/openFiles.ts",
+        "src/features/workspace/openFiles.test.ts",
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "src/features/preview/CsvFilePreviewPane.vitest.tsx",
+        "impl-plans/active/csv-header-contract.md"
+      ],
+      "sharedPaths": [
+        "src-tauri/src/viewer/types.rs",
+        "src-tauri/src/viewer/service.rs",
+        "src-tauri/src/viewer/service/tests.rs",
+        "src/features/workspace/openFiles.ts",
+        "src/features/workspace/openFiles.test.ts",
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "src/features/preview/CsvFilePreviewPane.vitest.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Legacy path-only requests and missing response fields retain false; strict new fields reject invalid values.",
+        "Rust and TypeScript wire shapes agree and all constructors and owned fixtures compile.",
+        "True and false preserve parsing, raw output, budgets and source metadata; no header record is consumed.",
+        "Targeted checks and typecheck pass; the plan progress log records complete logs and terminal exit statuses."
+      ],
+      "verification": [
+        {"command": "CARGO_TERM_QUIET=true mise exec -- cargo test --manifest-path src-tauri/Cargo.toml viewer", "expectedExitStatus": 0},
+        {"command": "CARGO_TERM_QUIET=true mise exec -- cargo test --manifest-path src-tauri/Cargo.toml commands::document", "expectedExitStatus": 0},
+        {"command": "mise exec -- bun run test:dom src/lib/tauri/document.vitest.ts src/lib/tauri/document-invoke.vitest.ts", "expectedExitStatus": 0},
+        {"command": "mise exec -- bun run test", "expectedExitStatus": 0},
+        {"command": "mise exec -- bun run typecheck", "expectedExitStatus": 0},
+        {"command": "git diff --check", "expectedExitStatus": 0}
+      ]
+    },
+    {
+      "planId": "csv-header-startup",
+      "planPath": "impl-plans/active/csv-header-startup.md",
+      "dependsOn": ["csv-header-contract"],
+      "writePaths": [
+        "src-tauri/src/cli/mod.rs",
+        "src-tauri/src/cli/tests.rs",
+        "src-tauri/src/main.rs",
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/app_state.rs",
+        "src-tauri/src/viewer/service.rs",
+        "src-tauri/src/viewer/service/tests.rs",
+        "impl-plans/active/csv-header-startup.md"
+      ],
+      "sharedPaths": [
+        "src-tauri/src/viewer/service.rs",
+        "src-tauri/src/viewer/service/tests.rs"
+      ],
+      "acceptanceCriteria": [
+        "CLI accepts exactly the documented syntax and default, duplicate, invalid and information-exit precedence.",
+        "All startup target kinds retain typed options through main, run, context and AppState without altering target behavior.",
+        "CLI help and focused Rust checks pass; logging and process-exit validation remains assigned to finalization."
+      ],
+      "verification": [
+        {"command": "CARGO_TERM_QUIET=true mise exec -- cargo test --manifest-path src-tauri/Cargo.toml cli", "expectedExitStatus": 0},
+        {"command": "CARGO_TERM_QUIET=true mise exec -- cargo test --manifest-path src-tauri/Cargo.toml viewer", "expectedExitStatus": 0},
+        {"command": "CARGO_TERM_QUIET=true mise exec -- cargo check --manifest-path src-tauri/Cargo.toml", "expectedExitStatus": 0},
+        {"command": "git diff --check", "expectedExitStatus": 0}
+      ]
+    },
+    {
+      "planId": "csv-header-pane",
+      "planPath": "impl-plans/active/csv-header-pane.md",
+      "dependsOn": ["csv-header-contract"],
+      "writePaths": [
+        "src/features/preview/CsvFilePreviewPane.tsx",
+        "src/features/preview/CsvFilePreviewPane.vitest.tsx",
+        "src/app/App.css",
+        "impl-plans/active/csv-header-pane.md"
+      ],
+      "sharedPaths": [
+        "src/features/preview/CsvFilePreviewPane.vitest.tsx",
+        "src/features/preview/CsvFilePreviewPane.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Header on and off render the correct records, labels, gutters and count semantics without payload changes.",
+        "The checkbox is accessible; empty, header-only, unavailable formatted and raw cases match the accepted design.",
+        "Focused DOM tests and typecheck pass; real keyboard and UI confirmation remains assigned to finalization."
+      ],
+      "verification": [
+        {"command": "mise exec -- bun run test:dom src/features/preview/CsvFilePreviewPane.vitest.tsx", "expectedExitStatus": 0},
+        {"command": "mise exec -- bun run typecheck", "expectedExitStatus": 0},
+        {"command": "git diff --check", "expectedExitStatus": 0}
+      ]
+    },
+    {
+      "planId": "csv-header-workspace",
+      "planPath": "impl-plans/active/csv-header-workspace.md",
+      "dependsOn": ["csv-header-startup", "csv-header-pane"],
+      "writePaths": [
+        "src/features/workspace/WorkspaceShell.tsx",
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "src/features/workspace/WorkspaceDocumentColumn.tsx",
+        "src/features/workspace/WorkspaceDocumentColumn.vitest.tsx",
+        "src/features/workspace/WorkspaceHeader.vitest.tsx",
+        "src/features/workspace/openFiles.ts",
+        "src/features/workspace/openFiles.test.ts",
+        "src/features/preview/CsvFilePreviewPane.tsx",
+        "src/features/preview/CsvFilePreviewPane.vitest.tsx",
+        "impl-plans/active/csv-header-workspace.md"
+      ],
+      "sharedPaths": [
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "src/features/workspace/openFiles.ts",
+        "src/features/workspace/openFiles.test.ts",
+        "src/features/preview/CsvFilePreviewPane.tsx",
+        "src/features/preview/CsvFilePreviewPane.vitest.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Explicit, open, launch and default precedence, picker navigation and active setting lifetime match the accepted design.",
+        "Reload and selection races preserve latest active intent and reject stale responses.",
+        "All required controlled props are wired; non-CSV, Raw and Formatted, shortcut and focus regressions pass.",
+        "Pre-existing workspace edits survive; owned tests and typecheck pass with complete evidence."
+      ],
+      "verification": [
+        {"command": "mise exec -- bun run test:dom src/features/workspace/WorkspaceShell.vitest.tsx src/features/workspace/WorkspaceDocumentColumn.vitest.tsx src/features/workspace/WorkspaceHeader.vitest.tsx src/features/preview/CsvFilePreviewPane.vitest.tsx", "expectedExitStatus": 0},
+        {"command": "mise exec -- bun run test", "expectedExitStatus": 0},
+        {"command": "mise exec -- bun run typecheck", "expectedExitStatus": 0},
+        {"command": "git diff --check", "expectedExitStatus": 0}
+      ]
+    },
+    {
+      "planId": "csv-header-finalize",
+      "planPath": "impl-plans/active/csv-header-finalize.md",
+      "dependsOn": ["csv-header-workspace"],
+      "writePaths": [
+        "README.md",
+        "impl-plans/README.md",
+        "impl-plans/active/csv-header-finalize.md"
+      ],
+      "sharedPaths": [
+        "src-tauri/src/app_state.rs",
+        "src-tauri/src/cli/mod.rs",
+        "src-tauri/src/cli/tests.rs",
+        "src-tauri/src/commands/document.rs",
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/main.rs",
+        "src-tauri/src/viewer/csv.rs",
+        "src-tauri/src/viewer/service.rs",
+        "src-tauri/src/viewer/service/tests.rs",
+        "src-tauri/src/viewer/types.rs",
+        "src/app/App.css",
+        "src/features/preview/CsvFilePreviewPane.tsx",
+        "src/features/preview/CsvFilePreviewPane.vitest.tsx",
+        "src/features/workspace/WorkspaceDocumentColumn.tsx",
+        "src/features/workspace/WorkspaceDocumentColumn.vitest.tsx",
+        "src/features/workspace/WorkspaceHeader.vitest.tsx",
+        "src/features/workspace/WorkspaceShell.tsx",
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "src/features/workspace/openFiles.test.ts",
+        "src/features/workspace/openFiles.ts",
+        "src/lib/tauri/document-invoke.vitest.ts",
+        "src/lib/tauri/document.ts",
+        "src/lib/tauri/document.vitest.ts",
+        "README.md",
+        "impl-plans/README.md",
+        "Cargo.lock",
+        "bun.lock"
+      ],
+      "acceptanceCriteria": [
+        "Combined source preserves every accepted plan intent and unrelated baseline edit; serial repair evidence is complete.",
+        "README and index updates are accurate; archiving waits for global acceptance.",
+        "Full Bun and Rust checks and rebuilt app pass; visible UI behavior and CLI expected exits have complete logs.",
+        "No owned process remains running on return; blocked checks and high or medium findings remain explicit until resolved.",
+        "Independent implementation, integrity, adversarial and combined design and implementation review gates pass before global completion."
+      ],
+      "verification": [
+        {"command": "CARGO_TERM_QUIET=true mise run verify", "expectedExitStatus": 0},
+        {"command": "CARGO_TERM_QUIET=true mise exec -- bun run tauri build --debug --no-bundle", "expectedExitStatus": 0},
+        {"command": "target/debug/chilla --csv-first-row-header=true tmp/riela-evidence/csv-header-fixtures/report.csv", "expectedExitStatus": 0},
+        {"command": "target/debug/chilla --csv-first-row-header=false tmp/riela-evidence/csv-header-fixtures/report.csv", "expectedExitStatus": 0},
+        {"command": "target/debug/chilla tmp/riela-evidence/csv-header-fixtures/report.csv", "expectedExitStatus": 0},
+        {"command": "target/debug/chilla --csv-first-row-header=true --verbose --help", "expectedExitStatus": 0},
+        {"command": "target/debug/chilla --csv-first-row-header=false --version", "expectedExitStatus": 0},
+        {"command": "target/debug/chilla --csv-first-row-header=invalid --help", "expectedExitStatus": 2},
+        {"command": "target/debug/chilla --csv-first-row-header --version", "expectedExitStatus": 2},
+        {"command": "target/debug/chilla --csv-first-row-header= --help", "expectedExitStatus": 2},
+        {"command": "target/debug/chilla --csv-first-row-header true --help", "expectedExitStatus": 2},
+        {"command": "git diff --check", "expectedExitStatus": 0},
+        {"command": "git status --short", "expectedExitStatus": 0}
+      ]
+    }
+  ]
+}
