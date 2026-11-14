@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#faf7ef" /><meta name="description" content="A fast, keyboard-first file and Git viewer for macOS. Yazi-like navigation, rich previews, and built-in Git diff review—with a cute cat for company." />
+<meta property="og:title" content="chilla — Yazi-like browsing, with a softer side" /><meta property="og:description" content="A fast, keyboard-first file and Git viewer for macOS. Yazi-like navigation, rich previews, and built-in Git diff review—with a cute cat for company." /><meta property="og:type" content="website" /><meta property="og:url" content="https://chilla-viewer.com/" /><meta property="og:image" content="https://chilla-viewer.com/og.png" /><meta name="twitter:card" content="summary" />
+<link rel="canonical" href="https://chilla-viewer.com/" />
+<link rel="alternate" hreflang="en" href="https://chilla-viewer.com/" /><link rel="alternate" hreflang="ja" href="https://chilla-viewer.com/ja/" /><link rel="alternate" hreflang="x-default" href="https://chilla-viewer.com/" />
+<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" /><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+<link rel="stylesheet" href="/src/styles.css" /><title>chilla — Yazi-like browsing, with a softer side</title>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+<a class="brand" href="/" aria-label="chilla"><img class="brand-icon" src="/favicon.png" data-app-icon alt="" width="44" height="44" /><span>chilla</span></a>
+<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>Menu</button>
+<nav class="site-nav" id="site-nav" aria-label="Main navigation" data-nav>
+<a href="#features">Why chilla</a>
+<a href="#keyboard">Keyboard</a>
+<a href="#git-diff">Git diff</a>
+<a href="#install">Install</a>
+<a href="https://github.com/tacogips/chilla">GitHub ↗</a><a class="language-link" href="/ja/" lang="ja">日本語</a></nav>
+</header>
+<main id="main">
+<section class="hero" aria-labelledby="hero-title">
+<div class="hero-top"><div class="hero-copy">
+<p class="eyebrow"><span class="status-dot" aria-hidden="true"></span>Yazi-like file & Git viewer · macOS</p>
+<h1 id="hero-title">Fast file browsing.<br /><em>Just like your terminal.</em></h1><p class="hero-lede">Move through files with Yazi-like keyboard controls. Preview Markdown, images, and code, then check Git diffs in one fast, focused desktop app. Keep your hands on the keyboard and your work moving.</p>
+<div class="hero-actions"><a class="button button-primary" href="https://github.com/tacogips/chilla/releases/latest">Download for Mac<span aria-hidden="true">↗</span></a><a class="button button-secondary" href="#install">Install with Homebrew</a><a class="button button-secondary" href="https://github.com/tacogips/chilla">View on GitHub<span aria-hidden="true">↗</span></a></div><p class="small-note">Apple Silicon</p>
+</div><aside class="hero-mascot" aria-label="Meet Chilla’s cat"><p class="cat-note">A little curiosity goes a long way.</p><img src="/cat.webp" width="1024" height="1536" alt="A curious pixel-art tabby cat peeking around a corner" fetchpriority="high" /><div class="cat-keys" aria-hidden="true"><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></div></aside></div>
+<ul class="feature-strip" aria-label="Highlights"><li><span class="feature-index" aria-hidden="true">01</span>Yazi-like browsing</li><li><span class="feature-index" aria-hidden="true">02</span>Keyboard-first</li><li><span class="feature-index" aria-hidden="true">03</span>Fast and responsive</li><li><span class="feature-index" aria-hidden="true">04</span>Built-in Git diffs</li></ul>
+</section>
+<section class="install-section" id="install" aria-labelledby="install-title"><div class="section install-layout">
+<div><img class="install-cat" src="/favicon.png" data-app-icon width="68" height="68" alt="" /><p class="eyebrow">UP AND RUNNING IN A FEW STEPS</p><h2 id="install-title">Install chilla.</h2><p>For macOS on Apple Silicon (M1 or later). Choose the DMG download or install from your terminal with Homebrew.</p>
+<h3 class="install-method">Install with the DMG</h3>
+<ol class="install-steps">
+<li>Open the <a href="https://github.com/tacogips/chilla/releases/latest">latest release</a> and download the file ending in <code>_aarch64.dmg</code> from Assets.</li>
+<li>Open the downloaded <code>.dmg</code> and drag <code>chilla.app</code> into <code>Applications</code>.</li>
+<li>Eject the DMG, then launch <code>chilla</code> from your Applications folder.</li>
+</ol>
+<a class="button button-primary" href="https://github.com/tacogips/chilla/releases/latest">Download the DMG<span aria-hidden="true">↗</span></a><p class="small-note">No Homebrew required for this method.</p></div>
+<div class="install-panel"><div class="terminal-label"><h3>Install with Homebrew</h3><span>macOS</span></div>
+<ol class="brew-steps">
+<li><strong>Get Homebrew ready</strong><p>If you do not have it yet, follow the instructions on the <a href="https://brew.sh/">official Homebrew website</a>.</p></li>
+<li><strong>Install in Terminal</strong><pre><code>brew tap tacogips/tap
+brew install --cask chilla</code></pre><button class="copy-button" type="button" data-copy-command="brew tap tacogips/tap && brew install --cask chilla" aria-live="polite">Copy command</button></li>
+<li><strong>Launch chilla</strong><p>Open it from Applications, or run:</p><pre class="launch-command"><code>open -a chilla</code></pre><p>To browse your current project folder:</p><pre class="launch-command"><code>chilla .</code></pre></li>
+</ol>
+<details class="install-update"><summary>Update later with Homebrew</summary><pre><code>brew update
+brew upgrade --cask chilla</code></pre></details>
+<a class="text-link" href="https://github.com/tacogips/chilla#install">Installation details ↗</a></div>
+</div></section>
+<div class="section product-preview">
+<figure class="app-shot hero-shot" id="proof"><div class="shot-heading"><span>Your files. A familiar rhythm.</span><span class="shot-tag">chilla / README.md</span></div>
+<a href="/screenshots/browse-fresh.jpg" aria-label="Open full-size browsing screenshot"><picture><source type="image/webp" srcset="/screenshots/browse-fresh.webp" /><img src="/screenshots/browse-fresh.jpg" width="1277" height="768" alt="Chilla’s file browser beside a rendered README with the cat illustration and preview controls" loading="lazy" /></picture></a><figcaption>Fresh app capture · Browse a repository and preview its README.</figcaption></figure>
+</div>
+<section class="section features" id="features" aria-labelledby="features-title">
+<div class="section-intro"><div><p class="eyebrow">LESS FUSS. MORE FLOW.</p><h2 id="features-title">A quick look should<br />stay a quick look.</h2></div><p>Keep the speed and familiar keys of a terminal file browser, with a desktop view for the things you actually want to see. Chilla is Yazi-inspired, not a Yazi fork.</p></div>
+<div class="feature-grid"><article><span class="feature-symbol" aria-hidden="true">h / j / k / l</span><h3>Follow your curiosity.</h3><p>Move through folders, filter filenames, and switch between list and tree views. The file you select is right there in the preview.</p></article><article><span class="feature-symbol" aria-hidden="true">.md &nbsp; .png &nbsp; .pdf</span><h3>Peek at more than text.</h3><p>Rendered Markdown, highlighted source, images, video, PDF, CSV, and EPUB. Different files, one comfortable place to look.</p></article><article><span class="feature-symbol" aria-hidden="true">&gt; chilla .</span><h3>Travel light.</h3><p>Built with Rust and Tauri for a focused desktop workflow. Open a folder directly—no workspace import, account setup, or full IDE session.</p></article></div>
+</section>
+<section class="keyboard-section" id="keyboard" aria-labelledby="keyboard-title"><div class="section keyboard-layout">
+<div><p class="eyebrow">KEEP YOUR HANDS AT HOME</p><h2 id="keyboard-title">Your fingers already<br />know the way.</h2><p class="section-lede">Yazi-like movement makes browsing feel familiar. Navigate, filter, and open a diff without reaching for the mouse.</p><p class="keyboard-foot">Prefer arrow keys? Those work too.</p></div>
+<div class="keyboard-board"><div class="shortcuts"><div class="shortcut"><kbd>h</kbd><span>Parent folder</span></div>
+<div class="shortcut"><kbd>j</kbd><span>Move down</span></div>
+<div class="shortcut"><kbd>k</kbd><span>Move up</span></div>
+<div class="shortcut"><kbd>l</kbd><span>Open selection</span></div>
+<div class="shortcut"><kbd>/</kbd><span>Filter files</span></div>
+<div class="shortcut"><kbd>g</kbd><span>Toggle Git diff</span></div>
+<div class="shortcut"><kbd>Shift + L</kbd><span>Show / hide file tree</span></div>
+<div class="shortcut"><kbd>?</kbd><span>Show help</span></div></div><p class="small-note">Default shortcuts. Movement keys apply in the file browser; text fields keep normal typing.</p></div>
+</div></section>
+<section class="section diff-section" id="git-diff" aria-labelledby="diff-title">
+<div class="section-intro"><div><p class="eyebrow">YES, IT DOES GIT DIFFS</p><h2 id="diff-title">Small details.<br />Clearly different.</h2></div><div><p>Review local changes, commits, and ranges, or open a GitHub pull request URL. Browse changed files and see exactly what moved—with the same keyboard-first flow.</p><ul class="mode-pills"><li>Split comparison</li><li>Stacked diff</li><li>Full-file context</li></ul></div></div>
+<figure class="app-shot diff-shot"><a href="/screenshots/diff-fresh.jpg" aria-label="Open full-size Git diff screenshot"><picture><source type="image/webp" srcset="/screenshots/diff-fresh.webp" /><img src="/screenshots/diff-fresh.jpg" width="1277" height="768" loading="lazy" alt="Chilla showing a real Git diff with a changed-file sidebar and red and green split comparison" /></picture></a><figcaption>Fresh app capture · A real repository change in Chilla’s split diff view.</figcaption></figure>
+<p class="diff-shortcuts">In diff mode: <kbd>1</kbd> split <kbd>2</kbd> stack <kbd>3</kbd> full file</p></section>
+</main>
+<footer class="site-footer"><a class="brand" href="/"><img class="brand-icon" src="/favicon.png" data-app-icon alt="" width="44" height="44" /><span>chilla</span></a><p>A curious little file & Git viewer.</p><nav aria-label="Footer"><a href="/privacy/">Privacy</a><a href="https://github.com/tacogips/chilla/releases/latest">Releases</a><a href="https://github.com/tacogips/chilla">GitHub</a><a href="/ja/" lang="ja">日本語</a></nav><p class="copyright">© <span data-year>2026</span> chilla</p></footer>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
