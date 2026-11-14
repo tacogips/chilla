@@ -1,0 +1,79 @@
+%YAML 1.2
+---
+# http://www.sublimetext.com/docs/3/syntax.html
+name: Zig
+
+file_extensions:
+  - zig
+  - zon
+
+scope: source.zig
+
+contexts:
+  main:
+    - include: comments
+    - include: strings
+    - include: builtins
+    - include: keywords
+    - include: constants
+    - include: numbers
+    - include: operators
+
+  comments:
+    - match: '//.*$'
+      scope: comment.line.double-slash.zig
+
+  builtins:
+    - match: '@[A-Za-z_][A-Za-z0-9_]*'
+      scope: support.function.builtin.zig
+
+  keywords:
+    - match: |-
+        (?x)\b(
+          const|var|fn|pub|struct|enum|union|if|else|while|for|return|break|continue
+          |switch|try|catch|defer|errdefer|comptime|async|await|test|error
+          |and|or|import|usingnamespace|extern|export|inline|noinline|align
+          |allowzero|volatile|threadlocal|packed|opaque|anyframe|orelse
+          |suspend|resume|nosuspend|anytype
+        )\b
+      scope: keyword.control.zig
+
+  constants:
+    - match: '\b(true|false|null|undefined)\b'
+      scope: constant.language.zig
+
+  numbers:
+    - match: '\b0x[0-9A-Fa-f_]+\b'
+      scope: constant.numeric.hex.zig
+    - match: '\b0b[01_]+\b'
+      scope: constant.numeric.binary.zig
+    - match: '\b0o[0-7_]+\b'
+      scope: constant.numeric.octal.zig
+    - match: '\b[0-9][0-9_]*(\.[0-9_]+)?([eE][+-]?[0-9_]+)?\b'
+      scope: constant.numeric.zig
+
+  operators:
+    - match: '==|!=|<=|>=|->|\+\+|--|&&|\|\||[+\-*/%<>!=&|^~]'
+      scope: keyword.operator.zig
+
+  strings:
+    - match: '\\\\.*$'
+      scope: string.quoted.other.multiline.zig
+    - match: '"'
+      scope: punctuation.definition.string.begin.zig
+      push:
+        - meta_scope: string.quoted.double.zig
+        - match: '\\.'
+          scope: constant.character.escape.zig
+        - match: '"'
+          scope: punctuation.definition.string.end.zig
+          pop: true
+    - match: "'"
+      scope: punctuation.definition.string.begin.zig
+      push:
+        - meta_scope: string.quoted.single.zig
+        - match: '\\.'
+          scope: constant.character.escape.zig
+        - match: "'"
+          scope: punctuation.definition.string.end.zig
+          pop: true
