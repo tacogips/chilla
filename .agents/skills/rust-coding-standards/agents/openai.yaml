@@ -1,0 +1,3 @@
+interface:
+  display_name: "rust-coding-standards"
+  short_description: "Use when writing, reviewing, or refactoring Rust code. Provides type safety patterns, error handling, project layout, and async programming guidelines."
