@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://chilla-viewer.com/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://chilla-viewer.com/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://chilla-viewer.com/ja/" />
+  </url>
+  <url>
+    <loc>https://chilla-viewer.com/ja/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://chilla-viewer.com/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://chilla-viewer.com/ja/" />
+  </url>
+  <url>
+    <loc>https://chilla-viewer.com/privacy/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://chilla-viewer.com/privacy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://chilla-viewer.com/ja/privacy/" />
+  </url>
+  <url>
+    <loc>https://chilla-viewer.com/ja/privacy/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://chilla-viewer.com/privacy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://chilla-viewer.com/ja/privacy/" />
+  </url>
+</urlset>

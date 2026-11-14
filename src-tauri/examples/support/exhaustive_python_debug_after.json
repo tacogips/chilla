@@ -1,0 +1,134 @@
+{
+  "entries": [
+    {
+      "extensions": [
+        "py",
+        "py3",
+        "pyw",
+        "pyi",
+        "pyx",
+        "pyx.in",
+        "pxd",
+        "pxd.in",
+        "pxi",
+        "pxi.in",
+        "rpy",
+        "cpy",
+        "SConstruct",
+        "Sconstruct",
+        "sconstruct",
+        "SConscript",
+        "gyp",
+        "gypi",
+        "Snakefile",
+        "wscript"
+      ],
+      "hidden": false,
+      "measurements": [
+        {
+          "cold_render_ms": 26.035,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 2.333460999999999,
+            "parse_ms": 16.667963999999994,
+            "setup_ms": 3.299833,
+            "style_ms": 3.338759000000001
+          },
+          "cold_total_ms": 53.055333000000005,
+          "highlighter_init_ms": 0.00925,
+          "html_bytes": 69231,
+          "html_hash": "74a97daf4d0bf7d02a25df1f068e40742ca8bd1e98e310d56c54ec7df359c9d7",
+          "reference_uncached_ms": [
+            14.202875,
+            13.440292,
+            14.8885,
+            14.079708,
+            14.270667000000001,
+            13.447042,
+            13.406540999999999,
+            13.315333,
+            13.288792
+          ],
+          "set_load_ms": 27.011083000000003,
+          "spans": 1656,
+          "theme": "dark",
+          "uncached_ms": [
+            17.51775,
+            17.417208,
+            17.416083,
+            17.371333,
+            19.968,
+            18.337667,
+            19.831959,
+            17.309917000000002,
+            17.405834
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 2.312877,
+            "parse_ms": 13.283127,
+            "setup_ms": 0.001333,
+            "style_ms": 3.3365879999999986
+          }
+        },
+        {
+          "cold_render_ms": 27.03475,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 2.0926609999999983,
+            "parse_ms": 17.82926199999999,
+            "setup_ms": 4.2776250000000005,
+            "style_ms": 3.643049999999999
+          },
+          "cold_total_ms": 53.628,
+          "highlighter_init_ms": 0.016041,
+          "html_bytes": 58973,
+          "html_hash": "d0d1927a70abdc67ff5e94d1b9a0f3d81a1c53e97714c9b024740625b5ee1d99",
+          "reference_uncached_ms": [
+            25.398500000000002,
+            23.415499999999998,
+            21.381334,
+            25.200792,
+            20.265833,
+            23.774791999999998,
+            24.011042,
+            24.231459,
+            23.162791
+          ],
+          "set_load_ms": 26.577209,
+          "spans": 1196,
+          "theme": "light",
+          "uncached_ms": [
+            17.668875,
+            18.096791,
+            22.170667,
+            18.485583,
+            20.397084,
+            17.491709,
+            20.690709000000002,
+            21.208792,
+            22.13425
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 2.338630000000001,
+            "parse_ms": 16.304981000000005,
+            "setup_ms": 0.004458,
+            "style_ms": 4.235548000000001
+          }
+        }
+      ],
+      "name": "Python",
+      "scope": "source.python",
+      "source_bytes": 8280,
+      "source_hash": "cdff998054a5e299e18489a25e22e7feade286ddbfd74768072ee0271ec0b388"
+    }
+  ],
+  "fixture_target_bytes": 8192,
+  "grammar_count": 1,
+  "pipeline": "scope-cache-streaming",
+  "profile": "debug",
+  "sample_order": "alternating reference/optimized pairs",
+  "samples": 9,
+  "timing_notes": "Each grammar/theme gets a fresh packdump for cold full rendering and a separate fresh packdump for cold stages. Theme loading is excluded. Highlighter setup is recorded separately for the optimized path, and is inside the reference renderer. Warm uncached calls reparse all source; no whole-source result cache is used. Stage instrumentation collects per-line regions; full optimized rendering streams them."
+}
