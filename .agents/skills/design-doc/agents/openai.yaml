@@ -1,0 +1,3 @@
+interface:
+  display_name: "design-doc"
+  short_description: "Use when creating or organizing design documents. Provides directory structure, file naming, and content guidelines for design specs and references."
