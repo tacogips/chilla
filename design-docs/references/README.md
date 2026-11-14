@@ -1,0 +1,50 @@
+# Design References
+
+This directory contains reference materials for system design and implementation.
+
+## External References
+
+| Name | URL | Description |
+|------|-----|-------------|
+| The Rust Book | https://doc.rust-lang.org/book/ | Official Rust programming language book |
+| Rust API Guidelines | https://rust-lang.github.io/api-guidelines/ | Rust API design best practices |
+| Rust Design Patterns | https://rust-unofficial.github.io/patterns/ | Common Rust design patterns |
+| Tauri Documentation | https://tauri.app/ | Official Tauri framework documentation |
+| Tauri WebDriver Tests | https://v2.tauri.app/develop/tests/webdriver/ | Official Tauri WebDriver and `tauri-driver` guide |
+| Tauri WebDriver CI | https://v2.tauri.app/develop/tests/webdriver/ci/ | Official CI guidance for WebDriver-based Tauri tests |
+| Tauri Discussion 3768 | https://github.com/orgs/tauri-apps/discussions/3768 | Community discussion about integrating `tauri-driver` |
+| Foliate | https://github.com/johnfactotum/foliate | Desktop EPUB reader used as the UX reference for reader navigation behavior |
+| Foliate JS | https://github.com/johnfactotum/foliate-js | EPUB renderer reference for TOC trees, href resolution, and anchor-based pagination state |
+| SolidJS Documentation | https://docs.solidjs.com/ | Official Solid.js framework documentation |
+| Mermaid Documentation | https://mermaid.js.org/ | Official Mermaid syntax and rendering documentation |
+| Bun Documentation | https://bun.sh/docs | Official Bun runtime and package manager documentation |
+| GitHub REST API commits | https://docs.github.com/rest/commits/commits | Official GitHub REST API reference for commit and compare retrieval |
+| GitHub REST API pulls | https://docs.github.com/rest/pulls/pulls | Official GitHub REST API reference for pull request metadata and changed files |
+| Task Documentation | https://taskfile.dev/ | Official go-task documentation |
+| qraftbox DiffView.svelte | sibling qraftbox checkout: `client-legacy/components/DiffView.svelte` | Local behavioral reference for PR diff mode controls, file diff rendering, and navigation buttons |
+| qraftbox diff types | sibling qraftbox checkout: `client-legacy/src/types/diff.ts` | Local reference for diff file, hunk/chunk, change-line, and view-mode shape |
+| qraftbox GitHub PR service | sibling qraftbox checkout: `src/server/github/pr-service.ts` | Local reference for GitHub PR metadata service boundaries |
+| qraftbox GitHub URL parser | sibling qraftbox checkout: `src/server/github/url-parser.ts` | Local reference for GitHub URL source parsing boundaries |
+| qraftbox diff routes | sibling qraftbox checkout: `src/server/routes/diff.ts` | Local reference for diff retrieval request/response shape |
+| qraftbox side-by-side diff image | sibling qraftbox checkout: `usage/resource/diff_side_by_side.png` | Visual reference for side-by-side diff mode |
+| qraftbox current diff image | sibling qraftbox checkout: `usage/resource/diff_current.png` | Visual reference for current-state diff mode |
+| qraftbox stack diff image | sibling qraftbox checkout: `usage/resource/diff_stack.png` | Visual reference for stack/inline diff mode |
+
+## Reference Documents
+
+Reference documents should be organized by topic:
+
+```
+references/
+├── README.md              # This index file
+├── rust/                  # Rust patterns and practices
+└── <topic>/               # Other topic-specific references
+```
+
+## Adding References
+
+When adding new reference materials:
+
+1. Create a topic directory if it does not exist
+2. Add reference documents with clear naming
+3. Update this README.md with the reference entry
