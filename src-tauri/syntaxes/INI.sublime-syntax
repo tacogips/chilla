@@ -1,0 +1,63 @@
+%YAML 1.2
+---
+# http://www.sublimetext.com/docs/3/syntax.html
+name: INI
+
+file_extensions:
+  - ini
+  - cfg
+  - conf
+  - editorconfig
+  - gitconfig
+  - desktop
+  - .editorconfig
+  - .gitconfig
+
+scope: source.ini
+
+contexts:
+  main:
+    - include: comments
+    - include: section
+    - include: keyval
+
+  comments:
+    - match: '^\s*[;#].*$'
+      scope: comment.line.ini
+
+  section:
+    - match: '^(\s*)(\[)([^\]]*)(\])'
+      captures:
+        2: punctuation.definition.section.begin.ini
+        3: entity.name.section.ini
+        4: punctuation.definition.section.end.ini
+
+  keyval:
+    - match: '^(\s*)([A-Za-z0-9_.\-]+)(\s*)(=|:)'
+      captures:
+        2: keyword.other.key.ini
+        4: punctuation.separator.key-value.ini
+      push:
+        - match: '$'
+          pop: true
+        - include: strings
+        - match: '[^\n]+'
+          scope: string.unquoted.value.ini
+
+  strings:
+    - match: '"'
+      scope: punctuation.definition.string.begin.ini
+      push:
+        - meta_scope: string.quoted.double.ini
+        - match: '\\.'
+          scope: constant.character.escape.ini
+        - match: '"'
+          scope: punctuation.definition.string.end.ini
+          pop: true
+    - match: "'"
+      scope: punctuation.definition.string.begin.ini
+      push:
+        - meta_scope: string.quoted.single.ini
+        - match: "'"
+          scope: punctuation.definition.string.end.ini
+          pop: true

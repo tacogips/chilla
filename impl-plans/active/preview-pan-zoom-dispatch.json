@@ -1,0 +1,263 @@
+{
+  "taskId": "preview-pan-zoom",
+  "workflowMode": "issue-resolution",
+  "issueReference": "local-request:opus-terra-design-and-implement-review-loop-session-715",
+  "implementationBranch": "main",
+  "baseBranch": "main",
+  "remote": "origin",
+  "gitPush": false,
+  "originalHead": "7583025062b9819be28779f03b5eb3d9d891f2e5",
+  "evidenceRoot": "tmp/preview-pan-zoom",
+  "designDocPaths": [
+    "design-docs/specs/architecture.md",
+    "design-docs/specs/design-pdf-inline-rendering.md",
+    "design-docs/user-qa/qa-preview-right-drag-pan.md"
+  ],
+  "reviewContext": {
+    "issueReference": "local-request:opus-terra-design-and-implement-review-loop-session-715",
+    "userProblem": "There are two parts. PART A: the working tree holds uncommitted, already-verified work from sessions 708 and 710 that needs review, real-defect fixes only, and a commit. That work is PDF inline pdf.js canvas rendering, Chilla shortcuts working with a PDF open, Alt/Ctrl+wheel zoom, and the picker supersession fix. PART B: every preview type (Markdown/rendered, source, image, video, PDF) needs an iPhone-like right/middle-button drag pan with momentum fling and a smooth Ctrl/Cmd+wheel (pinch) zoom anchored at the pointer. Both follow the read-only nodetto-cloud reference, and the PART A Alt+wheel zoom is removed.",
+    "requiredOutcomes": [
+      "One shared, unit-tested module src/features/preview/previewPanZoom.ts with nodetto constants PAN_SLOP=4, FLING_WINDOW_MS=80, FLING_DECAY=0.998/ms, FLING_MIN_VELOCITY=0.02, WHEEL_ZOOM_SENSITIVITY=0.0015 and wheelPixels deltaMode normalization. The partial rightDragPan.ts and rightDragPan.vitest.ts are deleted.",
+      "Right/middle drag pans Markdown/rendered, source (inner pre owner), image, video and PDF previews with a 4px slop, pointer capture and a grabbing cursor. Release starts a fling from the last 80ms that decays until below 0.02 px/ms or a scroll edge. A new pointerdown, wheel, keydown or document change stops it. prefers-reduced-motion disables it.",
+      "contextmenu is suppressed only after a right gesture moved past the slop. A plain right-click still opens it.",
+      "The image left-button drag pan (dragPanEnabled) gets the same fling. Text selection and left-click are unchanged.",
+      "Ctrl/Cmd+wheel (and pinch) zooms smoothly by Math.exp(-dy*0.0015) about the pointer, within 50-300% (rendered/source/PDF/video) and 50-800% (images). Alt+wheel no longer zooms. Keyboard +/- keeps 10% steps.",
+      "PDF wheel zoom resizes the canvas CSS immediately and re-renders once through pdf.js, debounced 150ms, at the final zoom. Page-local anchoring holds (pdfPageAnchorScroll(1200,200,1028,1000,2028,2000) === 2572).",
+      "previewZoomDirectionFromWheel is deleted after wave 2. README shortcut lines are updated.",
+      "PART A is reviewed with real-defect fixes only. Existing PDF shortcut and picker tests still pass.",
+      "bun run typecheck, bun run lint:biome, bun run test and test:dom exit 0 with zero failures. The debug tauri build succeeds.",
+      "Everything is committed locally after an accepted integration review."
+    ],
+    "nonGoals": [
+      "No rewrite, revert or redesign of PART A work.",
+      "No edits to package.json or bun.lock.",
+      "No touch/pen-specific logic, keymap entry, setting, Tauri command or Rust change.",
+      "No platform-specific press-time contextmenu suppression (user QA Options B and C).",
+      "No modification of the read-only reference /Users/taco/gits/tacogips/nodetto-cloud.",
+      "No git push."
+    ],
+    "constraints": [
+      "Do not modify unrelated files. Do not touch .riela/ or riela-lock.json.",
+      "Run Node-based vitest via: mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test:dom (or bunx vitest run for scoped runs).",
+      "Do not launch the GUI app in the foreground. PART B GUI checks are delegated to the supervising session (user-accepted gap).",
+      "PART A step-8 GUI evidence is tmp/pdf-inline-rendering-20261104-02/pdf-shortcuts-finalize/runtime-observed/RUNTIME-EVIDENCE.md. The JPX fixture in the GUI, the Web Inspector console and video wheel at runtime are user-accepted gaps covered by vitest.",
+      "Implementers run no git mutations. Commits contain no AI attribution, no Co-Authored-By lines and no emojis.",
+      "Workers edit only their writePaths and their own plan progress log. Moving plans to impl-plans/completed/ is handled by the plan-archive node.",
+      "Each plan records pre/post shasum -a 256 for owned files and logs under tmp/preview-pan-zoom/<planId>/."
+    ],
+    "designDecisionsAndRationale": [
+      {
+        "decision": "A single module, previewPanZoom.ts, pins the contract: wheelPixels, flingVelocity, flingStep, wheelZoomFactor, anchoredZoomScroll, measureAnchor, anchorScrollAfterZoom, applyWheelZoom and attachPreviewPan(target, {isActive, leftButton?, scrollOwner?}) -> {detach, stopFling}.",
+        "rationale": "This gives identical nodetto semantics across all panes (architecture.md#shared-preview-pan-and-zoom-gestures). The module does not import PreviewPane.tsx, which avoids an import cycle."
+      },
+      {
+        "decision": "flingStep uses the incoming velocity for displacement, then decays (v * 0.998 ** dt). The fling stops per axis at a scroll edge.",
+        "rationale": "This matches nodetto page-tab-scroll.ts pageTabFlingStep."
+      },
+      {
+        "decision": "In source layout, the scroll owner is the inner .preview__source-content > .file-preview--text > pre, resolved per call.",
+        "rationale": "The outer .preview--source is overflow hidden, and innerHTML replacement swaps the pre."
+      },
+      {
+        "decision": "PDF splits zoom into a live zoom and a renderZoom. Wheel zoom resizes canvas CSS and debounces the pdf.js render by 150ms. Anchoring is page-local.",
+        "rationale": "This avoids a re-render per wheel event and avoids drift from the 12px page gaps (design DR-002)."
+      },
+      {
+        "decision": "previewZoomDirectionFromWheel stays exported during wave 2 and is deleted in finalize. PreviewPane.tsx is written by preview-pan-zoom-preview-pane and then preview-pan-zoom-finalize, serialized through dependsOn.",
+        "rationale": "The media and PDF panes import it until their wave-2 plans remove the import."
+      },
+      {
+        "decision": "Keep the existing App.css .preview--right-drag-panning rule as PREVIEW_PANNING_CLASS.",
+        "rationale": "No CSS rename is needed, and no plan owns App.css."
+      },
+      {
+        "decision": "Amendment 2026-11-04 round 1: declare dist and target as writePaths and artifactRoots of preview-pan-zoom-finalize so the required debug tauri build may write its generated output.",
+        "rationale": "Blocked plan: preview-pan-zoom-finalize (blocked-wave-scope-or-contract). Resolved gap: the debug build writes gitignored build caches dist/ (.gitignore:29) and target/ (.gitignore:5) that were outside the empty artifact roots. No source path lies inside them; no cargo clean or hand-edits there. Resume steps are in impl-plans/active/preview-pan-zoom-finalize.md section 'Amendment 2026-11-04'."
+      }
+    ],
+    "intentionalTradeoffs": [
+      "On macOS WebKit and WebKitGTK, contextmenu fires at press, so right-drag pan may not work in the real app (user-accepted). Middle-button drag stays available.",
+      "Per-plan bun run typecheck may fail transiently from a sibling's in-progress wave-2 edits. Only owned-file errors gate a wave-2 plan. The serial finalize gate is authoritative.",
+      "The finalize debug build writes dist/ and target/. Amendment round 1 declares them as artifactRoots of preview-pan-zoom-finalize only; they are recorded as digest/count manifests, not source snapshots."
+    ],
+    "supportedEdgeCases": [
+      "A move of 4px or less does not scroll and does not suppress contextmenu.",
+      "Chord release (right released while left held) ends the gesture without a fling. A following contextmenu is prevented.",
+      "pointercancel and lostpointercapture end without a fling. A setPointerCapture failure does not break the gesture.",
+      "Hidden panes and audio previews do not pan or zoom.",
+      "A paused release (no samples in the last 80ms), reduced motion, or missing matchMedia/requestAnimationFrame means no fling.",
+      "A centered video figure or a narrower centered PDF page re-measures its origin after zoom. A pointer in the PDF page gap anchors to the previous page's bottom edge.",
+      "A PDF reload or video source change during a fling stops it and clears the PDF debounce timer.",
+      "A wheel over the source pre zooms exactly once."
+    ],
+    "outOfScopeEdgeCases": [
+      "Native video controls intercepting right-button events at runtime (GUI gap).",
+      "Real-app macOS/Linux contextmenu ordering (GUI gap delegated to the supervising session).",
+      "EPUB, CSV, raw Markdown editor, HTML iframe preview and diff views.",
+      "Touch/pen-specific gestures."
+    ],
+    "sourcePaths": [
+      "src/features/preview/previewPanZoom.ts",
+      "src/features/preview/previewPanZoom.vitest.ts",
+      "src/features/preview/rightDragPan.ts",
+      "src/features/preview/rightDragPan.vitest.ts",
+      "src/features/preview/PreviewPane.tsx",
+      "src/features/preview/PreviewPane.vitest.tsx",
+      "src/features/preview/MediaFilePreviewPane.tsx",
+      "src/features/preview/MediaFilePreviewPane.vitest.tsx",
+      "src/features/preview/PdfFilePreviewPane.tsx",
+      "src/features/preview/PdfFilePreviewPane.vitest.tsx",
+      "src/features/preview/pdfjs.ts",
+      "src/features/preview/pdfjs.vitest.ts",
+      "src/features/workspace/WorkspaceShell.tsx",
+      "src/features/workspace/WorkspaceShell.vitest.tsx",
+      "src/app/App.css",
+      "README.md",
+      "vite.config.ts",
+      "package.json",
+      "bun.lock",
+      "src-tauri/tauri.conf.json"
+    ]
+  },
+  "acceptedDependencies": [],
+  "plans": [
+    {
+      "planId": "preview-pan-zoom-module",
+      "planPath": "impl-plans/active/preview-pan-zoom-module.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/preview/previewPanZoom.ts",
+        "src/features/preview/previewPanZoom.vitest.ts",
+        "src/features/preview/rightDragPan.ts",
+        "src/features/preview/rightDragPan.vitest.ts",
+        "impl-plans/active/preview-pan-zoom-module.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "previewPanZoom.ts exports exactly the pinned contract, with constants equal to the nodetto values.",
+        "previewPanZoom.vitest.ts covers every listed case and passes: wheel helpers, fling math, anchoring, pan gesture, context menu, fling behavior and stop triggers.",
+        "rightDragPan.ts and rightDragPan.vitest.ts are deleted. grep -rn rightDragPan src returns nothing.",
+        "Scoped biome and typecheck are clean for owned files. The progress log records hashes, commands, exit codes and log paths."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/previewPanZoom.vitest.ts",
+        "bunx biome check src/features/preview/previewPanZoom.ts src/features/preview/previewPanZoom.vitest.ts --diagnostic-level=warn",
+        "bun run typecheck",
+        "! grep -rn \"rightDragPan\" src"
+      ]
+    },
+    {
+      "planId": "preview-pan-zoom-preview-pane",
+      "planPath": "impl-plans/active/preview-pan-zoom-preview-pane.md",
+      "dependsOn": ["preview-pan-zoom-module"],
+      "writePaths": [
+        "src/features/preview/PreviewPane.tsx",
+        "src/features/preview/PreviewPane.vitest.tsx",
+        "impl-plans/active/preview-pan-zoom-preview-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "attachPreviewPan and the shared wheel zoom are wired. The old dragState code is removed.",
+        "The source scroll owner is the inner pre, and the source tests prove it.",
+        "Alt+wheel does not zoom. Ctrl/Meta zoom smoothly, stay anchored, and the clamps hold (300% rendered, 800% image, 50% min).",
+        "previewZoomDirectionFromWheel still exists but is unused in PreviewPane.",
+        "Owned tests, scoped biome and owned-file typecheck pass. The progress log is updated."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/PreviewPane.vitest.tsx",
+        "bunx biome check src/features/preview/PreviewPane.tsx src/features/preview/PreviewPane.vitest.tsx --diagnostic-level=warn",
+        "bun run typecheck"
+      ]
+    },
+    {
+      "planId": "preview-pan-zoom-media-pane",
+      "planPath": "impl-plans/active/preview-pan-zoom-media-pane.md",
+      "dependsOn": ["preview-pan-zoom-module"],
+      "writePaths": [
+        "src/features/preview/MediaFilePreviewPane.tsx",
+        "src/features/preview/MediaFilePreviewPane.vitest.tsx",
+        "impl-plans/active/preview-pan-zoom-media-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Video pans with right/middle drag and flings. Audio is untouched.",
+        "Smooth Ctrl/Cmd zoom is anchored with a re-measured origin. Alt+wheel does not zoom. Keyboard +/- is unchanged.",
+        "previewZoomDirectionFromWheel is no longer imported here.",
+        "Owned tests, scoped biome and owned-file typecheck pass. The progress log is updated."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/MediaFilePreviewPane.vitest.tsx",
+        "bunx biome check src/features/preview/MediaFilePreviewPane.tsx src/features/preview/MediaFilePreviewPane.vitest.tsx --diagnostic-level=warn",
+        "bun run typecheck"
+      ]
+    },
+    {
+      "planId": "preview-pan-zoom-pdf-pane",
+      "planPath": "impl-plans/active/preview-pan-zoom-pdf-pane.md",
+      "dependsOn": ["preview-pan-zoom-module"],
+      "writePaths": [
+        "src/features/preview/PdfFilePreviewPane.tsx",
+        "src/features/preview/PdfFilePreviewPane.vitest.tsx",
+        "impl-plans/active/preview-pan-zoom-pdf-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "zoom and renderZoom are split, with a 150ms wheel debounce. Keyboard +/- re-renders immediately.",
+        "Page-local anchoring passes the 2572 example and the centered and gap cases.",
+        "Right/middle pan and fling work. Alt+wheel does not zoom. A reload during a fling stops it and clears the debounce timer. The stop effect is keyed on the pdfSrc memo, not the untracked generation variable.",
+        "Existing PDF load, reload, error, focus and shortcut tests pass. Owned tests, scoped biome and owned-file typecheck pass. The progress log is updated."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/PdfFilePreviewPane.vitest.tsx src/features/preview/pdfjs.vitest.ts",
+        "bunx biome check src/features/preview/PdfFilePreviewPane.tsx src/features/preview/PdfFilePreviewPane.vitest.tsx --diagnostic-level=warn",
+        "bun run typecheck"
+      ]
+    },
+    {
+      "planId": "preview-pan-zoom-finalize",
+      "planPath": "impl-plans/active/preview-pan-zoom-finalize.md",
+      "dependsOn": ["preview-pan-zoom-preview-pane", "preview-pan-zoom-media-pane", "preview-pan-zoom-pdf-pane"],
+      "writePaths": [
+        "src/features/preview/PreviewPane.tsx",
+        "README.md",
+        "src/features/workspace/WorkspaceShell.tsx",
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "vite.config.ts",
+        "src-tauri/tauri.conf.json",
+        "src/features/preview/pdfjs.ts",
+        "src/features/preview/pdfjs.vitest.ts",
+        "impl-plans/active/pdf-canvas-pane.md",
+        "impl-plans/active/pdf-pdfjs-foundation.md",
+        "impl-plans/active/pdf-shortcuts-finalize.md",
+        "impl-plans/active/pdf-video-zoom.md",
+        "impl-plans/active/pdf-zoom-wheel-contract.md",
+        "impl-plans/active/workspace-picker-supersession.md",
+        "impl-plans/active/preview-pan-zoom-finalize.md",
+        "dist",
+        "target"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": ["dist", "target"],
+      "acceptanceCriteria": [
+        "previewZoomDirectionFromWheel is deleted from PreviewPane.tsx with no remaining references.",
+        "Exactly the three README lines are updated: Ctrl/Cmd+wheel or pinch zoom, right/middle drag pan with momentum, and image drag pan with momentum.",
+        "PART A review findings (WorkspaceShell, vite.config.ts, tauri.conf.json connect-src asset: only, pdfjs.ts) are recorded. Any real defect is fixed with a test.",
+        "PART A plan progress logs cite this run's evidence and RUNTIME-EVIDENCE.md. Status is Completed only where every criterion is checked.",
+        "The full gate passes: typecheck, lint:biome, bun run test (67 baseline), test:dom (more than 459), the debug tauri build, the absence grep, and .riela/riela-lock.json untouched."
+      ],
+      "verification": [
+        "bun run typecheck",
+        "bun run lint:biome",
+        "bun run test",
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test:dom",
+        "CARGO_TERM_QUIET=true bun run tauri build --debug --no-bundle",
+        "! grep -rn \"previewZoomDirectionFromWheel\\|rightDragPan\" src",
+        "git status --porcelain .riela riela-lock.json"
+      ]
+    }
+  ]
+}

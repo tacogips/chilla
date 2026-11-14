@@ -1,0 +1,184 @@
+{
+  "rust": {
+    "dark": {
+      "html_bytes": 94493,
+      "spans": 2112,
+      "html_hash": "84be640aa45523e8e2f6b326415221a1d4f833ec208fa0c29829417ebcff7e68"
+    },
+    "source_bytes": 16434,
+    "source_hash": "7b7174ffd23dcb4fdfa7c1b906565fdad861aeb19d44dc001f1082be6689ca69",
+    "light": {
+      "html_bytes": 109277,
+      "spans": 2178,
+      "html_hash": "970f45b0798a555a411ae4dbb0eea8c1d1e4027a952041b235973c6d2ab2ee91"
+    }
+  },
+  "typescript": {
+    "source_bytes": 16575,
+    "source_hash": "f2dc15ad290a2c3dd244f19bc360734733a8bc0b1aa50744717867c3696564ae",
+    "dark": {
+      "html_bytes": 118472,
+      "spans": 2775,
+      "html_hash": "bcfa4479d66a5393476bebdef63d970685858e5709946d10836e0432e7892ac6"
+    },
+    "light": {
+      "html_bytes": 109697,
+      "spans": 2175,
+      "html_hash": "37e8adcf99f9895f433786647d7739b8aa0e01a884821df7d24c4b8eb1002178"
+    }
+  },
+  "javascript": {
+    "source_bytes": 16564,
+    "source_hash": "a99b4cf7239e5336a72614f8803c2353f1575a1ab3e2ad7c4e20bb28e4325ddb",
+    "dark": {
+      "html_bytes": 130427,
+      "spans": 3116,
+      "html_hash": "80e255d778425a7548c1e78ff81b692b3f31dca375c82d6c93e30d4ca61d05e0"
+    },
+    "light": {
+      "html_bytes": 128131,
+      "spans": 2624,
+      "html_hash": "c20c8115afb308055e778ca9ac7e34c0221bbc8618a20c2379ff822e4ac6c1e4"
+    }
+  },
+  "python": {
+    "source_bytes": 16524,
+    "source_hash": "78f8412c8e347001d417d1e52cb2e837f9fa704ce94e5a0e9de4dbec0992a423",
+    "dark": {
+      "html_bytes": 100973,
+      "spans": 2268,
+      "html_hash": "61e250470d86bb7b8a2e28546b0b8a8c7f93f7d3d6fe9a494801363374f24b80"
+    },
+    "light": {
+      "html_bytes": 122195,
+      "spans": 2511,
+      "html_hash": "7621761a00e880260400156cf696e8c10dc927ee42f73e2148718c0ab5d14005"
+    }
+  },
+  "shell": {
+    "source_bytes": 16405,
+    "source_hash": "3fb31a85ba6c751a45e09b7db039ad9f8b52e7890caae81237e0fe2aa5890af6",
+    "dark": {
+      "html_bytes": 141402,
+      "spans": 3315,
+      "html_hash": "070db8fcc37c03f1226ab31ac48fae300c2b4e2a29becd91ebcdf24c05be1dd1"
+    },
+    "light": {
+      "html_bytes": 130012,
+      "spans": 2635,
+      "html_hash": "79fd21da7b25dae5cdd0a643e5808cf89db47e7047388fc5266dfa63b7847e58"
+    }
+  },
+  "toml": {
+    "source_bytes": 16416,
+    "source_hash": "74e5f11a4ead38a5c8de31e23f9a9273d64887bb00476d647f2b589d223ad1da",
+    "dark": {
+      "html_bytes": 114575,
+      "spans": 2592,
+      "html_hash": "cb268f1a58fbffca57d0362c64da5f372ddf37fb3b1a7199ac586aeec1b29ef3"
+    },
+    "light": {
+      "html_bytes": 109391,
+      "spans": 2400,
+      "html_hash": "ba7f85a4281963c99c96709a941f57171196861a0b0765ebfb97ce8a9acd587c"
+    }
+  },
+  "yaml": {
+    "source_bytes": 16490,
+    "source_hash": "cfc5070b24a04ceef8aec160381c98ee710004360d1e9884ed0c5fee4dedfc50",
+    "dark": {
+      "html_bytes": 110037,
+      "spans": 2550,
+      "html_hash": "34dfd7a93492c98a68ec49a3d59af775c94864f6367ad47c792865962782bdb6"
+    },
+    "light": {
+      "html_bytes": 109952,
+      "spans": 2465,
+      "html_hash": "62b4d0fa448c248ae20096f3fb4fc4cf2195bcb3c0b7976557f4a6c773899b39"
+    }
+  },
+  "css": {
+    "source_bytes": 16478,
+    "source_hash": "cd4dec047b8590b2474c3bb46196d7b1ab5a3c7a84a5450e3f3a1df77cd66d23",
+    "dark": {
+      "html_bytes": 101456,
+      "spans": 2310,
+      "html_hash": "63db0d97b56f2a5641bbe2429076d3ecbbb167d66fec61e3ed89bc6a050ed33c"
+    },
+    "light": {
+      "html_bytes": 124710,
+      "spans": 2772,
+      "html_hash": "610a757447c1a1966a197bfdc4cac1d1967c71eaa546db259d1d929d2683c51e"
+    }
+  },
+  "html": {
+    "source_bytes": 16575,
+    "source_hash": "57c62e528499cbd3a46ef8423bc040a729893de8b5a99fc2371e4ec198ac896f",
+    "dark": {
+      "html_bytes": 154772,
+      "spans": 3675,
+      "html_hash": "818afa197b28aae75cc55118cb9d5cbf038f8bd9b0ae3390316b15db6934bbed"
+    },
+    "light": {
+      "html_bytes": 159947,
+      "spans": 3675,
+      "html_hash": "c23c47a455283b17c5ba7f63210bde28d3184ae92090adf571ed76b75b7c4ef7"
+    }
+  },
+  "xml": {
+    "source_bytes": 16530,
+    "source_hash": "fbfa160aa681781096a36dc2224b227d2fbbe79522d10614da82161f8b8b3ed0",
+    "dark": {
+      "html_bytes": 120507,
+      "spans": 2660,
+      "html_hash": "101bc03adcdc6f01665a49e1f5ea847f10ce0c5603fd0538e54ae9865a82e885"
+    },
+    "light": {
+      "html_bytes": 118797,
+      "spans": 2565,
+      "html_hash": "cb9439da615ed8e85cb478858a0311cdee235afffb5e373a186f89a5a9cfddd2"
+    }
+  },
+  "markdown": {
+    "source_bytes": 16393,
+    "source_hash": "1d6e003dd71beae1bbff7a23f9c96e16500e954b2bf1ef77e53e8636831684c1",
+    "dark": {
+      "html_bytes": 91906,
+      "spans": 1940,
+      "html_hash": "946f246003459efddb004c3a5c008af9114d3f1ce1182b854390bb0dcf934284"
+    },
+    "light": {
+      "html_bytes": 145644,
+      "spans": 3104,
+      "html_hash": "6497e8119518c325e7a767b68094afe21634c7dd69134935700bc48e031545d1"
+    }
+  },
+  "plain": {
+    "source_bytes": 16440,
+    "source_hash": "5d298fe6c3695ea1a839ac0adfd7110e8212be63c36b10b5d884c75e390b8633",
+    "dark": {
+      "html_bytes": 32653,
+      "spans": 411,
+      "html_hash": "b87172c7e0032195a8a74d0c7a44ee637aea06675de94a6866f71259f614c548"
+    },
+    "light": {
+      "html_bytes": 32653,
+      "spans": 411,
+      "html_hash": "73a13725426d485cb212d16140f594cd33d2f8b98f649fb049a7905fdbbe8c0c"
+    }
+  },
+  "json": {
+    "source_bytes": 16425,
+    "source_hash": "427a8855349b596bfdf9531845a0fcf4f60d5ebad4b1185dc0d2319111110852",
+    "dark": {
+      "html_bytes": 127208,
+      "spans": 2701,
+      "html_hash": "f8e649dc138b39c9fe587250d10d5b25a069a9300c4fb30d5d9f6526a375e5f9"
+    },
+    "light": {
+      "html_bytes": 192008,
+      "spans": 4501,
+      "html_hash": "a8137a57fd7989ce2c95dd0727f91793757744a542f9ae421687e78e5b969887"
+    }
+  }
+}

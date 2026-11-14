@@ -1,0 +1,158 @@
+{
+  "entries": [
+    {
+      "extensions": [
+        "py",
+        "py3",
+        "pyw",
+        "pyi",
+        "pyx",
+        "pyx.in",
+        "pxd",
+        "pxd.in",
+        "pxi",
+        "pxi.in",
+        "rpy",
+        "cpy",
+        "SConstruct",
+        "Sconstruct",
+        "sconstruct",
+        "SConscript",
+        "gyp",
+        "gypi",
+        "Snakefile",
+        "wscript"
+      ],
+      "hidden": false,
+      "measurements": [
+        {
+          "cold_render_ms": 24.213291,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.22921899999999915,
+            "parse_ms": 17.585628000000014,
+            "setup_ms": 0.8834580000000001,
+            "style_ms": 0.44082999999999817
+          },
+          "cold_total_ms": 24.816291000000003,
+          "highlighter_init_ms": 0.00575,
+          "html_bytes": 69231,
+          "html_hash": "74a97daf4d0bf7d02a25df1f068e40742ca8bd1e98e310d56c54ec7df359c9d7",
+          "reference_uncached_ms": [
+            15.212916,
+            15.03525,
+            18.003,
+            41.926625,
+            22.641458,
+            34.51575,
+            34.290667,
+            23.515291,
+            34.81375,
+            22.913458000000002,
+            28.200583,
+            25.266291,
+            38.663250000000005,
+            32.363,
+            20.427916
+          ],
+          "set_load_ms": 0.5972500000000001,
+          "spans": 1656,
+          "theme": "dark",
+          "uncached_ms": [
+            14.393667,
+            14.32925,
+            20.69925,
+            22.264083,
+            63.5365,
+            30.038083,
+            28.755416,
+            40.102625,
+            24.981875000000002,
+            38.849709000000004,
+            28.929167,
+            39.757,
+            44.922999999999995,
+            38.524583,
+            38.285332999999994
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.27453699999999914,
+            "parse_ms": 30.800658999999996,
+            "setup_ms": 0.003375,
+            "style_ms": 1.944916999999997
+          }
+        },
+        {
+          "cold_render_ms": 29.689209,
+          "cold_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.23642099999999902,
+            "parse_ms": 37.100127,
+            "setup_ms": 0.865459,
+            "style_ms": 0.5837969999999976
+          },
+          "cold_total_ms": 30.244585,
+          "highlighter_init_ms": 0.013959,
+          "html_bytes": 58973,
+          "html_hash": "d0d1927a70abdc67ff5e94d1b9a0f3d81a1c53e97714c9b024740625b5ee1d99",
+          "reference_uncached_ms": [
+            42.671375,
+            48.347292,
+            44.975458,
+            41.262042,
+            44.449625,
+            46.570292,
+            43.011125,
+            38.657292000000005,
+            36.659667,
+            59.28775,
+            38.155125,
+            43.372583,
+            39.583292,
+            54.114291,
+            36.746500000000005
+          ],
+          "set_load_ms": 0.541417,
+          "spans": 1196,
+          "theme": "light",
+          "uncached_ms": [
+            36.540917,
+            30.557000000000002,
+            27.482625,
+            33.837916,
+            44.676209,
+            18.644166,
+            36.3705,
+            29.913333,
+            24.46,
+            32.884041,
+            22.250916,
+            22.424291999999998,
+            20.989082999999997,
+            27.571375,
+            20.169541
+          ],
+          "warm_stages": {
+            "breakdown_available": true,
+            "html_ms": 0.2539929999999994,
+            "parse_ms": 28.196088000000017,
+            "setup_ms": 0.002458,
+            "style_ms": 0.7030399999999982
+          }
+        }
+      ],
+      "name": "Python",
+      "scope": "source.python",
+      "source_bytes": 8280,
+      "source_hash": "cdff998054a5e299e18489a25e22e7feade286ddbfd74768072ee0271ec0b388"
+    }
+  ],
+  "fixture_target_bytes": 8192,
+  "grammar_count": 1,
+  "pipeline": "scope-cache-streaming",
+  "profile": "release",
+  "sample_order": "alternating reference/optimized pairs",
+  "samples": 15,
+  "timing_notes": "Each grammar/theme gets a fresh packdump for cold full rendering and a separate fresh packdump for cold stages. Theme loading is excluded. Highlighter setup is recorded separately for the optimized path, and is inside the reference renderer. Warm uncached calls reparse all source; no whole-source result cache is used. Stage instrumentation collects per-line regions; full optimized rendering streams them."
+}

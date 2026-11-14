@@ -1,0 +1,81 @@
+%YAML 1.2
+---
+# http://www.sublimetext.com/docs/3/syntax.html
+name: Protocol Buffers
+
+file_extensions:
+  - proto
+
+scope: source.proto
+
+contexts:
+  main:
+    - include: comments
+    - include: strings
+    - include: keywords
+    - include: types
+    - include: constants
+    - include: numbers
+    - include: operators
+
+  comments:
+    - match: '//.*$'
+      scope: comment.line.double-slash.proto
+    - match: '/\*'
+      scope: punctuation.definition.comment.begin.proto
+      push:
+        - meta_scope: comment.block.proto
+        - match: '\*/'
+          scope: punctuation.definition.comment.end.proto
+          pop: true
+
+  keywords:
+    - match: |-
+        (?x)\b(
+          syntax|package|import|option|message|enum|service|rpc|returns
+          |repeated|optional|required|oneof|map|reserved|extend|extensions
+          |to|public|weak|stream
+        )\b
+      scope: keyword.control.proto
+
+  types:
+    - match: |-
+        (?x)\b(
+          double|float|int32|int64|uint32|uint64|sint32|sint64
+          |fixed32|fixed64|sfixed32|sfixed64|bool|string|bytes
+        )\b
+      scope: storage.type.proto
+
+  constants:
+    - match: '\b(true|false)\b'
+      scope: constant.language.proto
+
+  numbers:
+    - match: '\b0x[0-9A-Fa-f]+\b'
+      scope: constant.numeric.hex.proto
+    - match: '\b[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?\b'
+      scope: constant.numeric.proto
+
+  operators:
+    - match: '[=;:]'
+      scope: keyword.operator.proto
+
+  strings:
+    - match: '"'
+      scope: punctuation.definition.string.begin.proto
+      push:
+        - meta_scope: string.quoted.double.proto
+        - match: '\\.'
+          scope: constant.character.escape.proto
+        - match: '"'
+          scope: punctuation.definition.string.end.proto
+          pop: true
+    - match: "'"
+      scope: punctuation.definition.string.begin.proto
+      push:
+        - meta_scope: string.quoted.single.proto
+        - match: '\\.'
+          scope: constant.character.escape.proto
+        - match: "'"
+          scope: punctuation.definition.string.end.proto
+          pop: true
