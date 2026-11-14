@@ -1,0 +1,4 @@
+interface:
+  display_name: "Riela Workflow"
+  short_description: "Create step-addressed riela workflows"
+  default_prompt: "Use $riela-workflow to create a portable riela workflow bundle from this process description."

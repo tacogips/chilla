@@ -1,0 +1,1935 @@
+import {
+  For,
+  Show,
+  createMemo,
+  createEffect,
+  createSignal,
+  createUniqueId,
+  onCleanup,
+  onMount,
+} from "solid-js";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { isEditableKeyboardTarget } from "../../lib/keyboard";
+import { PaneResizeHandle } from "../file-view/PaneResizeHandle";
+import {
+  BrowserListGlyph,
+  BrowserTreeGlyph,
+  BrowserFilterGlyph,
+} from "../file-view/browser-toolbar-glyphs";
+import {
+  persistPaneWidthPx,
+  PR_BROWSER_WIDTH_STORAGE_KEY,
+  prBrowserWidthBounds,
+  restorePersistedPaneWidthPx,
+  safeLocalStorage,
+} from "../file-view/paneResize";
+import type {
+  DiffWorkspaceTarget,
+  GitHubDiffSource,
+  PrDiffChange,
+  PrDiffChunk,
+  PrDiffFile,
+  PrDiffFileText,
+  PrDiffSnapshot,
+} from "../../lib/tauri/document";
+import {
+  loadGitDiff,
+  loadGitDiffFileText,
+  loadPrDiff,
+  loadPrDiffFileText,
+  PrFileStatus,
+} from "../../lib/tauri/document";
+import {
+  highlightSyntaxSegments,
+  syntaxKindForPath,
+  type SyntaxKind,
+} from "./prDiffSyntax";
+import {
+  buildDirectoryEntries,
+  buildTreeEntries,
+  treeAncestors,
+  parentDir,
+  type BrowserEntry,
+} from "./prDiffBrowserEntries";
+export { buildDirectoryEntries } from "./prDiffBrowserEntries";
+
+type DiffViewMode = "left_right" | "full_file" | "stack" | "image";
+interface PrDiffWorkspaceProps {
+  readonly target: DiffWorkspaceTarget;
+}
+
+interface LazyFileTextState {
+  readonly loading: boolean;
+  readonly text: PrDiffFileText | null;
+  readonly error: string | null;
+}
+
+const MIN_DIFF_PAGE_SCROLL_PX = 80;
+const DIFF_PAGE_SCROLL_RATIO = 0.45;
+
+function isSvgPath(path: string): boolean {
+  return path.toLowerCase().endsWith(".svg");
+}
+
+function svgImageDataUrl(svgText: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
+}
+
+type FullFileLineKind = "context" | "add" | "modify";
+type FullFileRow =
+  | {
+      readonly kind: "line";
+      readonly lineKind: FullFileLineKind;
+      readonly lineNumber: number;
+      readonly content: string;
+    }
+  | {
+      readonly kind: "deletion-marker";
+      readonly position: number;
+      readonly deletedCount: number;
+    };
+
+function matchesCtrlShortcut(event: KeyboardEvent, key: "d" | "u"): boolean {
+  const shortcutCode = `Key${key.toUpperCase()}`;
+
+  return (
+    (event.key.toLowerCase() === key || event.code === shortcutCode) &&
+    event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    !event.shiftKey
+  );
+}
+
+function scrollDiffPane(
+  body: HTMLElement | undefined,
+  direction: 1 | -1,
+): void {
+  if (body === undefined) {
+    return;
+  }
+
+  const delta =
+    Math.max(
+      MIN_DIFF_PAGE_SCROLL_PX,
+      Math.floor(body.clientHeight * DIFF_PAGE_SCROLL_RATIO),
+    ) * direction;
+  body.scrollTop += delta;
+}
+
+function statusLabel(file: PrDiffFile): string {
+  switch (file.status) {
+    case PrFileStatus.Added:
+      return "A";
+    case PrFileStatus.Deleted:
+      return "D";
+    case PrFileStatus.Renamed:
+      return "R";
+    case PrFileStatus.Copied:
+      return "C";
+    case PrFileStatus.Modified:
+      return "M";
+    default:
+      return "?";
+  }
+}
+
+function JumpIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M6.25 3.25H3.5a1.25 1.25 0 0 0-1.25 1.25v8A1.25 1.25 0 0 0 3.5 13.75h8A1.25 1.25 0 0 0 12.75 12.5V9.75" />
+      <path d="M8.25 2.25h5.5v5.5" />
+      <path d="m7.25 8.75 6-6" />
+    </svg>
+  );
+}
+
+function PreviousFileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M10.25 3.25 5.5 8l4.75 4.75" />
+    </svg>
+  );
+}
+
+function NextFileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M5.75 3.25 10.5 8l-4.75 4.75" />
+    </svg>
+  );
+}
+
+function PrDiffLoading(props: { readonly compact?: boolean }) {
+  return (
+    <div
+      class={`pr-diff-loading${
+        props.compact ? " pr-diff-loading--compact" : ""
+      }`}
+    >
+      <span class="pr-diff-loading__spinner" aria-hidden="true" />
+      <span class="pr-diff-loading__text">
+        {props.compact ? "Loading files..." : "Loading diff..."}
+      </span>
+    </div>
+  );
+}
+
+function sourceDisplayLabel(source: GitHubDiffSource): string {
+  switch (source.kind) {
+    case "pull_request":
+      return `#${source.number}`;
+    case "commit":
+      return `@${source.sha.slice(0, 12)}`;
+    case "compare":
+      return `${source.base}...${source.head}`;
+    case "git_worktree":
+      return "worktree";
+    case "git_commit":
+      return `@${source.commit.slice(0, 12)}`;
+    case "git_range": {
+      const separator = source.merge_base ? "..." : "..";
+      return `${source.base}${separator}${source.head}`;
+    }
+  }
+}
+
+function sourceKindLabel(source: GitHubDiffSource): string {
+  switch (source.kind) {
+    case "pull_request":
+      return "Pull request";
+    case "commit":
+      return "Commit";
+    case "compare":
+      return "Compare";
+    case "git_worktree":
+      return "Git worktree";
+    case "git_commit":
+      return "Git commit";
+    case "git_range":
+      return "Git range";
+  }
+}
+
+function sourceStatusLabel(snapshot: PrDiffSnapshot | null): string {
+  const identity = snapshot?.identity;
+  if (identity === undefined) {
+    return "Loading";
+  }
+
+  if (identity.source.kind === "commit") {
+    return "Commit";
+  }
+
+  if (identity.source.kind === "compare") {
+    return identity.state ?? "Compare";
+  }
+
+  if (
+    identity.source.kind === "git_worktree" ||
+    identity.source.kind === "git_commit" ||
+    identity.source.kind === "git_range"
+  ) {
+    return identity.state ?? sourceKindLabel(identity.source);
+  }
+
+  if (identity.merged) {
+    return "Merged";
+  }
+
+  return identity.state ?? "Unknown";
+}
+
+function sourceStatusClass(snapshot: PrDiffSnapshot | null): string {
+  const identity = snapshot?.identity;
+  if (identity?.source.kind !== "pull_request") {
+    return "";
+  }
+
+  if (identity.merged) {
+    return "pr-diff-header__state--merged";
+  }
+
+  if (identity.state === "open") {
+    return "pr-diff-header__state--open";
+  }
+
+  if (identity.state === "closed") {
+    return "pr-diff-header__state--closed";
+  }
+
+  return "";
+}
+
+function fallbackSourceForTarget(
+  target: DiffWorkspaceTarget,
+): GitHubDiffSource {
+  if (target.kind === "github") {
+    return target.target.source;
+  }
+
+  const repoPath = target.target.repo_path;
+  switch (target.target.source.kind) {
+    case "worktree":
+      return {
+        kind: "git_worktree",
+        repo_path: repoPath,
+      };
+    case "commit":
+      return {
+        kind: "git_commit",
+        repo_path: repoPath,
+        commit: target.target.source.commit,
+      };
+    case "range":
+      return {
+        kind: "git_range",
+        repo_path: repoPath,
+        base: target.target.source.base,
+        head: target.target.source.head,
+        merge_base: target.target.source.merge_base,
+      };
+  }
+}
+
+function fallbackTargetTitle(target: DiffWorkspaceTarget): string {
+  return target.kind === "github" ? target.target.url : target.target.repo_path;
+}
+
+function fallbackOwner(target: DiffWorkspaceTarget): string {
+  return target.kind === "github" ? target.target.owner : "local";
+}
+
+function fallbackRepo(target: DiffWorkspaceTarget): string {
+  if (target.kind === "github") {
+    return target.target.repo;
+  }
+
+  const parts = target.target.repo_path.split(/[\\/]/).filter(Boolean);
+  const name = parts[parts.length - 1];
+  return name ?? target.target.repo_path;
+}
+
+function ModeIcon(props: { readonly mode: DiffViewMode }) {
+  if (props.mode === "left_right") {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="1.5" y="2.5" width="5" height="11" rx="1" />
+        <rect x="9.5" y="2.5" width="5" height="11" rx="1" />
+      </svg>
+    );
+  }
+
+  if (props.mode === "full_file") {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M4 1.75h5.2L12.75 5v9.25H4z" />
+        <path d="M9.2 1.75V5h3.55" />
+      </svg>
+    );
+  }
+
+  if (props.mode === "image") {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="1.75" y="2.25" width="12.5" height="11.5" rx="1" />
+        <circle cx="5.25" cy="5.75" r="1.25" />
+        <path d="m3.5 11 2.75-2.75 2 2 1.5-1.5 2.75 2.75" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="2" y="2.5" width="12" height="11" rx="1" />
+      <path d="M4.5 5.5h7M4.5 8h7M4.5 10.5h5" />
+    </svg>
+  );
+}
+
+function SvgImageDiff(props: {
+  readonly file: PrDiffFile;
+  readonly loading: boolean;
+  readonly error: string | null;
+}) {
+  const [failedSource, setFailedSource] = createSignal<string | null>(null);
+  const imageSource = createMemo(() => {
+    if (
+      props.file.status === PrFileStatus.Deleted ||
+      props.file.full_text === null ||
+      props.file.full_text_truncated
+    ) {
+      return null;
+    }
+
+    return svgImageDataUrl(props.file.full_text);
+  });
+
+  const unavailableMessage = createMemo(() => {
+    if (props.loading) {
+      return "Loading SVG image...";
+    }
+    if (props.error !== null) {
+      return `Unable to load SVG image: ${props.error}`;
+    }
+    if (props.file.status === PrFileStatus.Deleted) {
+      return "SVG image preview is unavailable for deleted files.";
+    }
+    if (props.file.full_text_truncated) {
+      return "SVG image preview is unavailable because the file content is truncated.";
+    }
+    if (props.file.full_text === null) {
+      return "SVG image content is unavailable.";
+    }
+    if (failedSource() === imageSource()) {
+      return "SVG image could not be rendered.";
+    }
+    return null;
+  });
+
+  return (
+    <div class="pr-diff-image" aria-label="SVG image review">
+      <Show
+        when={unavailableMessage() === null && imageSource() !== null}
+        fallback={
+          <div class="pr-diff-image__placeholder" role="status">
+            {unavailableMessage()}
+          </div>
+        }
+      >
+        <img
+          class="pr-diff-image__preview"
+          src={imageSource() ?? ""}
+          alt={`Rendered preview of ${props.file.path}`}
+          onError={() => setFailedSource(imageSource())}
+        />
+      </Show>
+    </div>
+  );
+}
+
+function FileStatusBadge(props: { readonly file: PrDiffFile }) {
+  return (
+    <span class={`pr-file-badge pr-file-badge--${props.file.status}`}>
+      {statusLabel(props.file)}
+    </span>
+  );
+}
+
+function DiffLineContent(props: {
+  readonly change: PrDiffChange;
+  readonly syntaxKind: SyntaxKind;
+}) {
+  return (
+    <code class="pr-diff-line__content">
+      <span class="pr-diff-line__marker">
+        {props.change.change_type === "add"
+          ? "+"
+          : props.change.change_type === "delete"
+            ? "-"
+            : " "}
+      </span>
+      <For
+        each={highlightSyntaxSegments(props.change.content, props.syntaxKind)}
+      >
+        {(segment) => (
+          <span class={`pr-syntax pr-syntax--${segment.kind}`}>
+            {segment.text}
+          </span>
+        )}
+      </For>
+    </code>
+  );
+}
+
+function FullFileLineContent(props: {
+  readonly content: string;
+  readonly syntaxKind: SyntaxKind;
+}) {
+  return (
+    <code class="pr-diff-line__content pr-diff-line__content--full-file">
+      <For each={highlightSyntaxSegments(props.content, props.syntaxKind)}>
+        {(segment) => (
+          <span class={`pr-syntax pr-syntax--${segment.kind}`}>
+            {segment.text}
+          </span>
+        )}
+      </For>
+    </code>
+  );
+}
+
+function flushChangeBlock(
+  lineKinds: Map<number, FullFileLineKind>,
+  deletionMarkers: Map<number, number>,
+  deletedCount: number,
+  addedLines: readonly number[],
+  nextNewLine: number | null,
+  lastNewLine: number,
+): void {
+  if (deletedCount > 0) {
+    const markerPosition = addedLines[0] ?? nextNewLine ?? lastNewLine + 1;
+    deletionMarkers.set(
+      markerPosition,
+      (deletionMarkers.get(markerPosition) ?? 0) + deletedCount,
+    );
+  }
+
+  const lineKind: FullFileLineKind = deletedCount > 0 ? "modify" : "add";
+  for (const lineNumber of addedLines) {
+    lineKinds.set(lineNumber, lineKind);
+  }
+}
+
+function buildFullFileAnnotations(file: PrDiffFile): {
+  readonly lineKinds: ReadonlyMap<number, FullFileLineKind>;
+  readonly deletionMarkers: ReadonlyMap<number, number>;
+} {
+  const lineKinds = new Map<number, FullFileLineKind>();
+  const deletionMarkers = new Map<number, number>();
+
+  for (const chunk of file.chunks) {
+    let deletedCount = 0;
+    let addedLines: number[] = [];
+    let lastNewLine = chunk.new_start - 1;
+
+    const flush = (nextNewLine: number | null) => {
+      flushChangeBlock(
+        lineKinds,
+        deletionMarkers,
+        deletedCount,
+        addedLines,
+        nextNewLine,
+        lastNewLine,
+      );
+      deletedCount = 0;
+      addedLines = [];
+    };
+
+    for (const change of chunk.changes) {
+      if (change.change_type === "context") {
+        flush(change.new_line);
+        if (change.new_line !== null) {
+          lastNewLine = change.new_line;
+        }
+        continue;
+      }
+
+      if (change.change_type === "delete") {
+        if (deletedCount === 0 && addedLines.length > 0) {
+          flush(null);
+        }
+        deletedCount += 1;
+        continue;
+      }
+
+      if (change.new_line !== null) {
+        addedLines.push(change.new_line);
+        lastNewLine = change.new_line;
+      }
+    }
+
+    flush(null);
+  }
+
+  return { lineKinds, deletionMarkers };
+}
+
+function fullTextRows(file: PrDiffFile): readonly FullFileRow[] {
+  if (file.full_text === null) {
+    return [];
+  }
+
+  const { lineKinds, deletionMarkers } = buildFullFileAnnotations(file);
+  const rows: FullFileRow[] = [];
+
+  file.full_text.split("\n").forEach((content, index) => {
+    const lineNumber = index + 1;
+    const deletedCount = deletionMarkers.get(lineNumber);
+    if (deletedCount !== undefined) {
+      rows.push({
+        kind: "deletion-marker",
+        position: lineNumber,
+        deletedCount,
+      });
+    }
+
+    rows.push({
+      kind: "line",
+      lineKind: lineKinds.get(lineNumber) ?? "context",
+      lineNumber,
+      content,
+    });
+  });
+
+  const trailingMarkerPosition = file.full_text.split("\n").length + 1;
+  const trailingDeletedCount = deletionMarkers.get(trailingMarkerPosition);
+  if (trailingDeletedCount !== undefined) {
+    rows.push({
+      kind: "deletion-marker",
+      position: trailingMarkerPosition,
+      deletedCount: trailingDeletedCount,
+    });
+  }
+
+  return rows;
+}
+
+function StackDiff(props: { readonly file: PrDiffFile }) {
+  const syntaxKind = createMemo(() => syntaxKindForPath(props.file.path));
+
+  return (
+    <div class="pr-diff-code" role="table" aria-label="Stack diff">
+      <For each={props.file.chunks}>
+        {(chunk) => (
+          <>
+            <div class="pr-diff-hunk" role="row">
+              <span>{chunk.header}</span>
+            </div>
+            <For each={chunk.changes}>
+              {(change) => (
+                <div
+                  class={`pr-diff-line pr-diff-line--${change.change_type}`}
+                  role="row"
+                >
+                  <span class="pr-diff-line__number">
+                    {change.old_line ?? ""}
+                  </span>
+                  <span class="pr-diff-line__number">
+                    {change.new_line ?? ""}
+                  </span>
+                  <DiffLineContent change={change} syntaxKind={syntaxKind()} />
+                </div>
+              )}
+            </For>
+          </>
+        )}
+      </For>
+    </div>
+  );
+}
+
+export function FullFileDiff(props: {
+  readonly file: PrDiffFile;
+  readonly loading?: boolean;
+  readonly error?: string | null;
+}) {
+  const syntaxKind = createMemo(() => syntaxKindForPath(props.file.path));
+
+  return (
+    <div class="pr-diff-code" role="table" aria-label="Full file diff">
+      <Show when={props.loading}>
+        <div class="pr-diff-hunk" role="row">
+          <PrDiffLoading compact={true} />
+        </div>
+      </Show>
+      <Show when={props.error !== undefined && props.error !== null}>
+        <div class="pr-diff-hunk" role="row">
+          <span>{props.error}</span>
+        </div>
+      </Show>
+      <Show
+        when={props.file.full_text !== null}
+        fallback={
+          <For each={props.file.chunks}>
+            {(chunk) => (
+              <>
+                <div class="pr-diff-hunk" role="row">
+                  <span>{chunk.header}</span>
+                </div>
+                <For
+                  each={chunk.changes.filter(
+                    (change) => change.change_type !== "delete",
+                  )}
+                >
+                  {(change) => (
+                    <div
+                      class={`pr-diff-line pr-diff-line--full-file pr-diff-line--${change.change_type}`}
+                      role="row"
+                    >
+                      <span class="pr-diff-line__number" aria-hidden="true" />
+                      <span class="pr-diff-line__number">
+                        {change.new_line ?? ""}
+                      </span>
+                      <DiffLineContent
+                        change={change}
+                        syntaxKind={syntaxKind()}
+                      />
+                    </div>
+                  )}
+                </For>
+              </>
+            )}
+          </For>
+        }
+      >
+        <Show when={props.file.full_text_truncated}>
+          <div class="pr-diff-hunk" role="row">
+            <span>Full file content is truncated.</span>
+          </div>
+        </Show>
+        <For each={fullTextRows(props.file)}>
+          {(row) =>
+            row.kind === "line" ? (
+              <div
+                class={`pr-diff-line pr-diff-line--full-file pr-diff-line--${row.lineKind}`}
+                role="row"
+              >
+                <span class="pr-diff-line__number" aria-hidden="true" />
+                <span class="pr-diff-line__number">{row.lineNumber}</span>
+                <FullFileLineContent
+                  content={row.content}
+                  syntaxKind={syntaxKind()}
+                />
+              </div>
+            ) : (
+              <div
+                class="pr-diff-line pr-diff-line--full-file pr-diff-line--delete-marker"
+                role="row"
+                aria-label={`Deleted ${row.deletedCount} line${
+                  row.deletedCount === 1 ? "" : "s"
+                } before line ${row.position}`}
+              >
+                <span class="pr-diff-line__number" aria-hidden="true" />
+                <span class="pr-diff-line__number" aria-hidden="true" />
+                <span
+                  class="pr-diff-line__content pr-diff-line__content--delete-marker"
+                  aria-hidden="true"
+                />
+              </div>
+            )
+          }
+        </For>
+      </Show>
+    </div>
+  );
+}
+
+function LeftRightDiff(props: { readonly file: PrDiffFile }) {
+  const syntaxKind = createMemo(() => syntaxKindForPath(props.file.path));
+
+  return (
+    <div class="pr-diff-split" role="table" aria-label="Left/right diff">
+      <For each={props.file.chunks}>
+        {(chunk) => (
+          <LeftRightDiffHunk chunk={chunk} syntaxKind={syntaxKind()} />
+        )}
+      </For>
+    </div>
+  );
+}
+
+function LeftRightDiffHunk(props: {
+  readonly chunk: PrDiffChunk;
+  readonly syntaxKind: SyntaxKind;
+}) {
+  let oldPane: HTMLDivElement | undefined;
+  let newPane: HTMLDivElement | undefined;
+  let segmentScrollbar: HTMLDivElement | undefined;
+  let scrollbarSpacer: HTMLDivElement | undefined;
+  let syncing = false;
+
+  const updateScrollbarWidth = () => {
+    const oldScrollWidth = oldPane?.scrollWidth ?? 0;
+    const newScrollWidth = newPane?.scrollWidth ?? 0;
+    const paneWidth = Math.max(
+      oldPane?.clientWidth ?? 0,
+      newPane?.clientWidth ?? 0,
+    );
+    const scrollWidth = Math.max(oldScrollWidth, newScrollWidth, paneWidth);
+
+    if (scrollbarSpacer !== undefined) {
+      scrollbarSpacer.style.width = `${scrollWidth}px`;
+    }
+  };
+
+  const applyScrollLeft = (nextScrollLeft: number) => {
+    if (oldPane !== undefined) {
+      oldPane.scrollLeft = nextScrollLeft;
+    }
+    if (newPane !== undefined) {
+      newPane.scrollLeft = nextScrollLeft;
+    }
+    if (segmentScrollbar !== undefined) {
+      segmentScrollbar.scrollLeft = nextScrollLeft;
+    }
+  };
+
+  const syncFromScrollbar = () => {
+    if (segmentScrollbar === undefined) {
+      return;
+    }
+
+    applyScrollLeft(segmentScrollbar.scrollLeft);
+  };
+
+  const syncFromPane = (source: HTMLDivElement) => {
+    if (syncing) {
+      return;
+    }
+
+    syncing = true;
+    applyScrollLeft(source.scrollLeft);
+    syncing = false;
+  };
+
+  const handleWheel = (event: WheelEvent) => {
+    if (segmentScrollbar === undefined) {
+      return;
+    }
+
+    const horizontalDelta = event.deltaX || (event.shiftKey ? event.deltaY : 0);
+    if (Math.abs(horizontalDelta) === 0) {
+      return;
+    }
+    event.preventDefault();
+    applyScrollLeft(segmentScrollbar.scrollLeft + horizontalDelta);
+  };
+
+  createEffect(() => {
+    props.chunk.header;
+    props.chunk.changes.length;
+    queueMicrotask(updateScrollbarWidth);
+  });
+
+  onMount(() => {
+    updateScrollbarWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(updateScrollbarWidth);
+    if (oldPane !== undefined) {
+      resizeObserver.observe(oldPane);
+    }
+    if (newPane !== undefined) {
+      resizeObserver.observe(newPane);
+    }
+
+    onCleanup(() => resizeObserver.disconnect());
+  });
+
+  return (
+    <>
+      <div class="pr-diff-split__hunk" role="row">
+        <span>{props.chunk.header}</span>
+      </div>
+      <div class="pr-diff-split__hunk-body" onWheel={handleWheel}>
+        <div class="pr-diff-split__hunk-panes">
+          <div
+            ref={(element) => {
+              oldPane = element;
+            }}
+            class="pr-diff-split__pane pr-diff-split__pane--old"
+            onScroll={(event) => syncFromPane(event.currentTarget)}
+          >
+            <For each={props.chunk.changes}>
+              {(change) => (
+                <div
+                  class={`pr-diff-split__cell pr-diff-split__cell--old pr-diff-split__cell--${change.change_type}`}
+                  role="row"
+                >
+                  <span class="pr-diff-line__number">
+                    {change.old_line ?? ""}
+                  </span>
+                  <Show
+                    when={
+                      change.change_type === "delete" ||
+                      change.change_type === "context"
+                    }
+                    fallback={
+                      <code
+                        class="pr-diff-line__content pr-diff-line__content--empty"
+                        aria-hidden="true"
+                      />
+                    }
+                  >
+                    <DiffLineContent
+                      change={change}
+                      syntaxKind={props.syntaxKind}
+                    />
+                  </Show>
+                </div>
+              )}
+            </For>
+          </div>
+          <div
+            ref={(element) => {
+              newPane = element;
+            }}
+            class="pr-diff-split__pane pr-diff-split__pane--new"
+            onScroll={(event) => syncFromPane(event.currentTarget)}
+          >
+            <For each={props.chunk.changes}>
+              {(change) => (
+                <div
+                  class={`pr-diff-split__cell pr-diff-split__cell--new pr-diff-split__cell--${change.change_type}`}
+                  role="row"
+                >
+                  <span class="pr-diff-line__number">
+                    {change.new_line ?? ""}
+                  </span>
+                  <Show
+                    when={
+                      change.change_type === "add" ||
+                      change.change_type === "context"
+                    }
+                    fallback={
+                      <code
+                        class="pr-diff-line__content pr-diff-line__content--empty"
+                        aria-hidden="true"
+                      />
+                    }
+                  >
+                    <DiffLineContent
+                      change={change}
+                      syntaxKind={props.syntaxKind}
+                    />
+                  </Show>
+                </div>
+              )}
+            </For>
+          </div>
+        </div>
+        <div
+          ref={(element) => {
+            segmentScrollbar = element;
+          }}
+          class="pr-diff-segment-scrollbar"
+          aria-hidden="true"
+          onScroll={syncFromScrollbar}
+        >
+          <div
+            ref={(element) => {
+              scrollbarSpacer = element;
+            }}
+            class="pr-diff-segment-scrollbar__spacer"
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
+export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
+  let browserPane: HTMLElement | undefined;
+  let focusedBrowserRow: HTMLButtonElement | undefined;
+  let filterInput: HTMLInputElement | undefined;
+  let filterButton: HTMLButtonElement | undefined;
+  const filterId = createUniqueId();
+  let diffFileView: HTMLDivElement | undefined;
+  const [snapshot, setSnapshot] = createSignal<PrDiffSnapshot | null>(null);
+  const [isLoading, setLoading] = createSignal(true);
+  const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
+  const [currentDir, setCurrentDir] = createSignal("");
+  const [browserView, setBrowserView] = createSignal<"list" | "tree">("tree");
+  const [expandedPaths, setExpandedPaths] = createSignal<ReadonlySet<string>>(
+    new Set(),
+  );
+  const [query, setQuery] = createSignal("");
+  const [filterOpen, setFilterOpen] = createSignal(false);
+  const filterVisible = () => filterOpen() || query().length > 0;
+  const [cursorPath, setCursorPath] = createSignal<string | null>(null);
+  const [selectedPath, setSelectedPath] = createSignal<string | null>(null);
+  const [lazyFileText, setLazyFileText] = createSignal<
+    Readonly<Record<string, LazyFileTextState>>
+  >({});
+  const [mode, setMode] = createSignal<DiffViewMode>("left_right");
+  const [prBrowserWidthPx, setPrBrowserWidthPx] = createSignal<number | null>(
+    restorePersistedPaneWidthPx(
+      safeLocalStorage(),
+      PR_BROWSER_WIDTH_STORAGE_KEY,
+      prBrowserWidthBounds(window.innerWidth),
+    ),
+  );
+
+  const prWorkspaceStyle = createMemo(() => {
+    const width = prBrowserWidthPx();
+    return width === null ? undefined : { "--pr-browser-width": `${width}px` };
+  });
+
+  const handlePrBrowserResizeEnd = () => {
+    const width = prBrowserWidthPx();
+    if (width !== null) {
+      persistPaneWidthPx(
+        safeLocalStorage(),
+        PR_BROWSER_WIDTH_STORAGE_KEY,
+        width,
+      );
+    }
+  };
+
+  const files = createMemo(() => snapshot()?.files ?? []);
+  const sortedFiles = createMemo(() =>
+    [...files()].sort((left, right) => left.path.localeCompare(right.path)),
+  );
+  const entries = createMemo(() =>
+    browserView() === "tree"
+      ? buildTreeEntries(sortedFiles(), currentDir(), query(), expandedPaths())
+      : buildDirectoryEntries(sortedFiles(), currentDir(), query()).map(
+          (entry) => ({ ...entry, depth: 0 }),
+        ),
+  );
+  const selectedFile = createMemo(() => {
+    const path = selectedPath();
+    const file = sortedFiles().find((candidate) => candidate.path === path);
+    if (file === undefined) {
+      return null;
+    }
+
+    const lazyState = lazyFileText()[file.path];
+    if (lazyState?.text === undefined || lazyState.text === null) {
+      return file;
+    }
+
+    return {
+      ...file,
+      full_text: lazyState.text.full_text,
+      full_text_truncated: lazyState.text.full_text_truncated,
+    };
+  });
+  const selectedLazyTextState = createMemo(() => {
+    const file = selectedFile();
+    return file === null ? null : (lazyFileText()[file.path] ?? null);
+  });
+  const selectedFileIndex = createMemo(() => {
+    const path = selectedPath();
+    if (path === null) {
+      return -1;
+    }
+
+    return sortedFiles().findIndex((file) => file.path === path);
+  });
+  const hasPreviousFile = createMemo(
+    () => sortedFiles().length > 0 && selectedFileIndex() !== 0,
+  );
+  const hasNextFile = createMemo(() => {
+    const fileCount = sortedFiles().length;
+    return fileCount > 0 && selectedFileIndex() < fileCount - 1;
+  });
+  const headerSourceLabel = createMemo(() =>
+    sourceDisplayLabel(
+      snapshot()?.identity.source ?? fallbackSourceForTarget(props.target),
+    ),
+  );
+  const headerSummary = createMemo(() => {
+    const currentSnapshot = snapshot();
+    if (currentSnapshot === null) {
+      return fallbackTargetTitle(props.target);
+    }
+
+    return `${sourceKindLabel(currentSnapshot.identity.source)}: ${
+      currentSnapshot.identity.title
+    }`;
+  });
+
+  const load = async () => {
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      const nextSnapshot =
+        props.target.kind === "github"
+          ? await loadPrDiff(props.target.target)
+          : await loadGitDiff(props.target.target);
+      setSnapshot(nextSnapshot);
+      const nextFiles = [...nextSnapshot.files].sort((left, right) =>
+        left.path.localeCompare(right.path),
+      );
+      const initialEntries = buildDirectoryEntries(nextFiles, "", "");
+      setCurrentDir("");
+      setExpandedPaths(new Set<string>());
+      setQuery("");
+      setCursorPath(initialEntries[0]?.path ?? null);
+      setSelectedPath(null);
+      setLazyFileText({});
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to load diff",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchFullFileText = (
+    file: PrDiffFile,
+  ): Promise<PrDiffFileText> | null => {
+    if (props.target.kind === "github") {
+      if (file.raw_url === null) {
+        return null;
+      }
+      return loadPrDiffFileText(file.raw_url);
+    }
+
+    return loadGitDiffFileText(props.target.target, file.path);
+  };
+
+  const ensureFullFileText = (file: PrDiffFile) => {
+    const lazyState = lazyFileText()[file.path];
+    if (
+      file.full_text !== null ||
+      file.is_binary ||
+      file.status === PrFileStatus.Deleted ||
+      lazyState?.loading === true ||
+      (lazyState?.text !== undefined && lazyState.text !== null) ||
+      (lazyState?.error !== undefined && lazyState.error !== null)
+    ) {
+      return;
+    }
+
+    const request = fetchFullFileText(file);
+    if (request === null) {
+      return;
+    }
+
+    setLazyFileText((state) => ({
+      ...state,
+      [file.path]: {
+        loading: true,
+        text: state[file.path]?.text ?? null,
+        error: null,
+      },
+    }));
+
+    void request
+      .then((text) => {
+        setLazyFileText((state) => ({
+          ...state,
+          [file.path]: {
+            loading: false,
+            text,
+            error: null,
+          },
+        }));
+      })
+      .catch((error: unknown) => {
+        setLazyFileText((state) => ({
+          ...state,
+          [file.path]: {
+            loading: false,
+            text: state[file.path]?.text ?? null,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to load full file content",
+          },
+        }));
+      });
+  };
+
+  createEffect(() => {
+    const file = selectedFile();
+    if ((mode() === "full_file" || mode() === "image") && file !== null) {
+      ensureFullFileText(file);
+    }
+  });
+
+  createEffect(() => {
+    const file = selectedFile();
+    if (mode() === "image" && (file === null || !isSvgPath(file.path))) {
+      setMode("left_right");
+    }
+  });
+
+  const focusEntry = (entry: BrowserEntry) => {
+    setCursorPath(entry.path);
+    if (entry.kind === "file" || browserView() === "list") {
+      setSelectedPath(entry.kind === "file" ? entry.path : null);
+    }
+  };
+
+  const isExpanded = (path: string): boolean =>
+    query().trim().length > 0 || expandedPaths().has(path);
+  const toggleDirectory = (path: string) => {
+    if (query().trim().length > 0) return;
+    setExpandedPaths((previous) => {
+      const next = new Set(previous);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+
+  const revealPath = (path: string) => {
+    let root = currentDir();
+    while (root.length > 0 && !path.startsWith(`${root}/`)) {
+      root = parentDir(root) ?? "";
+    }
+    setCurrentDir(root);
+    setExpandedPaths(
+      (previous) => new Set([...previous, ...treeAncestors(path, root)]),
+    );
+  };
+
+  const changeBrowserView = (view: "list" | "tree") => {
+    setBrowserView(view);
+    const path = selectedPath();
+    if (
+      view === "tree" &&
+      path !== null &&
+      (currentDir().length === 0 || path.startsWith(`${currentDir()}/`))
+    ) {
+      revealPath(path);
+    }
+    if (!entries().some((entry) => entry.path === cursorPath())) {
+      setCursorPath(entries()[0]?.path ?? null);
+    }
+  };
+
+  const selectFilePath = (path: string) => {
+    if (browserView() === "tree") revealPath(path);
+    else setCurrentDir(parentDir(path) ?? "");
+    setQuery("");
+    setCursorPath(path);
+    setSelectedPath(path);
+    queueMicrotask(() => {
+      if (diffFileView !== undefined) {
+        diffFileView.scrollTop = 0;
+      }
+    });
+  };
+
+  const navigateFileByPathOrder = (step: 1 | -1) => {
+    const pathOrderedFiles = sortedFiles();
+    if (pathOrderedFiles.length === 0) {
+      return;
+    }
+
+    const currentIndex = selectedFileIndex();
+    const fallbackIndex = step === 1 ? -1 : pathOrderedFiles.length;
+    const boundedIndex = Math.min(
+      pathOrderedFiles.length - 1,
+      Math.max(0, (currentIndex === -1 ? fallbackIndex : currentIndex) + step),
+    );
+    const nextFile = pathOrderedFiles[boundedIndex];
+    if (nextFile !== undefined) {
+      selectFilePath(nextFile.path);
+    }
+  };
+
+  const selectEntry = (entry: BrowserEntry) => {
+    focusEntry(entry);
+    if (entry.kind === "directory") {
+      if (browserView() === "tree") {
+        toggleDirectory(entry.path);
+        return;
+      }
+      setCurrentDir(entry.path);
+      setQuery("");
+      const childEntries = buildDirectoryEntries(sortedFiles(), entry.path, "");
+      const firstChild = childEntries[0];
+      if (firstChild === undefined) {
+        setCursorPath(null);
+        setSelectedPath(null);
+      } else {
+        focusEntry(firstChild);
+      }
+      return;
+    }
+  };
+
+  const moveCursor = (step: 1 | -1) => {
+    const visibleEntries = entries();
+    if (visibleEntries.length === 0) {
+      return;
+    }
+
+    const index = visibleEntries.findIndex(
+      (entry) => entry.path === cursorPath(),
+    );
+    const currentIndex = index === -1 ? 0 : index;
+    const nextIndex = Math.min(
+      visibleEntries.length - 1,
+      Math.max(0, currentIndex + step),
+    );
+    const nextEntry = visibleEntries[nextIndex];
+    if (nextEntry !== undefined) {
+      focusEntry(nextEntry);
+    }
+  };
+
+  const navigateParent = () => {
+    const previousDir = currentDir();
+    const parent = parentDir(currentDir());
+    if (parent !== null) {
+      setCurrentDir(parent);
+      setQuery("");
+      setCursorPath(previousDir);
+      setSelectedPath(null);
+    }
+  };
+
+  const moveTreeLeft = () => {
+    const entry = entries().find(
+      (candidate) => candidate.path === cursorPath(),
+    );
+    if (entry === undefined) return;
+    if (
+      entry.kind === "directory" &&
+      isExpanded(entry.path) &&
+      query().trim().length === 0
+    ) {
+      toggleDirectory(entry.path);
+      return;
+    }
+    const parent = parentDir(entry.path);
+    if (parent !== currentDir() && parent !== null) setCursorPath(parent);
+  };
+
+  const revealFilter = () => {
+    setFilterOpen(true);
+    queueMicrotask(() => {
+      filterInput?.focus();
+      filterInput?.select();
+    });
+  };
+
+  const hideFilter = () => {
+    setQuery("");
+    setFilterOpen(false);
+    if (!entries().some((entry) => entry.path === cursorPath())) {
+      setCursorPath(entries()[0]?.path ?? null);
+    }
+    queueMicrotask(() => {
+      const row = Array.from(
+        browserPane?.querySelectorAll<HTMLButtonElement>("button[data-path]") ??
+          [],
+      ).find((candidate) => candidate.dataset["path"] === cursorPath());
+      (row ?? filterButton)?.focus({ preventScroll: true });
+    });
+  };
+
+  createEffect(() => {
+    cursorPath();
+    entries();
+    queueMicrotask(() => {
+      const row = Array.from(
+        browserPane?.querySelectorAll<HTMLButtonElement>("button[data-path]") ??
+          [],
+      ).find((candidate) => candidate.dataset["path"] === cursorPath());
+      row?.scrollIntoView?.({ block: "nearest" });
+      if (
+        focusedBrowserRow !== undefined &&
+        (document.activeElement === focusedBrowserRow ||
+          (!focusedBrowserRow.isConnected &&
+            document.activeElement === document.body))
+      ) {
+        row?.focus({ preventScroll: true });
+      }
+    });
+  });
+
+  onMount(() => {
+    void load();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+      if (
+        (event.key === "/" || event.key === "f") &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.repeat &&
+        !event.isComposing
+      ) {
+        event.preventDefault();
+        revealFilter();
+        return;
+      }
+      if (
+        event.key === "t" &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.repeat &&
+        !event.isComposing
+      ) {
+        event.preventDefault();
+        changeBrowserView(browserView() === "tree" ? "list" : "tree");
+        return;
+      }
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".file-browser__toolbar") !== null
+      )
+        return;
+
+      const key = event.key.toLowerCase();
+      if (matchesCtrlShortcut(event, "d")) {
+        event.preventDefault();
+        scrollDiffPane(diffFileView, 1);
+        return;
+      }
+
+      if (matchesCtrlShortcut(event, "u")) {
+        event.preventDefault();
+        scrollDiffPane(diffFileView, -1);
+        return;
+      }
+
+      if (event.key === "<") {
+        event.preventDefault();
+        navigateFileByPathOrder(-1);
+        return;
+      }
+
+      if (event.key === ">") {
+        event.preventDefault();
+        navigateFileByPathOrder(1);
+        return;
+      }
+
+      if (key === "j" || event.key === "ArrowDown" || event.key === "Down") {
+        event.preventDefault();
+        moveCursor(1);
+        return;
+      }
+
+      if (key === "k" || event.key === "ArrowUp" || event.key === "Up") {
+        event.preventDefault();
+        moveCursor(-1);
+        return;
+      }
+
+      if (key === "h" || event.key === "ArrowLeft" || event.key === "Left") {
+        event.preventDefault();
+        if (browserView() === "tree") moveTreeLeft();
+        else navigateParent();
+        return;
+      }
+
+      if (
+        key === "l" ||
+        event.key === "ArrowRight" ||
+        event.key === "Right" ||
+        event.key === "Enter" ||
+        event.key === "Return"
+      ) {
+        const entry =
+          entries().find((candidate) => candidate.path === cursorPath()) ??
+          entries()[0];
+        if (entry !== undefined) {
+          event.preventDefault();
+          if (
+            browserView() === "tree" &&
+            entry.kind === "directory" &&
+            (key === "l" ||
+              event.key === "ArrowRight" ||
+              event.key === "Right") &&
+            isExpanded(entry.path)
+          ) {
+            const index = entries().findIndex(
+              (candidate) => candidate.path === entry.path,
+            );
+            const child = entries()[index + 1];
+            if (child !== undefined && child.depth > entry.depth)
+              focusEntry(child);
+          } else selectEntry(entry);
+        }
+        return;
+      }
+
+      if (event.key === "Tab") {
+        event.preventDefault();
+        const availableModes: readonly DiffViewMode[] =
+          selectedFile() !== null && isSvgPath(selectedFile()?.path ?? "")
+            ? ["left_right", "stack", "full_file", "image"]
+            : ["left_right", "stack", "full_file"];
+        setMode((value) => {
+          const currentIndex = availableModes.indexOf(value);
+          return (
+            availableModes[(currentIndex + 1) % availableModes.length] ??
+            "left_right"
+          );
+        });
+        return;
+      }
+
+      if (event.key === "1") {
+        event.preventDefault();
+        setMode("left_right");
+        return;
+      }
+
+      if (event.key === "2") {
+        event.preventDefault();
+        setMode("stack");
+        return;
+      }
+
+      if (event.key === "3") {
+        event.preventDefault();
+        setMode("full_file");
+        return;
+      }
+
+      if (event.key === "4") {
+        if (selectedFile() !== null && isSvgPath(selectedFile()?.path ?? "")) {
+          event.preventDefault();
+          setMode("image");
+        }
+        return;
+      }
+
+      if (key === "o") {
+        if (props.target.kind !== "github") {
+          return;
+        }
+        event.preventDefault();
+        void openUrl(snapshot()?.identity.url ?? props.target.target.url);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
+  });
+
+  return (
+    <div class="pr-workspace" style={prWorkspaceStyle()}>
+      <aside class="pane pr-browser" ref={browserPane}>
+        <header class="pane__header">
+          <span class="pane__title">Changed Files</span>
+          <span>{files().length} files</span>
+        </header>
+        <div class="pane__body pr-browser__body">
+          <div class="file-browser__toolbar">
+            <div
+              class="file-browser__view-toggle"
+              role="group"
+              aria-label="Changed files view"
+            >
+              <button
+                type="button"
+                class="file-browser__view-option"
+                title="List view (t toggles)"
+                aria-label="List"
+                aria-pressed={browserView() === "list"}
+                onClick={() => changeBrowserView("list")}
+              >
+                <BrowserListGlyph />
+              </button>
+              <button
+                type="button"
+                class="file-browser__view-option"
+                title="Tree view (t toggles)"
+                aria-label="Tree"
+                aria-pressed={browserView() === "tree"}
+                onClick={() => changeBrowserView("tree")}
+              >
+                <BrowserTreeGlyph />
+              </button>
+            </div>
+            <div class="file-browser__toolbar-actions">
+              <button
+                ref={filterButton}
+                type="button"
+                class="file-browser__filter-toggle file-browser__icon-button"
+                title="Show and focus filter (f or /)"
+                aria-label="Show filter"
+                aria-expanded={filterVisible()}
+                aria-controls={filterId}
+                onClick={revealFilter}
+              >
+                <BrowserFilterGlyph />
+              </button>
+            </div>
+          </div>
+          <div
+            class={`pr-browser__path${
+              currentDir().length === 0 ? " pr-browser__path--root" : ""
+            }`}
+          >
+            {currentDir().length === 0 ? "/" : currentDir()}
+          </div>
+          <Show when={filterVisible()}>
+            <input
+              id={filterId}
+              aria-label="Filter changed files"
+              ref={(element) => {
+                filterInput = element;
+              }}
+              class="file-browser__filter pr-browser__filter"
+              value={query()}
+              placeholder="Filter files..."
+              onInput={(event) => setQuery(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && !event.isComposing) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  hideFilter();
+                }
+              }}
+            />
+          </Show>
+          <Show
+            when={entries().length > 0}
+            fallback={
+              <Show
+                when={!isLoading()}
+                fallback={<PrDiffLoading compact={true} />}
+              >
+                <div class="empty">No changed files here.</div>
+              </Show>
+            }
+          >
+            <ul
+              class="file-browser__list pr-browser__list"
+              role={browserView() === "tree" ? "tree" : "list"}
+              aria-label="Changed files"
+            >
+              <Show
+                when={
+                  browserView() === "list" && parentDir(currentDir()) !== null
+                }
+              >
+                <li>
+                  <button
+                    type="button"
+                    class="file-browser__button file-browser__button--dir"
+                    onClick={navigateParent}
+                  >
+                    <span class="file-browser__entry-labels">
+                      <span class="file-browser__name">..</span>
+                    </span>
+                  </button>
+                </li>
+              </Show>
+              <For each={entries()}>
+                {(entry) => (
+                  <li role={browserView() === "tree" ? "none" : "listitem"}>
+                    <button
+                      type="button"
+                      class={`file-browser__button${browserView() === "tree" ? " file-browser__tree-row" : ""}${
+                        entry.kind === "directory"
+                          ? " file-browser__button--dir"
+                          : " file-browser__button--file"
+                      }${
+                        cursorPath() === entry.path
+                          ? " file-browser__button--active"
+                          : ""
+                      }`}
+                      data-path={entry.path}
+                      tabIndex={
+                        browserView() === "tree"
+                          ? cursorPath() === entry.path ||
+                            (!entries().some(
+                              (candidate) => candidate.path === cursorPath(),
+                            ) &&
+                              entries()[0]?.path === entry.path)
+                            ? 0
+                            : -1
+                          : 0
+                      }
+                      onFocus={(event) => {
+                        focusedBrowserRow = event.currentTarget;
+                        focusEntry(entry);
+                      }}
+                      role={browserView() === "tree" ? "treeitem" : undefined}
+                      aria-level={
+                        browserView() === "tree" ? entry.depth + 1 : undefined
+                      }
+                      aria-expanded={
+                        browserView() === "tree" && entry.kind === "directory"
+                          ? isExpanded(entry.path)
+                          : undefined
+                      }
+                      aria-selected={
+                        browserView() === "tree"
+                          ? cursorPath() === entry.path
+                          : undefined
+                      }
+                      style={{ "--tree-depth": entry.depth }}
+                      onClick={() => selectEntry(entry)}
+                    >
+                      <Show when={browserView() === "tree"}>
+                        <span
+                          class="file-browser__tree-chevron"
+                          aria-hidden="true"
+                        >
+                          {entry.kind === "directory"
+                            ? isExpanded(entry.path)
+                              ? "▾"
+                              : "▸"
+                            : ""}
+                        </span>
+                      </Show>
+                      <Show when={entry.kind === "file"}>
+                        <FileStatusBadge
+                          file={(entry as { file: PrDiffFile }).file}
+                        />
+                      </Show>
+                      <span class="file-browser__entry-labels">
+                        <span class="file-browser__name">{entry.name}</span>
+                        <span class="file-browser__path-hint">
+                          <Show
+                            when={entry.kind === "directory"}
+                            fallback={
+                              <>
+                                +
+                                {(entry as { file: PrDiffFile }).file.additions}
+                                {" -"}
+                                {(entry as { file: PrDiffFile }).file.deletions}
+                              </>
+                            }
+                          >
+                            {
+                              (
+                                entry as Extract<
+                                  BrowserEntry,
+                                  { kind: "directory" }
+                                >
+                              ).fileCount
+                            }
+                            {" files | +"}
+                            {
+                              (
+                                entry as Extract<
+                                  BrowserEntry,
+                                  { kind: "directory" }
+                                >
+                              ).additions
+                            }
+                            {" -"}
+                            {
+                              (
+                                entry as Extract<
+                                  BrowserEntry,
+                                  { kind: "directory" }
+                                >
+                              ).deletions
+                            }
+                          </Show>
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
+        </div>
+        <PaneResizeHandle
+          getBounds={() => prBrowserWidthBounds(window.innerWidth)}
+          onResize={setPrBrowserWidthPx}
+          onResizeEnd={handlePrBrowserResizeEnd}
+          label="Resize changed files pane"
+        />
+      </aside>
+
+      <section class="pane pr-diff-pane">
+        <header class="pane__header pr-diff-header">
+          <div class="pr-diff-header__title">
+            <span class="pane__title">
+              {snapshot()?.identity.owner ?? fallbackOwner(props.target)}/
+              {snapshot()?.identity.repo ?? fallbackRepo(props.target)}{" "}
+              {headerSourceLabel()}
+            </span>
+            <span class="pr-diff-header__summary">{headerSummary()}</span>
+            <span
+              class={`pr-diff-header__state ${sourceStatusClass(
+                snapshot() ?? null,
+              )}`}
+              title={
+                snapshot()?.identity.merged_at === undefined ||
+                snapshot()?.identity.merged_at === null
+                  ? undefined
+                  : `Merged at ${snapshot()?.identity.merged_at}`
+              }
+            >
+              {sourceStatusLabel(snapshot() ?? null)}
+            </span>
+          </div>
+          <div
+            class="pr-diff-header__actions"
+            role="group"
+            aria-label="Diff actions and diff mode"
+          >
+            <button
+              type="button"
+              class="workspace__mode"
+              title="Previous file (<)"
+              aria-label="Previous file"
+              disabled={!hasPreviousFile()}
+              onClick={() => navigateFileByPathOrder(-1)}
+            >
+              <PreviousFileIcon />
+            </button>
+            <button
+              type="button"
+              class="workspace__mode"
+              title="Next file (>)"
+              aria-label="Next file"
+              disabled={!hasNextFile()}
+              onClick={() => navigateFileByPathOrder(1)}
+            >
+              <NextFileIcon />
+            </button>
+            <Show when={props.target.kind === "github"}>
+              <button
+                type="button"
+                class="workspace__mode"
+                title="Open source in GitHub"
+                aria-label="Open source in GitHub"
+                onClick={() => {
+                  if (props.target.kind === "github") {
+                    void openUrl(
+                      snapshot()?.identity.url ?? props.target.target.url,
+                    );
+                  }
+                }}
+              >
+                <JumpIcon />
+              </button>
+            </Show>
+            <For
+              each={
+                [
+                  ["left_right", "Left/right diff"],
+                  ["stack", "Stack"],
+                  ["full_file", "Full file"],
+                ] as const
+              }
+            >
+              {([nextMode, label]) => (
+                <button
+                  type="button"
+                  class={`workspace__mode${
+                    mode() === nextMode ? " workspace__mode--active" : ""
+                  }`}
+                  title={label}
+                  aria-label={label}
+                  onClick={() => setMode(nextMode)}
+                >
+                  <ModeIcon mode={nextMode} />
+                </button>
+              )}
+            </For>
+            <Show
+              when={
+                selectedFile() !== null && isSvgPath(selectedFile()?.path ?? "")
+              }
+            >
+              <button
+                type="button"
+                class={`workspace__mode${
+                  mode() === "image" ? " workspace__mode--active" : ""
+                }`}
+                title="SVG image"
+                aria-label="SVG image"
+                onClick={() => setMode("image")}
+              >
+                <ModeIcon mode="image" />
+              </button>
+            </Show>
+          </div>
+        </header>
+        <Show when={errorMessage() !== null}>
+          <div class="banner banner--error pr-diff-error">
+            <span>{errorMessage()}</span>
+            <button
+              type="button"
+              class="workspace__text-button"
+              onClick={() => {
+                void load();
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        </Show>
+        <Show when={snapshot()?.warnings.length}>
+          <div class="banner">{snapshot()?.warnings.join(" | ")}</div>
+        </Show>
+        <div class="pane__body pr-diff-pane__body">
+          <Show when={!isLoading()} fallback={<PrDiffLoading />}>
+            <Show
+              when={selectedFile()}
+              fallback={<div class="empty">No file selected.</div>}
+            >
+              {(getFile) => (
+                <>
+                  <div class="pr-diff-filebar">
+                    <FileStatusBadge file={getFile()} />
+                    <span>{getFile().path}</span>
+                    <Show when={getFile().old_path !== null}>
+                      <span class="pr-diff-filebar__old">
+                        from {getFile().old_path}
+                      </span>
+                    </Show>
+                    <span>
+                      +{getFile().additions} -{getFile().deletions}
+                    </span>
+                  </div>
+                  <Show
+                    when={!getFile().is_binary}
+                    fallback={
+                      <div class="empty">
+                        No text diff is available for this file.
+                      </div>
+                    }
+                  >
+                    <Show
+                      when={
+                        getFile().chunks.length > 0 ||
+                        mode() === "full_file" ||
+                        mode() === "image"
+                      }
+                      fallback={
+                        <div class="empty">
+                          No patch is available for this file. Use full file
+                          view.
+                        </div>
+                      }
+                    >
+                      <div
+                        ref={(element) => {
+                          diffFileView = element;
+                        }}
+                        class="pr-diff-fileview"
+                      >
+                        <Show
+                          when={
+                            mode() === "left_right" &&
+                            getFile().chunks.length > 0
+                          }
+                        >
+                          <LeftRightDiff file={getFile()} />
+                        </Show>
+                        <Show when={mode() === "image"}>
+                          <SvgImageDiff
+                            file={getFile()}
+                            loading={selectedLazyTextState()?.loading ?? false}
+                            error={selectedLazyTextState()?.error ?? null}
+                          />
+                        </Show>
+                        <Show when={mode() === "full_file"}>
+                          <FullFileDiff
+                            file={getFile()}
+                            loading={selectedLazyTextState()?.loading ?? false}
+                            error={selectedLazyTextState()?.error ?? null}
+                          />
+                        </Show>
+                        <Show
+                          when={
+                            mode() === "stack" && getFile().chunks.length > 0
+                          }
+                        >
+                          <StackDiff file={getFile()} />
+                        </Show>
+                      </div>
+                    </Show>
+                  </Show>
+                </>
+              )}
+            </Show>
+          </Show>
+        </div>
+      </section>
+    </div>
+  );
+}

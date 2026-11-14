@@ -1,0 +1,4 @@
+interface:
+  display_name: "Riela Workflow Run"
+  short_description: "Run and monitor riela workflows"
+  default_prompt: "Use $riela-workflow-run to run this riela workflow and inspect the resulting session."

@@ -1,0 +1,687 @@
+{
+  "workflowId": "codex-design-and-implement-review-loop",
+  "description": "Single-node design and planning, committed conflict-aware plans, same-branch parallel implementation and review, overwrite reconciliation, and serialized commit, push and base-branch integration.",
+  "defaults": {
+    "fanoutConcurrency": 4,
+    "maxLoopIterations": 30,
+    "nodeTimeoutMs": 3600000
+  },
+  "loop": {
+    "kind": "design-implement-review",
+    "required": false,
+    "description": "First-party Codex design, implementation-plan, implementation, review, documentation, and commit workflow loop metadata.",
+    "convergence": {
+      "maxGateVisits": 4,
+      "maxRepeatedFindingRounds": 2,
+      "onStall": "fail"
+    },
+    "evidence": {
+      "required": true,
+      "artifactRootPolicy": "runtime-owned",
+      "requiredSections": [
+        "changed-files",
+        "verification",
+        "implementation-plan",
+        "review"
+      ]
+    },
+    "policies": {
+      "mutation": {
+        "allowedWriteRoots": [
+          "Sources",
+          "Tests",
+          "design-docs",
+          "impl-plans",
+          "examples",
+          ".riela/workflows",
+          "tmp"
+        ],
+        "scratchRoot": "tmp",
+        "commit": "prompt",
+        "push": "prompt"
+      },
+      "process": {
+        "nestedRiela": "deny",
+        "nestedCodex": "deny",
+        "allowedBackends": [
+          "codex-agent"
+        ]
+      },
+      "network": {
+        "mode": "inherit-command"
+      },
+      "redaction": {
+        "secretPolicy": "summary-only",
+        "storeRawStdout": false,
+        "storeRawStderr": false
+      }
+    },
+    "implementationPlan": {
+      "required": true,
+      "pathPattern": "impl-plans/active/*.md"
+    },
+    "gates": [
+      {
+        "id": "design-review",
+        "stepId": "step3-design-review",
+        "required": false,
+        "acceptWhen": {
+          "decision": "accepted",
+          "maxHighFindings": 0,
+          "maxMediumFindings": 0
+        }
+      },
+      {
+        "id": "implementation-plan-review",
+        "stepId": "step5-impl-plan-review",
+        "required": false,
+        "acceptWhen": {
+          "decision": "accepted",
+          "maxHighFindings": 0,
+          "maxMediumFindings": 0
+        }
+      },
+      {
+        "id": "test-integrity-review",
+        "stepId": "step6-test-integrity-check",
+        "required": false,
+        "acceptWhen": {
+          "decision": "accepted",
+          "maxHighFindings": 0,
+          "maxMediumFindings": 0
+        }
+      },
+      {
+        "id": "implementation-review",
+        "stepId": "step7-review",
+        "required": false,
+        "acceptWhen": {
+          "decision": "accepted",
+          "maxHighFindings": 0,
+          "maxMediumFindings": 0
+        }
+      },
+      {
+        "id": "adversarial-implementation-review",
+        "stepId": "step7-adversarial-review",
+        "required": false,
+        "acceptWhen": {
+          "decision": "accepted",
+          "maxHighFindings": 0,
+          "maxMediumFindings": 0
+        }
+      },
+      {
+        "id": "implementation-plan-completion-check",
+        "stepId": "step9-commit-message",
+        "required": false,
+        "acceptWhen": {
+          "decision": "accepted",
+          "maxHighFindings": 0,
+          "maxMediumFindings": 0
+        }
+      }
+    ],
+    "recovery": {
+      "resume": "preserve-session",
+      "rerun": "new-child-session",
+      "retry": "same-communication-or-step-attempt"
+    }
+  },
+  "prompts": {
+    "rielaPromptTemplate": "Coordinate {{workflowId}} through its authored graph. Always use the single design author and single plan author, with independent review gates. Planning-only uses Step 9 and final git steps without implementation. Issue-resolution checkpoints accepted designs and all plans before dispatching dependency-ready implementation plans with bounded Riela fanout on the SAME branch and working directory. Each branch executes implementation, integrity review, independent review and required adversarial review, then records immutable evidence. Wait for every branch to terminate before shared-change reconciliation and independent integration review. Repair overwritten or missing work and repeat integration review until accepted; dispatch later dependency waves only after acceptance. After every plan is integrated, run E2E evidence, docs, completion, one final commit, push and serialized merge to the recorded base branch. Never use worktrees or branch-local git mutations. Never finish with missing plan behavior, unexamined drift, incomplete plans or failed git operations.",
+    "workerSystemPromptTemplate": "Return concise business JSON only. Keep workflow mode, issue references, codex-agent references, file paths, findings, review decisions, and verification commands explicit."
+  },
+  "managerStepId": "riela-manager",
+  "entryStepId": "riela-manager",
+  "nodes": [
+    {
+      "id": "riela-manager",
+      "nodeFile": "nodes/node-riela-manager.json"
+    },
+    {
+      "id": "step1-issue-intake",
+      "nodeFile": "nodes/node-step1-issue-intake.json"
+    },
+    {
+      "id": "step2-design-doc-update",
+      "nodeFile": "nodes/node-step2-design-doc-update.json"
+    },
+    {
+      "id": "step3-design-review",
+      "nodeFile": "nodes/node-step3-design-review.json"
+    },
+    {
+      "id": "step4-impl-plan-create",
+      "nodeFile": "nodes/node-step4-impl-plan-create.json"
+    },
+    {
+      "id": "step5-impl-plan-review",
+      "nodeFile": "nodes/node-step5-impl-plan-review.json"
+    },
+    {
+      "id": "step6-implement",
+      "nodeFile": "nodes/node-step6-implement.json"
+    },
+    {
+      "id": "step7-review",
+      "nodeFile": "nodes/node-step7-review.json"
+    },
+    {
+      "id": "step6-test-integrity-check",
+      "nodeFile": "nodes/node-step6-test-integrity-check.json"
+    },
+    {
+      "id": "step7-adversarial-review",
+      "nodeFile": "nodes/node-step7-adversarial-review.json"
+    },
+    {
+      "id": "step7b-e2e-evidence",
+      "nodeFile": "nodes/node-step7b-e2e-evidence.json"
+    },
+    {
+      "id": "step8-docs-refresh",
+      "nodeFile": "nodes/node-step8-docs-refresh.json"
+    },
+    {
+      "id": "step9-commit-message",
+      "nodeFile": "nodes/node-step9-commit-message.json"
+    },
+    {
+      "id": "step10-git-commit",
+      "addon": {
+        "name": "riela/git-commit",
+        "version": "1",
+        "config": {
+          "commitMessageTemplate": "{{inbox.latest.output.payload.commitMessage}}",
+          "committedFilesTemplate": "{{inbox.latest.output.payload.committedFiles}}",
+          "allowCommit": true
+        }
+      }
+    },
+    {
+      "id": "step11-git-push",
+      "addon": {
+        "name": "riela/git-push",
+        "version": "1",
+        "config": {
+          "allowPush": true,
+          "expectedCommitHashTemplate": "{{inbox.latest.output.payload.git.commitHash}}"
+        }
+      }
+    },
+    {
+      "id": "workflow-output",
+      "kind": "output",
+      "nodeFile": "nodes/node-workflow-output.json"
+    },
+    {
+      "id": "plan-checkpoint",
+      "nodeFile": "nodes/node-plan-checkpoint.json"
+    },
+    {
+      "id": "plan-git-commit",
+      "addon": {
+        "name": "riela/git-commit",
+        "version": "1",
+        "config": {
+          "commitMessageTemplate": "{{inbox.latest.output.payload.commitMessage}}",
+          "committedFilesTemplate": "{{inbox.latest.output.payload.committedFiles}}",
+          "allowCommit": true
+        }
+      }
+    },
+    {
+      "id": "dispatch-plans",
+      "nodeFile": "nodes/node-dispatch-plans.json"
+    },
+    {
+      "id": "branch-evidence",
+      "nodeFile": "nodes/node-branch-evidence.json"
+    },
+    {
+      "id": "reconcile-implementations",
+      "nodeFile": "nodes/node-reconcile-implementations.json"
+    },
+    {
+      "id": "integration-review",
+      "nodeFile": "nodes/node-integration-review.json"
+    },
+    {
+      "id": "base-branch-integrate",
+      "nodeFile": "nodes/node-base-branch-integrate.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "riela-manager",
+      "nodeId": "riela-manager",
+      "description": "Start the shared workflow and hand execution to the intake worker.",
+      "role": "manager",
+      "transitions": [
+        {
+          "toStepId": "step1-issue-intake"
+        }
+      ]
+    },
+    {
+      "id": "step1-issue-intake",
+      "nodeId": "step1-issue-intake",
+      "description": "Normalize the request into a shared intake brief for either issue resolution or planning-only reference work.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step2-design-doc-update"
+        }
+      ]
+    },
+    {
+      "id": "step2-design-doc-update",
+      "nodeId": "step2-design-doc-update",
+      "description": "Update the design documents from the accepted intake brief before planning or implementation.",
+      "role": "worker",
+      "loop": {
+        "role": "worker",
+        "evidenceTags": [
+          "design",
+          "changed-files"
+        ],
+        "recordsChangedFiles": true
+      },
+      "transitions": [
+        {
+          "toStepId": "step3-design-review"
+        }
+      ]
+    },
+    {
+      "id": "step3-design-review",
+      "nodeId": "step3-design-review",
+      "description": "Review the design update and return to Step 2 when any high or mid finding exists.",
+      "role": "worker",
+      "loop": {
+        "role": "gate",
+        "gateId": "design-review",
+        "evidenceTags": [
+          "design-review",
+          "blocking-findings"
+        ],
+        "recordsVerification": true
+      },
+      "transitions": [
+        {
+          "toStepId": "step2-design-doc-update",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "step4-impl-plan-create",
+          "label": "!(needs_revision)"
+        }
+      ]
+    },
+    {
+      "id": "step4-impl-plan-create",
+      "nodeId": "step4-impl-plan-create",
+      "description": "Create or revise the implementation plan from the accepted design.",
+      "role": "worker",
+      "loop": {
+        "role": "worker",
+        "evidenceTags": [
+          "implementation-plan",
+          "changed-files"
+        ],
+        "recordsChangedFiles": true
+      },
+      "transitions": [
+        {
+          "toStepId": "step5-impl-plan-review"
+        }
+      ]
+    },
+    {
+      "id": "step5-impl-plan-review",
+      "nodeId": "step5-impl-plan-review",
+      "description": "Review the implementation plan and final design-plan consistency, then return to the correct authoring step when blocking findings exist.",
+      "role": "worker",
+      "loop": {
+        "role": "gate",
+        "gateId": "implementation-plan-review",
+        "evidenceTags": [
+          "implementation-plan-review",
+          "blocking-findings"
+        ],
+        "recordsVerification": true
+      },
+      "transitions": [
+        {
+          "toStepId": "step2-design-doc-update",
+          "label": "needs_design_revision"
+        },
+        {
+          "toStepId": "step4-impl-plan-create",
+          "label": "needs_revision && !(needs_design_revision)"
+        },
+        {
+          "toStepId": "step9-commit-message",
+          "label": "planning_only && !(needs_design_revision || needs_revision)"
+        },
+        {
+          "toStepId": "plan-checkpoint",
+          "label": "!(planning_only || needs_design_revision || needs_revision)"
+        }
+      ]
+    },
+    {
+      "id": "step6-implement",
+      "nodeId": "step6-implement",
+      "description": "Implement the accepted plan, run verification, and update plan progress.",
+      "role": "worker",
+      "timeoutMs": 14400000,
+      "loop": {
+        "role": "worker",
+        "evidenceTags": [
+          "implementation",
+          "changed-files",
+          "verification"
+        ],
+        "recordsChangedFiles": true,
+        "recordsVerification": true
+      },
+      "transitions": [
+        {
+          "toStepId": "step6-test-integrity-check"
+        }
+      ]
+    },
+    {
+      "id": "step6-test-integrity-check",
+      "nodeId": "step6-test-integrity-check",
+      "description": "Check the implementation for inappropriate test deletion, weakened assertions, test-only hacks, skipped coverage, and other verification integrity regressions.",
+      "role": "worker",
+      "loop": {
+        "role": "gate",
+        "gateId": "test-integrity-review",
+        "evidenceTags": [
+          "test-integrity",
+          "verification"
+        ],
+        "recordsVerification": true
+      },
+      "transitions": [
+        {
+          "toStepId": "step6-implement",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "step7-review",
+          "label": "!(needs_revision)"
+        }
+      ]
+    },
+    {
+      "id": "step7-review",
+      "nodeId": "step7-review",
+      "description": "Review the implementation diff and return to Step 6 when any high or mid finding exists.",
+      "role": "worker",
+      "loop": {
+        "role": "gate",
+        "gateId": "implementation-review",
+        "evidenceTags": [
+          "implementation-review",
+          "blocking-findings"
+        ],
+        "recordsVerification": true
+      },
+      "transitions": [
+        {
+          "toStepId": "step6-implement",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "step7-adversarial-review",
+          "label": "!(needs_revision) && requires_adversarial_review"
+        },
+        {
+          "toStepId": "branch-evidence",
+          "label": "!(needs_revision || requires_adversarial_review)"
+        }
+      ]
+    },
+    {
+      "id": "step7-adversarial-review",
+      "nodeId": "step7-adversarial-review",
+      "description": "Adversarially review high-risk accepted implementation changes for failure modes, misuse paths, misleading success states, and verification loopholes.",
+      "role": "worker",
+      "loop": {
+        "role": "gate",
+        "gateId": "adversarial-implementation-review",
+        "evidenceTags": [
+          "adversarial-review",
+          "blocking-findings"
+        ],
+        "recordsVerification": true
+      },
+      "transitions": [
+        {
+          "toStepId": "step6-implement",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "branch-evidence",
+          "label": "!(needs_revision)"
+        }
+      ]
+    },
+    {
+      "id": "step7b-e2e-evidence",
+      "nodeId": "step7b-e2e-evidence",
+      "description": "Run headless browser E2E as non-blocking evidence after review acceptance and before documentation refresh.",
+      "role": "worker",
+      "timeoutMs": 1800000,
+      "failurePolicy": "advisory",
+      "loop": {
+        "role": "worker",
+        "evidenceTags": [
+          "e2e",
+          "verification"
+        ],
+        "recordsVerification": true
+      },
+      "transitions": [
+        {
+          "toStepId": "step8-docs-refresh"
+        }
+      ]
+    },
+    {
+      "id": "step8-docs-refresh",
+      "nodeId": "step8-docs-refresh",
+      "description": "Refresh the user-facing repository documentation after implementation acceptance and before commit generation.",
+      "role": "worker",
+      "loop": {
+        "role": "worker",
+        "evidenceTags": [
+          "documentation",
+          "changed-files"
+        ],
+        "recordsChangedFiles": true
+      },
+      "transitions": [
+        {
+          "toStepId": "step9-commit-message"
+        }
+      ]
+    },
+    {
+      "id": "step9-commit-message",
+      "nodeId": "step9-commit-message",
+      "description": "Check completion for issue-resolution and prepare commit evidence; planning-only preserves active plans.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step8-docs-refresh",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "step10-git-commit",
+          "label": "!(needs_revision)"
+        }
+      ],
+      "loop": {
+        "role": "gate",
+        "gateId": "implementation-plan-completion-check",
+        "evidenceTags": [
+          "implementation-plan",
+          "completion-check"
+        ],
+        "recordsVerification": true
+      }
+    },
+    {
+      "id": "step10-git-commit",
+      "nodeId": "step10-git-commit",
+      "description": "Use the shared built-in git commit node to stage and commit the accepted workflow changes from Step 9.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step11-git-push"
+        }
+      ]
+    },
+    {
+      "id": "step11-git-push",
+      "nodeId": "step11-git-push",
+      "description": "Use the built-in git push node to push the commit created by Step 10 to the current branch.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "base-branch-integrate"
+        }
+      ]
+    },
+    {
+      "id": "workflow-output",
+      "nodeId": "workflow-output",
+      "description": "Publish the accepted planning handoff or the final accepted issue-resolution summary.",
+      "role": "worker"
+    },
+    {
+      "id": "plan-checkpoint",
+      "nodeId": "plan-checkpoint",
+      "description": "Prepare the accepted design and plan checkpoint without staging unrelated changes.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "plan-git-commit"
+        }
+      ]
+    },
+    {
+      "id": "plan-git-commit",
+      "nodeId": "plan-git-commit",
+      "description": "Commit accepted designs, plans and dispatch manifest before any implementation.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "dispatch-plans"
+        }
+      ]
+    },
+    {
+      "id": "dispatch-plans",
+      "nodeId": "dispatch-plans",
+      "description": "Select a dependency-ready wave from the committed plan manifest.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step6-implement",
+          "fanout": {
+            "groupId": "shared-branch-implementation",
+            "itemsFrom": "/implementationItems",
+            "itemVariable": "implementation",
+            "concurrency": 4,
+            "joinStepId": "reconcile-implementations",
+            "failurePolicy": "collect-partial",
+            "resultOrder": "input",
+            "dependencies": {
+              "branchIdFrom": "/planId",
+              "dependsOnFrom": "/dependsOn",
+              "completedBranchIdsFrom": "/acceptedPlanIds"
+            },
+            "changeTracking": {
+              "pathsFrom": "/trackedPaths"
+            },
+            "writeOwnership": {
+              "mode": "shared-workspace"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "branch-evidence",
+      "nodeId": "branch-evidence",
+      "description": "Record branch evidence after accepted reviews; never finalize git in a parallel branch.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "reconcile-implementations"
+        }
+      ]
+    },
+    {
+      "id": "reconcile-implementations",
+      "nodeId": "reconcile-implementations",
+      "description": "After all workers stop, detect and repair overwritten or missing changes and run combined verification.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "integration-review"
+        }
+      ]
+    },
+    {
+      "id": "integration-review",
+      "nodeId": "integration-review",
+      "description": "Independently verify retained plan behavior and repairs before another wave or finalization.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "reconcile-implementations",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "dispatch-plans",
+          "label": "!(needs_revision) && plans_remaining"
+        },
+        {
+          "toStepId": "step7b-e2e-evidence",
+          "label": "!(needs_revision || plans_remaining)"
+        }
+      ]
+    },
+    {
+      "id": "base-branch-integrate",
+      "nodeId": "base-branch-integrate",
+      "description": "Serially integrate the verified pushed branch into the recorded base branch and push the base.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "workflow-output"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "rielaPackage": {
+      "title": "codex-design-and-implement-review-loop",
+      "description": "Single-node design and planning, committed conflict-aware plans, same-branch parallel implementation and review, overwrite reconciliation, and serialized commit, push and base-branch integration.",
+      "tags": [
+        "workflow"
+      ],
+      "backends": [
+        "codex-agent"
+      ]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "riela-manager",
+  "description": "Coordinate either the full issue-resolution workflow or the planning-only Codex-reference design-and-plan workflow, enforce the review gates, require an implementation-only user-facing documentation refresh, require a final commit-message step, and then require built-in git commit and git push steps before completion.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-sol",
+  "modelFreeze": false,
+  "promptTemplateFile": "prompts/riela-manager.md",
+  "variables": {},
+  "input": {
+    "description": "Provide either issue reference details for full issue resolution or Codex-reference planning details for a design-plan-only run. Preferred fields are executionMode, issueUrl, issueNumber, issueRepository, issueTitle, issueBody, targetFeatureArea, requestedBehavior, codexAgentReferences, referenceRepositoryRoot, and referenceRepositoryUrl."
+  },
+  "output": {
+    "description": "Return either the final accepted issue-resolution summary or the accepted design-and-implementation-plan handoff, including any required documentation refresh, the final commit-message, and commit/push status, depending on the requested workflow mode."
+  }
+}

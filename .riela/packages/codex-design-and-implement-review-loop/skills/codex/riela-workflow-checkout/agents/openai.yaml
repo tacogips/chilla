@@ -1,0 +1,4 @@
+interface:
+  display_name: "Riela Workflow Checkout"
+  short_description: "Install GitHub workflow bundles"
+  default_prompt: "Use $riela-workflow-checkout to install this GitHub workflow directory into the scoped riela catalog."

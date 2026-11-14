@@ -1,0 +1,4 @@
+interface:
+  display_name: "Riela Manager Control"
+  short_description: "Issue typed manager control actions"
+  default_prompt: "Use $riela-manager-control to issue a safe riela manager control action."

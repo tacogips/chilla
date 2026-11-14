@@ -1,0 +1,13 @@
+{
+  "id": "step7-adversarial-review",
+  "description": "Adversarially review a high-risk accepted implementation for failure modes, misuse paths, misleading success states, and verification loopholes.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-sol",
+  "modelFreeze": false,
+  "effort": "medium",
+  "promptTemplateFile": "prompts/step7-adversarial-review.md",
+  "variables": {},
+  "output": {
+    "description": "Return adapter JSON with when.needs_revision true only when high or mid adversarial findings exist, plus findings and actionable feedback."
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "step5-impl-plan-review",
+  "description": "Review the implementation plan against the design, including final design-plan consistency, and route back to the right authoring step when blocking findings exist.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-sol",
+  "modelFreeze": false,
+  "effort": "medium",
+  "promptTemplateFile": "prompts/step5-impl-plan-review.md",
+  "variables": {},
+  "output": {
+    "description": "Return adapter JSON with when.needs_design_revision or when.needs_revision for blocking findings, plus when.planning_only to signal planning-only completion."
+  }
+}

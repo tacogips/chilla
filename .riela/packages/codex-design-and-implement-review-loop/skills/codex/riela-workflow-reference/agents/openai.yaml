@@ -1,0 +1,4 @@
+interface:
+  display_name: "Riela Workflow Reference"
+  short_description: "Use riela APIs and GraphQL clients"
+  default_prompt: "Use $riela-workflow-reference to integrate this application with riela workflow APIs."

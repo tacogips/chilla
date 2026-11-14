@@ -1,0 +1,9 @@
+{
+  "id": "dispatch-plans",
+  "description": "Select the next dependency-ready wave for native Riela fanout. Do not spawn agents or nested CLI processes yourself.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-sol",
+  "promptTemplateFile": "prompts/dispatch-plans.md",
+  "variables": {},
+  "effort": "high"
+}
