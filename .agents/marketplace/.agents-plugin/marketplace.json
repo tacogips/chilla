@@ -1,0 +1,14 @@
+{
+  "name": "local",
+  "owner": {
+    "name": "Project"
+  },
+  "plugins": [
+    {
+      "name": "rust-lsp",
+      "source": "./plugins/lsp",
+      "description": "Rust language server (rust-analyzer) support for agent tooling",
+      "version": "1.0.0"
+    }
+  ]
+}
