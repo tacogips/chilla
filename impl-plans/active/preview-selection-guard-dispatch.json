@@ -1,0 +1,139 @@
+{
+  "taskId": "preview-selection-guard",
+  "workflowMode": "issue-resolution",
+  "issueReference": "local-request:chilla-macos-webkit-right-drag-selection-guard (no GitHub issue; follow-up to commit 77c1236)",
+  "implementationBranch": "main",
+  "baseBranch": "main",
+  "remote": "origin",
+  "gitPush": false,
+  "originalHead": "77c1236a5ef41c37acf0fc0268c7a40f10b51366",
+  "evidenceRoot": "tmp/preview-selection-guard",
+  "designDocPaths": [
+    "design-docs/specs/architecture.md",
+    "design-docs/user-qa/qa-preview-right-drag-pan.md"
+  ],
+  "reviewContext": {
+    "issueReference": "local-request:chilla-macos-webkit-right-drag-selection-guard (no GitHub issue; follow-up to commit 77c1236)",
+    "userProblem": "On macOS WebKit a right press over Markdown preview text fires mousedown, selects the word under the pointer, then fires contextmenu. keepsNativeContextMenu sees that press-created selection, keeps the native menu, and right-drag pan never starts over text.",
+    "requiredOutcomes": [
+      "A right press over text with no prior selection prevents the right mousedown and the contextmenu, clears any press-created selection, and later moves pan.",
+      "A selection that existed before the press keeps the native menu and is left untouched; editable targets keep the menu and are never cleared.",
+      "No press record (inactive pane, keyboard menu, Windows order after pointerup) falls back to the unchanged event-time rule.",
+      "Middle pan, PAN_SLOP, fling, Ctrl/Cmd+wheel zoom, chord release and the suppressMenu path are unchanged.",
+      "Regression vitests for the macOS mousedown->select->contextmenu order pass, including a rendered Markdown PreviewPane case.",
+      "bun run typecheck, bun run lint:biome, bun run test and test:dom exit 0; committed locally on main after an accepted integration review; no push."
+    ],
+    "nonGoals": [
+      "No new exports, modules, global listeners, platform branches or composedPath.",
+      "No README.md change (the current wording stays accurate).",
+      "No edits to pane .tsx components, other pane vitest files, package.json, bun.lock, .riela/ or riela-lock.json.",
+      "No GUI launch; no git push."
+    ],
+    "constraints": [
+      "Do not modify unrelated files.",
+      "Do not touch .riela/ or riela-lock.json.",
+      "/Users/taco/gits/tacogips/nodetto-cloud is read-only.",
+      "Run Node-based vitest via: mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test:dom",
+      "Do not launch the GUI app; the supervising session performs the GUI re-check (user-accepted gap).",
+      "Commit messages must not contain AI attribution or Co-Authored-By lines; no emojis."
+    ],
+    "designDecisionsAndRationale": [
+      {
+        "decision": "Snapshot selection state (hadSelection) at right-button press time: button-2 pointerdown while active always replaces the record; mousedown captures only when no record exists.",
+        "rationale": "WebKit's word selection is created between mousedown and contextmenu, so only a press-time snapshot distinguishes a user's prior selection from a press-created one (architecture.md#pan-gesture-contract, Press-time selection record)."
+      },
+      {
+        "decision": "contextMenu rule order: (1) active pan/suppressMenu prevents; (2) editable target keeps; (3) press record present -> keep only if hadSelection, else prevent and removeAllRanges; (4) no record -> unchanged event-time rule.",
+        "rationale": "Keeps 77c1236 behavior for pan/suppressMenu and editable targets while fixing the macOS order; rule 4 preserves Windows order and keyboard menus."
+      },
+      {
+        "decision": "preventDefault the right mousedown only when button 2, active, not editable, and hadSelection is false.",
+        "rationale": "Stops WebKit from creating the word selection without affecting other buttons, editable fields or prior selections."
+      },
+      {
+        "decision": "Clear the press record on pointerup, pointercancel, detach and contextmenu; not in end() or lostpointercapture.",
+        "rationale": "Prevents stale records leaking into the next press while keeping the record alive through the macOS contextmenu that follows the press."
+      }
+    ],
+    "intentionalTradeoffs": [
+      "jsdom cannot reproduce WebKit native word select or mousedown default-action semantics; real macOS behavior is confirmed by the supervising GUI re-check.",
+      "If WebKit selects the word after contextmenu, that selection is not cleared, but the menu is still prevented and the pan proceeds.",
+      "removeAllRanges is called only when hadSelection is false, so a pre-existing selection is never touched."
+    ],
+    "supportedEdgeCases": [
+      "macOS order: pointerdown/mousedown -> simulated word selection -> contextmenu with no prior selection: prevented, selection cleared, moves pan.",
+      "Pre-existing user selection before the right press: native menu kept, selection untouched.",
+      "Editable target press: menu kept, no mousedown prevent, no clearing.",
+      "Windows order (contextmenu after pointerup, no record): event-time rule.",
+      "Next press replaces the previous record; inactive pane creates no record; detach removes listeners and record.",
+      "Middle-button pan has no record and prevents as before."
+    ],
+    "outOfScopeEdgeCases": [
+      "Real WebKit default-action timing differences not reproducible in jsdom.",
+      "Selection created by WebKit after contextmenu dispatch.",
+      "Keyboard-invoked context menus beyond the unchanged event-time rule."
+    ],
+    "sourcePaths": [
+      "src/features/preview/previewPanZoom.ts",
+      "src/features/preview/previewPanZoom.vitest.ts",
+      "src/features/preview/PreviewPane.vitest.tsx",
+      "design-docs/specs/architecture.md",
+      "design-docs/user-qa/qa-preview-right-drag-pan.md",
+      "impl-plans/active/preview-selection-guard-module.md",
+      "impl-plans/active/preview-selection-guard-preview-pane.md"
+    ]
+  },
+  "acceptedDependencies": [],
+  "plans": [
+    {
+      "planId": "preview-selection-guard-module",
+      "planPath": "impl-plans/active/preview-selection-guard-module.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/preview/previewPanZoom.ts",
+        "src/features/preview/previewPanZoom.vitest.ts",
+        "impl-plans/active/preview-selection-guard-module.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Case (a): mousedown and contextmenu are prevented, the press-created selection is cleared, and later moves pan.",
+        "Case (b): a pre-existing selection keeps the native menu and stays untouched.",
+        "Editable, Windows-order, next-press, inactive and detach cases pass.",
+        "All previous previewPanZoom.vitest.ts cases pass unchanged.",
+        "Only this plan's writePaths changed; the progress log records pre/post sha256, commands, exit codes and log paths."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/previewPanZoom.vitest.ts",
+        "bunx biome check src/features/preview/previewPanZoom.ts src/features/preview/previewPanZoom.vitest.ts --diagnostic-level=warn",
+        "bunx tsc --noEmit"
+      ]
+    },
+    {
+      "planId": "preview-selection-guard-preview-pane",
+      "planPath": "impl-plans/active/preview-selection-guard-preview-pane.md",
+      "dependsOn": ["preview-selection-guard-module"],
+      "writePaths": [
+        "src/features/preview/PreviewPane.vitest.tsx",
+        "impl-plans/active/preview-selection-guard-preview-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "The new rendered Markdown macOS-order test passes: mousedown and contextmenu are prevented, the selection is cleared and the preview scrolls by the drag delta.",
+        "Every existing PreviewPane.vitest.tsx test passes unchanged; window selection is cleared at test end so later tests see no leftover selection.",
+        "Only this plan's writePaths changed; the progress log records pre/post sha256, commands, exit codes and log paths."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/PreviewPane.vitest.tsx",
+        "bunx biome check src/features/preview/PreviewPane.vitest.tsx --diagnostic-level=warn"
+      ]
+    }
+  ],
+  "integrationVerification": [
+    "bun run typecheck",
+    "bun run lint:biome",
+    "bun run test",
+    "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test:dom"
+  ]
+}

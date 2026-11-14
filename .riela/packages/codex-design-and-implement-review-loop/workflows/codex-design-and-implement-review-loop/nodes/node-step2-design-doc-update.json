@@ -1,0 +1,16 @@
+{
+  "id": "step2-design-doc-update",
+  "description": "Update the design documentation from the shared intake brief, including Codex-reference mapping when the run is reference-driven.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-6-astra",
+  "modelFreeze": false,
+  "effort": "high",
+  "sessionPolicy": {
+    "mode": "reuse"
+  },
+  "promptTemplateFile": "prompts/step2-design-doc-update.md",
+  "variables": {},
+  "output": {
+    "description": "Return JSON with updated design-doc paths, issue mapping, Codex-reference mapping, key decisions, open questions, and addressed review feedback."
+  }
+}

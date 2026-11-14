@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Design and Implementation Loop"
+  short_description: "Codex designs, builds, reviews, and verifies"
+  default_prompt: "Use $codex-design-and-implement-review-loop to design, implement, review, and verify this task entirely with Codex."

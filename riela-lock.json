@@ -1,0 +1,31 @@
+{
+  "generatedBy" : "riela",
+  "lockfileVersion" : 1,
+  "packages" : {
+    "codex-design-and-implement-review-loop" : {
+      "addons" : [
+
+      ],
+      "checksum" : "4c7efb819c8cd454cb956898ea864cd8",
+      "checksumAlgorithm" : "md5",
+      "dependencies" : [
+
+      ],
+      "integrity" : {
+        "digest" : "51e9ad7d6c1e35d3c02069dc3e9f045cf076d87ddfd57f0cb8f95b5c109e04cb",
+        "digestAlgorithm" : "sha256",
+        "signatures" : [
+
+        ]
+      },
+      "kind" : "workflow",
+      "name" : "codex-design-and-implement-review-loop",
+      "registry" : "default",
+      "source" : {
+        "kind" : "registry",
+        "reference" : "codex-design-and-implement-review-loop"
+      },
+      "version" : "0.3.1"
+    }
+  }
+}

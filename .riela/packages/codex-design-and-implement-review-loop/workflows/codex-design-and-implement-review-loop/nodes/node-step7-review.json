@@ -1,0 +1,13 @@
+{
+  "id": "step7-review",
+  "description": "Review the implementation against the repository diff and route back when any high or mid finding exists.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-terra",
+  "modelFreeze": false,
+  "effort": "high",
+  "promptTemplateFile": "prompts/step7-review.md",
+  "variables": {},
+  "output": {
+    "description": "Return adapter JSON with when.needs_revision true only when high or mid findings exist, and when.requires_adversarial_review true only for accepted high-risk implementations that need the adversarial gate."
+  }
+}

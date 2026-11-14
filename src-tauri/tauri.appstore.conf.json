@@ -1,0 +1,11 @@
+{
+  "bundle": {
+    "active": true,
+    "category": "Utility",
+    "targets": ["app"],
+    "macOS": {
+      "bundleVersion": "7",
+      "minimumSystemVersion": "12.0"
+    }
+  }
+}

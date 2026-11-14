@@ -1,0 +1,13 @@
+{
+  "id": "step1-issue-intake",
+  "description": "Normalize the workflow request into a shared intake brief for either issue resolution or planning-only Codex-reference work.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-sol",
+  "modelFreeze": false,
+  "promptTemplateFile": "prompts/step1-issue-intake.md",
+  "variables": {},
+  "output": {
+    "description": "Return JSON with workflow mode, issue or reference context, problem summary, acceptance signals, impacted areas, codex-agent references, and open unknowns."
+  },
+  "effort": "high"
+}

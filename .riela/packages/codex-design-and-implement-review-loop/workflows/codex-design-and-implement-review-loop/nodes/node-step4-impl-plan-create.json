@@ -1,0 +1,16 @@
+{
+  "id": "step4-impl-plan-create",
+  "description": "Create or revise the implementation plan that executes the accepted design, including Codex-reference traceability when relevant.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-6-astra",
+  "modelFreeze": false,
+  "effort": "high",
+  "sessionPolicy": {
+    "mode": "reuse"
+  },
+  "promptTemplateFile": "prompts/step4-impl-plan-create.md",
+  "variables": {},
+  "output": {
+    "description": "Return JSON with implementation-plan paths, design and Codex references, task breakdown, verification plan, and addressed feedback."
+  }
+}

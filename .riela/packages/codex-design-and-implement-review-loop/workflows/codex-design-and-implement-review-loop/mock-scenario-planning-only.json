@@ -1,0 +1,503 @@
+{
+  "riela-manager": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.6-sol",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "start",
+      "policy": "codex-reference-design-plan-only"
+    }
+  },
+  "step1-issue-intake": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.6-sol",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "workflowMode": "design-plan-only",
+      "problemSummary": "Plan how cursor-agent should adopt codex-agent-style session history behavior without implementing it yet.",
+      "acceptanceSignals": [
+        "The design maps the target codex-agent behavior to cursor-agent boundaries.",
+        "The implementation plan is accepted and ready for a later execution workflow."
+      ],
+      "impactedAreas": [
+        "packages/riela/src/cli",
+        "packages/riela-adapters/src/cursor.ts",
+        "impl-plans/active"
+      ],
+      "constraints": [
+        "Use codex-agent as a behavioral reference only.",
+        "Keep Cursor-specific behavior behind adapter modules."
+      ],
+      "unknowns": [],
+      "risks": [
+        "Reference behavior may not map one-to-one onto local Cursor state."
+      ],
+      "codexAgentReferences": [
+        "../../codex-agent/src/session",
+        "../../codex-agent/src/cli"
+      ],
+      "referenceRepositoryRoot": "../../codex-agent",
+      "referenceRepositoryUrl": "https://github.com/tacogips/codex-agent"
+    }
+  },
+  "step2-design-doc-update": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-6-astra",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "workflowMode": "design-plan-only",
+        "issueReference": "",
+        "designDocPaths": [
+          "design-docs/specs/design-codex-reference-session-history.md"
+        ],
+        "codexAgentReferences": [
+          "../../codex-agent/src/session"
+        ],
+        "cursorCliBehaviorMapping": [
+          "Map codex-agent session history behavior to cursor-agent local Cursor transcript discovery."
+        ],
+        "designSummary": "Drafted the design but did not describe the Cursor adapter boundary clearly.",
+        "decisions": [
+          "Use local Cursor state as the product boundary."
+        ],
+        "openQuestions": [],
+        "issueToDesignMapping": [
+          "Codex-reference session history behavior must map to Cursor transcript discovery and local indexing."
+        ],
+        "intentionalDivergences": [],
+        "addressedFeedback": [],
+        "risks": [
+          "Adapter boundary is underspecified."
+        ]
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-6-astra",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "workflowMode": "design-plan-only",
+        "issueReference": "",
+        "designDocPaths": [
+          "design-docs/specs/design-codex-reference-session-history.md"
+        ],
+        "codexAgentReferences": [
+          "../../codex-agent/src/session",
+          "../../codex-agent/src/cli"
+        ],
+        "cursorCliBehaviorMapping": [
+          "Map codex-agent session history behavior to cursor-agent local Cursor transcript discovery.",
+          "Keep Cursor transcript parsing behind packages/riela-adapters/src/cursor.ts adapters."
+        ],
+        "designSummary": "Revised the design with explicit Cursor adapter boundaries and CLI behavior.",
+        "decisions": [
+          "Use local Cursor state as the product boundary.",
+          "Keep raw Cursor payload handling inside adapter modules."
+        ],
+        "openQuestions": [],
+        "issueToDesignMapping": [
+          "Codex-reference session history behavior maps to cursor-agent transcript discovery and CLI output."
+        ],
+        "intentionalDivergences": [
+          "cursor-agent reads Cursor local state instead of codex-agent transcript sources."
+        ],
+        "addressedFeedback": [
+          "Clarified Cursor adapter boundary and reference mapping."
+        ],
+        "risks": []
+      }
+    }
+  ],
+  "step3-design-review": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-6-astra",
+      "when": {
+        "needs_revision": true
+      },
+      "payload": {
+        "needs_revision": true,
+        "findings": [
+          {
+            "severity": "mid",
+            "file": "design-docs/specs/design-codex-reference-session-history.md",
+            "line": 1,
+            "message": "The design references codex-agent behavior but does not define the Cursor adapter boundary."
+          }
+        ],
+        "feedback": [
+          "Define which cursor-agent adapter owns raw Cursor transcript parsing and explain the codex-agent divergence."
+        ],
+        "accepted": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-6-astra",
+      "when": {
+        "needs_revision": false
+      },
+      "payload": {
+        "needs_revision": false,
+        "findings": [],
+        "feedback": [],
+        "accepted": true
+      }
+    }
+  ],
+  "step4-impl-plan-create": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-6-astra",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "workflowMode": "design-plan-only",
+        "issueReference": "",
+        "implPlanPaths": [
+          "impl-plans/active/codex-reference-session-history.md"
+        ],
+        "designReferences": [
+          "design-docs/specs/design-codex-reference-session-history.md"
+        ],
+        "codexAgentReferences": [
+          "../../codex-agent/src/session",
+          "../../codex-agent/src/cli"
+        ],
+        "taskBreakdown": [
+          "Add transcript discovery adapter",
+          "Add CLI output flow"
+        ],
+        "dependencies": [
+          "CLI output depends on adapter records."
+        ],
+        "parallelizableTasks": [],
+        "verification": [
+          "task typecheck"
+        ],
+        "completionCriteria": [
+          "Typecheck passes"
+        ],
+        "addressedFeedback": [],
+        "risks": [
+          "The plan does not include tests for missing transcript files."
+        ]
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-6-astra",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "workflowMode": "design-plan-only",
+        "issueReference": "",
+        "implPlanPaths": [
+          "impl-plans/active/codex-reference-session-history.md"
+        ],
+        "designReferences": [
+          "design-docs/specs/design-codex-reference-session-history.md"
+        ],
+        "codexAgentReferences": [
+          "../../codex-agent/src/session",
+          "../../codex-agent/src/cli"
+        ],
+        "taskBreakdown": [
+          "Add transcript discovery adapter",
+          "Add missing-file and malformed-transcript tests",
+          "Add CLI output flow",
+          "Update progress log during implementation"
+        ],
+        "dependencies": [
+          "CLI output depends on adapter records.",
+          "Malformed-transcript tests depend on adapter parser fixtures."
+        ],
+        "parallelizableTasks": [
+          "CLI formatting tests can run after adapter record types are defined."
+        ],
+        "verification": [
+          "task test",
+          "task typecheck"
+        ],
+        "completionCriteria": [
+          "Unit tests pass",
+          "Typecheck passes",
+          "Progress log updated"
+        ],
+        "addressedFeedback": [
+          "Added missing-file and malformed-transcript test coverage tasks."
+        ],
+        "risks": []
+      }
+    }
+  ],
+  "step5-impl-plan-review": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-6-astra",
+      "when": {
+        "needs_design_revision": false,
+        "needs_revision": true,
+        "planning_only": true
+      },
+      "payload": {
+        "needs_design_revision": false,
+        "needs_revision": true,
+        "planning_only": true,
+        "findings": [
+          {
+            "severity": "mid",
+            "targetStep": "step4-impl-plan-create",
+            "file": "impl-plans/active/codex-reference-session-history.md",
+            "line": 1,
+            "message": "The plan does not cover the design's malformed or missing transcript behavior."
+          }
+        ],
+        "feedback": [
+          "Add implementation tasks and verification for missing transcript files and malformed transcript records."
+        ],
+        "accepted": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-6-astra",
+      "when": {
+        "needs_design_revision": false,
+        "needs_revision": false,
+        "planning_only": true
+      },
+      "payload": {
+        "needs_design_revision": false,
+        "needs_revision": false,
+        "planning_only": true,
+        "findings": [],
+        "feedback": [],
+        "accepted": true
+      }
+    }
+  ],
+  "step9-commit-message": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.6-sol",
+    "when": {
+      "needs_revision": false
+    },
+    "payload": {
+      "decision": "accepted",
+      "workflowMode": "design-plan-only",
+      "commitMessage": "docs: add codex-reference session history design and plan",
+      "committedFiles": [
+        "design-docs/specs/design-codex-reference-session-history.md",
+        "impl-plans/active/codex-reference-session-history.md"
+      ],
+      "changeSummary": "Accepted planning-only design and implementation-plan updates for codex-reference session history behavior.",
+      "residualRisks": [],
+      "needs_revision": false,
+      "accepted": true,
+      "findings": []
+    }
+  },
+  "step10-git-commit": {
+    "provider": "scenario-mock",
+    "model": "riela/git-commit@1",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "git": {
+        "status": "committed",
+        "commitMessage": "docs: add codex-reference session history design and plan",
+        "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+        "committedFiles": [
+          "design-docs/specs/design-codex-reference-session-history.md",
+          "impl-plans/active/codex-reference-session-history.md"
+        ],
+        "operation": "commit"
+      }
+    }
+  },
+  "step11-git-push": {
+    "provider": "scenario-mock",
+    "model": "riela/git-push@1",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "git": {
+        "status": "pushed",
+        "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+        "pushedRemote": "origin",
+        "pushedBranch": "main",
+        "operation": "push"
+      }
+    }
+  },
+  "workflow-output": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.6-sol",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "status": "accepted",
+      "workflowMode": "design-plan-only",
+      "designDocPaths": [
+        "design-docs/specs/design-codex-reference-session-history.md"
+      ],
+      "implPlanPaths": [
+        "impl-plans/active/codex-reference-session-history.md"
+      ],
+      "codexAgentReferences": [
+        "../../codex-agent/src/session",
+        "../../codex-agent/src/cli"
+      ],
+      "designReviewSummary": "Design accepted after Cursor adapter boundaries and codex-agent divergence were clarified.",
+      "implPlanReviewSummary": "Implementation plan and design consistency review accepted after transcript edge-case tasks were added.",
+      "commitMessage": "docs: add codex-reference session history design and plan",
+      "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+      "pushedRemote": "origin",
+      "pushedBranch": "main",
+      "nextStep": "Run a full issue-resolution execution for impl-plans/active/codex-reference-session-history.md when implementation is approved.",
+      "residualRisks": [],
+      "committedFiles": [
+        "design-docs/specs/design-codex-reference-session-history.md",
+        "impl-plans/active/codex-reference-session-history.md"
+      ],
+      "baseBranch": "main",
+      "mergeStatus": "already-on-base",
+      "basePushStatus": "pushed"
+    }
+  },
+  "plan-checkpoint": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.6-sol",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "commitMessage": "docs: checkpoint shared-branch implementation plans",
+      "committedFiles": [
+        "impl-plans/active/a.md",
+        "impl-plans/active/b.md"
+      ],
+      "manifestPath": "impl-plans/active/mock-dispatch.json"
+    }
+  },
+  "plan-git-commit": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.6-sol",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "git": {
+        "status": "committed",
+        "commitHash": "1111111111111111111111111111111111111111",
+        "operation": "commit"
+      }
+    }
+  },
+  "dispatch-plans": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.6-sol",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "implementationItems": [
+        {
+          "planId": "a",
+          "planPath": "impl-plans/active/a.md",
+          "dependsOn": [],
+          "writePaths": [
+            "a.txt"
+          ],
+          "sharedPaths": [
+            "shared.txt"
+          ],
+          "acceptanceCriteria": [
+            "a behavior retained"
+          ],
+          "trackedPaths": [
+            "a.txt",
+            "shared.txt"
+          ]
+        }
+      ],
+      "acceptedPlanIds": []
+    }
+  },
+  "branch-evidence": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.6-sol",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "evidencePaths": [
+        "tmp/mock/accepted.json"
+      ],
+      "changedFiles": [
+        "shared.txt"
+      ],
+      "reviewDecisions": {
+        "accepted": true
+      }
+    }
+  },
+  "reconcile-implementations": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.6-sol",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "repairs": [],
+      "unresolvedFindings": [],
+      "verification": [
+        "mock combined check"
+      ]
+    }
+  },
+  "integration-review": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.6-sol",
+    "when": {
+      "needs_revision": false,
+      "plans_remaining": false
+    },
+    "payload": {
+      "accepted": true,
+      "findings": [],
+      "needs_revision": false,
+      "plans_remaining": false
+    }
+  },
+  "base-branch-integrate": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.6-sol",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "mergeStatus": "already-on-base",
+      "baseBranch": "main",
+      "basePushStatus": "pushed",
+      "implementationCommit": "fedcba9876543210fedcba9876543210fedcba98",
+      "implementationBranch": "main",
+      "remote": "origin"
+    }
+  }
+}

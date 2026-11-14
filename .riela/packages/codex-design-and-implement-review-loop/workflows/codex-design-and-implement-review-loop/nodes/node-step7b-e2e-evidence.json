@@ -1,0 +1,13 @@
+{
+  "id": "step7b-e2e-evidence",
+  "description": "Run headless browser end-to-end verification as non-blocking evidence after implementation-review acceptance and before documentation refresh.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-sol",
+  "modelFreeze": false,
+  "effort": "medium",
+  "promptTemplateFile": "prompts/step7b-e2e-evidence.md",
+  "variables": {},
+  "output": {
+    "description": "Return JSON recording the executed browser E2E command, its outcome (passed, failed, or skipped), captured evidence, and residual risks. This step is non-blocking and never requests Step 6 revision."
+  }
+}

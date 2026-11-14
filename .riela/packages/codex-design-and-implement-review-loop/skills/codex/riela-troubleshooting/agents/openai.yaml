@@ -1,0 +1,4 @@
+interface:
+  display_name: "Riela Troubleshooting"
+  short_description: "Diagnose workflow execution issues"
+  default_prompt: "Use $riela-troubleshooting to diagnose this failed riela workflow run."

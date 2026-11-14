@@ -1,0 +1,9 @@
+{
+  "id": "reconcile-implementations",
+  "description": "You are the sole writer after the native fanout join. All workers in the wave have stopped. On revision, read the latest integration-review feedback.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-terra",
+  "promptTemplateFile": "prompts/reconcile-implementations.md",
+  "variables": {},
+  "effort": "high"
+}

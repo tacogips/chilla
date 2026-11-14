@@ -1,0 +1,4 @@
+interface:
+  display_name: "Riela Node Add-Ons"
+  short_description: "Use built-in and local node add-ons"
+  default_prompt: "Use $riela-node-addons to add or review this riela node add-on."

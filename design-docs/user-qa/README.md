@@ -1,0 +1,30 @@
+# User Q&A
+
+This directory contains items requiring user confirmation or decision.
+
+## Purpose
+
+Store questions, pending decisions, and items awaiting user approval.
+
+## File Naming Convention
+
+| Prefix | Use Case |
+|--------|----------|
+| `qa-` | Questions/confirmation items |
+| `pending-` | Pending decisions |
+
+## Current Items
+
+- [qa-example.md](./qa-example.md) - Example: Database Selection (template example)
+- [pending-example.md](./pending-example.md) - Example: CLI Output Format (template example)
+- [qa-github-pr-diff-viewer.md](./qa-github-pr-diff-viewer.md) - GitHub diff viewer scope decisions
+- [qa-local-git-diff-viewer.md](./qa-local-git-diff-viewer.md) - Local Git diff mode and commit/range startup decisions
+- [qa-pdf-inline-rendering.md](./qa-pdf-inline-rendering.md) - Video zoom scope, PDF text layer, and lazy page rendering defaults
+- [qa-preview-right-drag-pan.md](./qa-preview-right-drag-pan.md) - Right-drag pan versus press-time contextmenu on macOS and Linux WebKit (resolved: native-menu guard on preview pan targets)
+
+## Adding New Items
+
+1. Create a new file with appropriate prefix (`qa-` or `pending-`)
+2. Include clear description of the question or decision needed
+3. List available options if applicable
+4. Update this README.md with a reference to the new item

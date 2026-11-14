@@ -1,0 +1,9 @@
+{
+  "id": "integration-review",
+  "description": "Independently review the stable shared-branch result after all workers stopped and reconciliation finished.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-6-astra",
+  "promptTemplateFile": "prompts/integration-review.md",
+  "variables": {},
+  "effort": "high"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "branch-evidence",
+  "description": "This is the final node of one native Riela implementation/review branch. The complete assigned contract is runtimeVariables.implementation (or runtimeVariables.fanoutItem).",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-sol",
+  "promptTemplateFile": "prompts/branch-evidence.md",
+  "variables": {},
+  "effort": "high"
+}

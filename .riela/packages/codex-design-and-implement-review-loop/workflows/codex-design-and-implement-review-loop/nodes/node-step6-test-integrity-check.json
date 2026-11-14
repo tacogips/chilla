@@ -1,0 +1,13 @@
+{
+  "id": "step6-test-integrity-check",
+  "description": "Check test and verification integrity after implementation before independent review.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-terra",
+  "modelFreeze": false,
+  "effort": "high",
+  "promptTemplateFile": "prompts/step6-test-integrity-check.md",
+  "variables": {},
+  "output": {
+    "description": "Return adapter JSON with when.needs_revision true only when test deletion, weakened assertions, test-only hacks, skipped coverage, or verification integrity issues require Step 6 revision."
+  }
+}

@@ -1,0 +1,193 @@
+{
+  "taskId": "preview-contextmenu-guard",
+  "workflowMode": "issue-resolution",
+  "issueReference": "workflowInput:session-718 right-drag-pan contextmenu regression (no GitHub issue; follow-up to commit 30f411a)",
+  "implementationBranch": "main",
+  "baseBranch": "main",
+  "remote": "origin",
+  "gitPush": false,
+  "originalHead": "30f411ae96a49b17144cce3c606a256828072321",
+  "evidenceRoot": "tmp/preview-contextmenu-guard",
+  "designDocPaths": [
+    "design-docs/specs/architecture.md",
+    "design-docs/user-qa/qa-preview-right-drag-pan.md"
+  ],
+  "reviewContext": {
+    "issueReference": "workflowInput:session-718 right-drag-pan contextmenu regression (no GitHub issue; follow-up to commit 30f411a)",
+    "userProblem": "In the real macOS debug app, a right-drag on a preview (observed on a PDF) does not pan. WebKit fires contextmenu at right mouse down, before any pointermove. The contextMenu handler in attachPreviewPan (src/features/preview/previewPanZoom.ts:282-286) only prevents the menu after a moved right gesture, so the native Reload / Inspect Element menu opens and takes the drag.",
+    "requiredOutcomes": [
+      "contextmenu on a preview pan target is prevented at event time (including press time) unless window.getSelection().toString() is non-empty or the target (or a text node's parent) is inside input, textarea or [contenteditable] other than \"false\". An active or just-ended right pan always prevents it.",
+      "Regression vitest: contextmenu at right pointerdown before any move is prevented, and later pointermoves beyond the slop still pan the container.",
+      "Old assertions that a plain right-click or a post-middle contextmenu is not prevented are replaced in previewPanZoom.vitest.ts, PreviewPane.vitest.tsx, MediaFilePreviewPane.vitest.tsx and PdfFilePreviewPane.vitest.tsx.",
+      "README.md:254 no longer promises the native menu on a plain right-click.",
+      "Pan, slop, chord release, fling and wheel zoom are unchanged.",
+      "bun run typecheck, bun run lint:biome, bun run test and test:dom exit 0.",
+      "Committed locally on main after an accepted integration review; no push."
+    ],
+    "nonGoals": [
+      "No global/window/document context-menu guard, no new module, no new export.",
+      "No platform or user-agent branch, no isActive check in the guard, no composedPath, no selection trim.",
+      "No canvas, video or link exemptions.",
+      "No edits to .tsx pane components, package.json, bun.lock, .riela/ or riela-lock.json.",
+      "No modification of the read-only reference /Users/taco/gits/tacogips/nodetto-cloud.",
+      "No git push."
+    ],
+    "constraints": [
+      "Do not modify unrelated files. Do not touch .riela/ or riela-lock.json.",
+      "Run Node-based vitest via: mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bun run test:dom (or bunx vitest run for scoped runs).",
+      "Do not launch the GUI app. The supervising session performs the GUI re-check (user-accepted gap).",
+      "Implementers run no git mutations. Commits contain no AI attribution, no Co-Authored-By lines and no emojis.",
+      "Workers edit only their writePaths, including their own plan progress log. Plan archiving is handled by the plan-archive node.",
+      "Each plan records pre/post shasum -a 256 for owned files and logs under tmp/preview-contextmenu-guard/<planId>/."
+    ],
+    "designDecisionsAndRationale": [
+      {
+        "decision": "Put the guard inside the existing contextMenu handler of attachPreviewPan, with a module-private keepsNativeContextMenu(event: MouseEvent): boolean predicate.",
+        "rationale": "The listener already exists only on the preview pan targets. This is the smallest diff (architecture.md#pan-gesture-contract)."
+      },
+      {
+        "decision": "Keep the suppressMenu post-drag flag, and give it priority over the selection and editable exemptions.",
+        "rationale": "Keeps the post-pan behavior on Windows, where contextmenu follows release. The chord-release assertion stays valid."
+      },
+      {
+        "decision": "The selection check is any non-empty window selection without trim. The editable check is closest('input, textarea, [contenteditable]:not([contenteditable=\"false\"])') on event.target or a text node's parentElement.",
+        "rationale": "Follows the nodetto keepsNativeContextMenu behavior. The no-trim divergence was accepted in design review."
+      }
+    ],
+    "intentionalTradeoffs": [
+      "A plain right-click over previews no longer shows Reload or Inspect Element on any platform.",
+      "With a non-empty selection, a right press on macOS still opens the native menu and does not pan.",
+      "Real WebKit press-time ordering is verified only by the supervising GUI re-check."
+    ],
+    "supportedEdgeCases": [
+      "contextmenu dispatched at right pointerdown before any pointermove (macOS WebKit order) is prevented, and later moves past the slop still pan the container.",
+      "contextmenu after release (Windows order) following a right pan is prevented by the just-ended flag, which any contextmenu consumes and the next pointerdown clears.",
+      "A plain right-click with no gesture, and contextmenu after middle or left gestures, are prevented.",
+      "Targets inside input, textarea or [contenteditable] (including contenteditable=\"\") keep the native menu; contenteditable=\"false\" with no editable ancestor is prevented.",
+      "Text-node event targets resolve through parentElement for the editable check.",
+      "Any non-empty window selection (no trim) keeps the native menu, except while a right pan is active or has just ended.",
+      "detach() removes the contextmenu listener."
+    ],
+    "outOfScopeEdgeCases": [
+      "Context menus outside the preview pan targets (no global, window or document guard).",
+      "Editables inside shadow DOM (composedPath is not used).",
+      "Whitespace-only selections (the selection is not trimmed).",
+      "Canvas, video and link specific exemptions.",
+      "Platform or user-agent specific behavior.",
+      "Real macOS WebKit press-time ordering in automated tests (covered only by the supervising GUI re-check)."
+    ],
+    "sourcePaths": [
+      "src/features/preview/previewPanZoom.ts",
+      "src/features/preview/previewPanZoom.vitest.ts",
+      "src/features/preview/PreviewPane.vitest.tsx",
+      "src/features/preview/MediaFilePreviewPane.vitest.tsx",
+      "src/features/preview/PdfFilePreviewPane.vitest.tsx",
+      "README.md"
+    ]
+  },
+  "acceptedDependencies": [],
+  "plans": [
+    {
+      "planId": "preview-contextmenu-guard-module",
+      "planPath": "impl-plans/active/preview-contextmenu-guard-module.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/preview/previewPanZoom.ts",
+        "src/features/preview/previewPanZoom.vitest.ts",
+        "impl-plans/active/preview-contextmenu-guard-module.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "contextmenu with no gesture, no selection and a non-editable target is defaultPrevented.",
+        "contextmenu right after a right pointerdown, before any move, is prevented, and later moves past the slop pan the container (scrollLeft 90).",
+        "Editable targets and a non-empty selection keep the native menu unless a right pan is active or has just ended.",
+        "Existing pan, chord, fling, wheel and geometry tests pass. Only the three listed menu assertions change.",
+        "The progress log records hashes, commands, exit codes and log paths."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/previewPanZoom.vitest.ts",
+        "bunx biome check src/features/preview/previewPanZoom.ts src/features/preview/previewPanZoom.vitest.ts --diagnostic-level=warn",
+        "bunx tsc --noEmit"
+      ]
+    },
+    {
+      "planId": "preview-contextmenu-guard-readme",
+      "planPath": "impl-plans/active/preview-contextmenu-guard-readme.md",
+      "dependsOn": [],
+      "writePaths": [
+        "README.md",
+        "impl-plans/active/preview-contextmenu-guard-readme.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "README.md has no 'plain right-click opens the context menu'.",
+        "README.md:254 ends with 'the native context menu is suppressed over previews except on selected text or editable fields.'",
+        "Exactly one README line changes."
+      ],
+      "verification": [
+        "grep -c \"plain right-click opens the context menu\" README.md",
+        "git diff --numstat -- README.md"
+      ]
+    },
+    {
+      "planId": "preview-contextmenu-guard-preview-pane",
+      "planPath": "impl-plans/active/preview-contextmenu-guard-preview-pane.md",
+      "dependsOn": ["preview-contextmenu-guard-module"],
+      "writePaths": [
+        "src/features/preview/PreviewPane.vitest.tsx",
+        "impl-plans/active/preview-contextmenu-guard-preview-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "The plain right-click and post-middle contextmenu assertions expect defaultPrevented true, and the test is renamed.",
+        "The chord-release test is unchanged and passes.",
+        "The file passes."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/PreviewPane.vitest.tsx",
+        "bunx biome check src/features/preview/PreviewPane.vitest.tsx --diagnostic-level=warn"
+      ]
+    },
+    {
+      "planId": "preview-contextmenu-guard-media-pane",
+      "planPath": "impl-plans/active/preview-contextmenu-guard-media-pane.md",
+      "dependsOn": ["preview-contextmenu-guard-module"],
+      "writePaths": [
+        "src/features/preview/MediaFilePreviewPane.vitest.tsx",
+        "impl-plans/active/preview-contextmenu-guard-media-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "No 'expect(menu()).toBe(false)' remains.",
+        "The file passes."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/MediaFilePreviewPane.vitest.tsx",
+        "bunx biome check src/features/preview/MediaFilePreviewPane.vitest.tsx --diagnostic-level=warn"
+      ]
+    },
+    {
+      "planId": "preview-contextmenu-guard-pdf-pane",
+      "planPath": "impl-plans/active/preview-contextmenu-guard-pdf-pane.md",
+      "dependsOn": ["preview-contextmenu-guard-module"],
+      "writePaths": [
+        "src/features/preview/PdfFilePreviewPane.vitest.tsx",
+        "impl-plans/active/preview-contextmenu-guard-pdf-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "No contextmenu event is asserted defaultPrevented false.",
+        "The file passes."
+      ],
+      "verification": [
+        "mise exec -- env PATH=\"$(mise where node)/bin:$PATH\" bunx vitest run --config vitest.config.ts src/features/preview/PdfFilePreviewPane.vitest.tsx",
+        "bunx biome check src/features/preview/PdfFilePreviewPane.vitest.tsx --diagnostic-level=warn"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "base-branch-integrate",
+  "description": "All parallel workers have stopped; final commit and push have succeeded. Perform serialized integration only now.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-sol",
+  "promptTemplateFile": "prompts/base-branch-integrate.md",
+  "variables": {},
+  "effort": "high"
+}

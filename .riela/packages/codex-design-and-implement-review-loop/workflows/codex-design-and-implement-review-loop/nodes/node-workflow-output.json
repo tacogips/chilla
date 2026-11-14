@@ -1,0 +1,12 @@
+{
+  "id": "workflow-output",
+  "description": "Publish either the accepted planning handoff or the final accepted issue-resolution handoff after the required review gates pass, the issue-resolution documentation refresh runs when required, Step 9 emits the commit message, Step 10 commits, and Step 11 pushes.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-sol",
+  "modelFreeze": false,
+  "promptTemplateFile": "prompts/workflow-output.md",
+  "variables": {},
+  "output": {
+    "description": "Return either the accepted design-and-plan handoff or the final issue-resolution handoff, with review summaries, documentation refresh details, commit/push details, and residual risks."
+  }
+}

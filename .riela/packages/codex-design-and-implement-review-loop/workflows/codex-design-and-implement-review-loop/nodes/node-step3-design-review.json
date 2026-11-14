@@ -1,0 +1,13 @@
+{
+  "id": "step3-design-review",
+  "description": "Review the design-doc update and route back when any high or mid finding exists.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.6-sol",
+  "modelFreeze": false,
+  "effort": "high",
+  "promptTemplateFile": "prompts/step3-design-review.md",
+  "variables": {},
+  "output": {
+    "description": "Return adapter JSON with when.needs_revision true only when high or mid findings exist, plus findings and actionable feedback."
+  }
+}

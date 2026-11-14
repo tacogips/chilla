@@ -1,0 +1,4 @@
+interface:
+  display_name: "Riela Event Sources"
+  short_description: "Configure and test workflow events"
+  default_prompt: "Use $riela-event-sources to configure and test this riela event source."
