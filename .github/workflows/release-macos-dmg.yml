@@ -1,0 +1,64 @@
+name: release-macos-dmg
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-macos-dmg-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos-dmg:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: 2026.8.3
+          install_args: bun node rust
+
+      - name: Install frontend dependencies
+        run: mise run install
+
+      - name: Build unsigned macOS bundles
+        run: mise run bundle-macos-dmg
+
+      - name: Verify macOS bundle outputs
+        run: |
+          set -euo pipefail
+
+          app_path="target/release/bundle/macos/chilla.app"
+          dmg_path=""
+          for candidate in target/release/bundle/dmg/*.dmg; do
+            if [ -f "$candidate" ]; then
+              dmg_path="$candidate"
+              break
+            fi
+          done
+
+          test -d "$app_path"
+          test -n "$dmg_path"
+          test -f "$dmg_path"
+
+      - name: Upload validation build artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: chilla-macos-dmg
+          if-no-files-found: error
+          path: |
+            target/release/bundle/dmg/*.dmg
+            target/release/bundle/macos/*.app
