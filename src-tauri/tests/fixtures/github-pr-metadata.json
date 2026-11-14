@@ -1,0 +1,13 @@
+{
+  "title": "Add PR diff viewer",
+  "state": "open",
+  "merged": false,
+  "merged_at": null,
+  "updated_at": "2026-06-02T00:00:00Z",
+  "base": {
+    "ref": "main"
+  },
+  "head": {
+    "ref": "feature/pr-diff"
+  }
+}
