@@ -1,0 +1,43 @@
+# Copy to ~/.config/chilla/keymap.toml, then restart chilla.
+# With absolute XDG_CONFIG_HOME, use $XDG_CONFIG_HOME/chilla/keymap.toml.
+# Only chilla built-in actions are accepted; run never executes a shell.
+
+[[mgr.prepend_keymap]]
+on = ["g", "f"]
+run = "search.name"
+desc = "Find filenames recursively"
+
+[[mgr.prepend_keymap]]
+on = ["g", "s"]
+run = "search.content"
+desc = "Search file contents recursively"
+
+[[mgr.prepend_keymap]]
+on = ["g", "z"]
+run = "sort.size.desc"
+desc = "Largest files first"
+
+[[mgr.prepend_keymap]]
+on = "<C-p>"
+run = "filter"
+desc = "Filter the browser"
+
+[[workspace.prepend_keymap]]
+on = ["<C-b>", "t"]
+run = "theme.toggle"
+desc = "Toggle theme"
+
+# Lower-priority additional binding; existing defaults win duplicates.
+[[workspace.append_keymap]]
+on = "<F2>"
+run = "help"
+desc = "Show effective keybindings"
+
+# To disable a specific default, prepend an entry with run = "noop".
+# To replace ALL defaults for a context, use its keymap array, for example:
+# [mgr]
+# keymap = [
+#   { on = "j", run = "cursor.down" },
+#   { on = "k", run = "cursor.up" },
+#   { on = "<Enter>", run = "open" },
+# ]
