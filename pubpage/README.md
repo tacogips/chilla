@@ -41,6 +41,13 @@ recorded in `../doc/branding/`. `public/viewer.webp` derives from
 `chilla-icon.png`. English and Japanese hero imagery and metadata use the new
 identity. Historical screenshots below are retained without retouching.
 
+November 15 captures were taken from the 0.4.0 debug build window (1280x800 points, flattened onto white):
+
+| Asset | Capture/source | Dimensions | SHA-256 |
+| --- | --- | --- | --- |
+| `public/screenshots/browse-fresh.jpg` | Actual app, repository README with the new artwork, file browser visible | 1280×800 | `6871c57b11179f7e3e85831433f9ba3e7351f448ac43c8aaa00edc5fc33be972` |
+| `public/screenshots/pair-view.jpg` | Actual app, `chilla before.png after.png` pair view with old and new artwork | 1280×800 | `f07df1dfff27563f874e2ca1eaf84e1437c4f6ec4f6a50ed6605e7d51e1ae232` |
+
 ### September 9 design and capture history
 
 The September page used a warm cream/sage/peach palette, rounded headings, the
@@ -55,7 +62,7 @@ No application source was changed or rebuilt for this website task.
 
 | Historical asset | Capture/source | Dimensions | SHA-256 |
 | --- | --- | --- | --- |
-| `public/screenshots/browse-fresh.jpg` | Actual app, repository README, file browser visible, ignored entries hidden; 13:36 JST | 1277×768 | `64f417cd0976944d7d04463acb655c8dee084291ed2b45a00c32979f8bbe1803` |
+| `public/screenshots/browse-fresh.jpg` (replaced November 15) | Actual app, repository README, file browser visible, ignored entries hidden; 13:36 JST | 1277×768 | `64f417cd0976944d7d04463acb655c8dee084291ed2b45a00c32979f8bbe1803` |
 | `public/screenshots/diff-fresh.jpg` | Actual app, local Git diff, README selected in split comparison; 13:37 JST | 1277×768 | `723a410d745179e10ebc4d370b8577a8b07a76bc485756de1707ba6e9798662a` |
 | `public/cat.webp` (removed November 15) | Existing `doc/empty-state-cat.png`, WebP conversion | 1024×1536 | `797e20aac4d5dad56921ce6a12268d93ef81e622104891b65fbe8bb4fae73663` |
 | `public/og.png` (superseded November 15) | Exact `src-tauri/icons/icon.png`, square social card | 512×512 | `35f682ce10b3e596e1bebae43e904878281c8e2c783ee04040fb6e090d8d22d8` |
