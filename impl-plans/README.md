@@ -2,7 +2,7 @@
 
 This directory contains implementation plans that translate design documents into actionable implementation specifications.
 
-- [macOS 0.4.0 Release](active/macos-release-0.4.0.md): pair view, left-edge expand strip and new branding; signed public assets, Homebrew cask and Apple review submission.
+- [macOS 0.4.0 Release](completed/macos-release-0.4.0.md): pair view, left-edge expand strip and new branding; signed public assets, Homebrew cask and Apple review submission.
 
 - [macOS 0.3.7 Release](completed/macos-release-0.3.7.md): PDF shortcuts, pointer-anchored zoom and momentum drag pan; signed public assets, Homebrew cask and Apple review submission.
 
