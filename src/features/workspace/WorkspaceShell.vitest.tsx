@@ -539,6 +539,11 @@ describe("WorkspaceShell numeric view shortcuts", () => {
           ".workspace__expand-tab",
         );
         expect(expandTab !== null).toBe(!visible);
+        expect(
+          document
+            .querySelector(".workspace__body")
+            ?.classList.contains("workspace__body--expand-tab"),
+        ).toBe(!visible);
         if (expandTab !== null) {
           expect(expandTab.getAttribute("aria-label")).toBe("Expand left pane");
           expect(expandTab.getAttribute("aria-expanded")).toBe("false");

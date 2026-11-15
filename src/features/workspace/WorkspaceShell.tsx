@@ -1541,9 +1541,13 @@ export function WorkspaceShell() {
       : "workspace workspace--syntax-off",
   );
 
+  /** The folded left pane is restored via a full-height strip on the left edge. */
+  const showExpandTab = (): boolean => !isFileTreeOpen() && !isPairMode();
+
   const viewerGridClassName = createMemo(() => {
+    const expandTab = showExpandTab() ? " workspace__body--expand-tab" : "";
     if (diffTarget() !== null) {
-      return "workspace__body workspace__body--pr-diff";
+      return `workspace__body workspace__body--pr-diff${expandTab}`;
     }
 
     const toc = isTocOpen() && hasTocDocument();
@@ -1558,7 +1562,7 @@ export function WorkspaceShell() {
       className += " workspace__body--viewer--no-tree";
     }
 
-    return className;
+    return className + expandTab;
   });
 
   const changePresentation = (rendered: boolean): void => {
@@ -1854,7 +1858,7 @@ export function WorkspaceShell() {
           />
 
           <div class={viewerGridClassName()} style={viewerGridStyle()}>
-            <Show when={!isFileTreeOpen() && !isPairMode()}>
+            <Show when={showExpandTab()}>
               <button
                 type="button"
                 class="workspace__expand-tab"
