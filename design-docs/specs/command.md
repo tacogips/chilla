@@ -22,7 +22,8 @@ The target command surface defines no named subcommands. The binary accepts eith
 | `chilla <git_dir> <commit>` | Local Git repository directory and one commit-ish | Open local Git diff viewer mode for one commit compared with its first parent |
 | `chilla <git_dir> <base>..<head>` | Local Git repository directory and two-dot range | Open local Git diff viewer mode for a direct base-to-head comparison |
 | `chilla <git_dir> <base>...<head>` | Local Git repository directory and three-dot range | Open local Git diff viewer mode for merge-base-to-head comparison |
-| `chilla <file_path> <file_path> ...` | Two or more file paths | Open file view mode with the left pane constrained to the provided files only |
+| `chilla <file_path> <file_path>` | Exactly two positional file arguments that resolve to two distinct canonical regular files | Open pair view: the two files side by side, first on the left, each pane with an eye toggle; see `design-pair-view.md` |
+| `chilla <file_path> <file_path> <file_path> ...` | Three or more positional file paths resolving to two or more unique files (for example `a b a`) | Open file view mode with the left pane constrained to the provided files only |
 | `chilla --verbose [startup arguments]` | Global diagnostic flag plus any supported startup form | Start normally and record verbose startup and file-I/O diagnostics |
 | `chilla --help` | None | Show CLI help |
 | `chilla --version` | None | Show application version |

@@ -22,6 +22,8 @@ Store questions, pending decisions, and items awaiting user approval.
 - [qa-pdf-inline-rendering.md](./qa-pdf-inline-rendering.md) - Video zoom scope, PDF text layer, and lazy page rendering defaults
 - [qa-preview-right-drag-pan.md](./qa-preview-right-drag-pan.md) - Right-drag pan versus press-time contextmenu on macOS and Linux WebKit (resolved: native-menu guard on preview pan targets)
 
+- [qa-pair-view.md](./qa-pair-view.md) - Pair view defaults (CLI-only trigger, no sidebar, fixed split, no shortcut, manual reload)
+
 ## Adding New Items
 
 1. Create a new file with appropriate prefix (`qa-` or `pending-`)

@@ -1,0 +1,276 @@
+{
+  "taskId": "pair-view-20261115-01",
+  "workflowMode": "issue-resolution",
+  "issueReference": "none: inline workflowInput request, no GitHub issue URL or number given (workflowExecutionId opus-terra-design-and-implement-review-loop-session-858; design accepted in comm-020278; plans accepted in comm-020280)",
+  "implementationBranch": "main",
+  "baseBranch": "main",
+  "remote": "origin",
+  "gitPush": false,
+  "originalHead": "4c575d30fb056801e96ee6763af794543e6cf383",
+  "evidenceRoot": "tmp/pair-view-20261115-01",
+  "designDocPaths": [
+    "design-docs/specs/design-pair-view.md",
+    "design-docs/user-qa/qa-pair-view.md",
+    "design-docs/specs/command.md",
+    "design-docs/specs/design-file-viewer-mode.md",
+    "design-docs/specs/architecture.md",
+    "design-docs/user-qa/README.md"
+  ],
+  "reviewContext": {
+    "issueReference": "none: inline workflowInput request, no GitHub issue URL or number given (workflowExecutionId opus-terra-design-and-implement-review-loop-session-858; design accepted in comm-020278; plans accepted in comm-020280)",
+    "userProblem": "Passing two files to chilla at launch (for example `chilla before.png after.png`) only shows them as a sidebar list with one viewer, so before/after files cannot be compared side by side.",
+    "requiredOutcomes": [
+      "`chilla before.png after.png` shows the two images side by side, first argument left, second right.",
+      "Two markdown/text files are also shown side by side using the existing renderers (WorkspaceDocumentColumn -> PreviewPane and friends).",
+      "Each pane has an eye icon at its top-left; hiding one pane gives the other the full width apart from a narrow restore strip; the hidden pane can be restored and both panes can never be hidden.",
+      "0, 1, or 3+ file arguments, directory or mixed directory+file arguments, and GitHub/Git-diff targets behave exactly as before (`a b a` stays an explicit file set).",
+      "Rust and TypeScript unit tests cover argument classification (pair vs list), the file_pair payload normalizer, and pane visibility state; a hidden pair pane ignores +/- zoom shortcuts.",
+      "CARGO_TERM_QUIET=true cargo clippy, cargo nextest, bun run typecheck, bun run test, bun run test:dom and biome pass; the reconcile phase launches target/debug/chilla with two image files per chilla-post-edit-launch."
+    ],
+    "nonGoals": [
+      "No new Tauri command; list_explicit_file_set, directory_listing.rs, commands/document.rs and lib.rs are unchanged.",
+      "macOS Finder / Apple Event open-files and startupContextForPickedTarget never produce file_pair.",
+      "No pane resizing, eye-toggle keyboard shortcut, synchronized scroll/zoom, per-pane file watching, editing, TOC or file browser sidebar in pair view.",
+      "No edits to src/features/workspace/WorkspaceDocumentColumn.tsx (pre-existing uncommitted user diff, 2+/2-), WorkspaceHeader.tsx, App.css, package.json or bun.lock.",
+      "No edits to unrelated user changes (README.md, branding assets, icons, pubpage/, design-docs/specs/notes.md, impl-plans/README.md, .riela/)."
+    ],
+    "constraints": [
+      "Exactly two positional file arguments that resolve to two distinct canonical regular files trigger pair view; classification uses P (positional count) and U (unique count): U==1 -> File, P==2 && U==2 -> FilePair, otherwise U>=2 -> FileSet.",
+      "Directory rejection text, exit code 2, the non-regular-file error, first-occurrence dedup and Git-diff precedence are unchanged.",
+      "Rust and TypeScript sides of the startup payload contract (BrowserRoot file_pair) change together across pair-view-rust-startup and pair-view-workspace-integration.",
+      "Reuse existing renderers; no duplicated viewers; inline SVG glyphs only; no emojis.",
+      "Follow AGENTS.md, rust-coding-standards and ts-coding-standards; CARGO_TERM_QUIET=true for cargo commands.",
+      "Each worker edits only its plan's writePaths, records pre/post sha256 for edited existing files, and appends to its own plan progress log; evidence goes under tmp/pair-view-20261115-01/<planId>/<attempt>/ (untracked, data only).",
+      "Commit messages must not contain AI attribution or Co-Authored-By lines."
+    ],
+    "designDecisionsAndRationale": [
+      {
+        "decision": "New StartupTarget::FilePair { left, right } and BrowserRoot::FilePair { left_file_path, right_file_path } serialized as kind \"file_pair\" with initial_mode file_view.",
+        "rationale": "A distinct variant keeps explicit_file_set semantics untouched and lets exhaustive matches on both Rust and TS sides surface every consumer (design-pair-view.md Startup Payload Contract)."
+      },
+      {
+        "decision": "Classify on P and U, not on U==2 alone.",
+        "rationale": "`a b a` (P=3, U=2) must keep the explicit file-set list, matching the constraint that 3+ arguments behave as before."
+      },
+      {
+        "decision": "PairView renders each pane through the existing WorkspaceDocumentColumn with markdownDoc=null and an openFilePreview result.",
+        "rationale": "Reuses image, markdown, text, PDF, media and CSV renderers without duplication and without editing the user-modified WorkspaceDocumentColumn.tsx."
+      },
+      {
+        "decision": "Visibility is a three-state machine (both, left_only, right_only); hiding the only visible pane is a no-op and a restore strip is always rendered for the hidden side.",
+        "rationale": "Makes the both-hidden state unrepresentable and guarantees a recovery control."
+      },
+      {
+        "decision": "Hidden panes stay mounted with the hidden attribute; PreviewPane keydown gets a closest('.pane--hidden, [hidden], [aria-hidden=true]') guard.",
+        "rationale": "Preserves per-pane zoom/scroll across hide/restore and matches existing PdfFilePreviewPane/MediaFilePreviewPane guards so +/- does not zoom a hidden pane."
+      },
+      {
+        "decision": "Pair mode reuses the existing workspace__body--viewer--no-tree grid and leaves header single-document toggles hidden via null md()/fp().",
+        "rationale": "Avoids App.css and WorkspaceHeader.tsx edits; full-width behavior is confirmed in the launched app."
+      }
+    ],
+    "intentionalTradeoffs": [
+      "Fixed 50/50 split with no resize handle (qa-pair-view.md default).",
+      "Pair view is CLI-launch only; open-files with two files still yields an explicit file set.",
+      "Reload re-opens both panes manually; no file watching.",
+      "jsdom cannot confirm layout width or concurrent media playback; these are confirmed only by the GUI launch check, which depends on the environment."
+    ],
+    "supportedEdgeCases": [
+      "`a b` -> FilePair(a,b); `b a` -> FilePair(b,a).",
+      "`a a`, `a ./a`, `a a a` -> File(a).",
+      "`a b a` -> FileSet([a,b]); `a b c` -> FileSet([a,b,c]).",
+      "`--verbose a b` and `--csv-first-row-header=true a b` -> FilePair (options do not count toward P); file_open_options pass through.",
+      "`dir file` -> existing usage error with exit code 2; `<git_dir> <commit>` stays a Git-diff target.",
+      "One pane failing to load shows its error while the other pane renders.",
+      "Hidden pane ignores +/- zoom; restored pane keeps its pre-hide zoom.",
+      "Reload in pair mode re-requests both previews; file-tree toggle and other directory shortcuts are inert in pair mode."
+    ],
+    "outOfScopeEdgeCases": [
+      "macOS Apple Event open-files delivering exactly two files.",
+      "Synchronized zoom/scroll between panes.",
+      "Live updates when a paired file changes on disk.",
+      "Pair view for directories or more than two files."
+    ],
+    "reviewFindingsCarriedForward": [
+      "low: impl-plans/active/pair-view-workspace-integration.md:140 gates on whole-project `bun run typecheck` without the wave-1 tolerance clause; a half-written sibling vitest file from pair-view-hidden-zoom-regression could fail it. Serial reconcile reruns typecheck.",
+      "low: WorkspaceShell keyboard shortcuts in pair mode (directoryState null) are covered only by the plan risk note and the handleToggleFileTree early return; step-6 review and the launch check should confirm the other shortcuts do nothing."
+    ],
+    "sourcePaths": [
+      "design-docs/specs/design-pair-view.md",
+      "design-docs/user-qa/qa-pair-view.md",
+      "design-docs/specs/command.md",
+      "design-docs/specs/design-file-viewer-mode.md",
+      "design-docs/specs/architecture.md",
+      "impl-plans/active/pair-view-rust-startup.md",
+      "impl-plans/active/pair-view-preview-guard.md",
+      "impl-plans/active/pair-view-component.md",
+      "impl-plans/active/pair-view-workspace-integration.md",
+      "impl-plans/active/pair-view-hidden-zoom-regression.md",
+      "src-tauri/src/cli/mod.rs",
+      "src-tauri/src/viewer/types.rs",
+      "src-tauri/src/viewer/service.rs",
+      "src-tauri/src/verbose_log.rs",
+      "src/lib/tauri/document.ts",
+      "src/features/workspace/WorkspaceShell.tsx",
+      "src/features/workspace/WorkspaceDocumentColumn.tsx",
+      "src/features/preview/PreviewPane.tsx"
+    ]
+  },
+  "acceptedDependencies": [],
+  "plans": [
+    {
+      "planId": "pair-view-rust-startup",
+      "planPath": "impl-plans/active/pair-view-rust-startup.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src-tauri/src/cli/mod.rs",
+        "src-tauri/src/cli/tests.rs",
+        "src-tauri/src/viewer/types.rs",
+        "src-tauri/src/viewer/service.rs",
+        "src-tauri/src/viewer/service/tests.rs",
+        "src-tauri/src/viewer/service/tests/startup_options_tests.rs",
+        "src-tauri/src/verbose_log.rs",
+        "impl-plans/active/pair-view-rust-startup.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "StartupTarget::FilePair { left, right } and BrowserRoot::FilePair { left_file_path, right_file_path } exist; serde_json gives kind == \"file_pair\".",
+        "Classification uses P and U: `a b` -> FilePair, `a b a` -> FileSet([a,b]), `a b c` -> FileSet, `a a`/`a ./a`/`a a a` -> File; options do not count toward P.",
+        "Directory rejection, exit code 2, Git-diff precedence and non-regular-file errors are unchanged; no `_ =>` wildcard added.",
+        "verbose_log startup_load_path returns the left path for FilePair; help text contains \"If two file paths are provided\".",
+        "clippy -D warnings, nextest and fmt --check exit 0; progress log records commands, exit codes, log paths and sha256 pre/post hashes."
+      ],
+      "verification": [
+        "CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+        "NEXTEST_STATUS_LEVEL=fail NEXTEST_FAILURE_OUTPUT=immediate-final NEXTEST_HIDE_PROGRESS_BAR=1 CARGO_TERM_QUIET=true cargo nextest run --manifest-path src-tauri/Cargo.toml",
+        "NEXTEST_STATUS_LEVEL=fail NEXTEST_FAILURE_OUTPUT=immediate-final NEXTEST_HIDE_PROGRESS_BAR=1 CARGO_TERM_QUIET=true cargo nextest run --manifest-path src-tauri/Cargo.toml cli::",
+        "CARGO_TERM_QUIET=true cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
+        "grep -n \"If two file paths are provided\" src-tauri/src/cli/mod.rs"
+      ]
+    },
+    {
+      "planId": "pair-view-preview-guard",
+      "planPath": "impl-plans/active/pair-view-preview-guard.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/preview/PreviewPane.tsx",
+        "src/features/preview/PreviewPane.vitest.tsx",
+        "impl-plans/active/pair-view-preview-guard.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "handleKeyDown returns early when the preview element has a `.pane--hidden, [hidden], [aria-hidden='true']` ancestor (closest), evaluated per event.",
+        "Four new vitest cases pass: hidden ancestor, aria-hidden ancestor, normal mount zooms to 1.1, un-hide then zoom to 1.1.",
+        "All existing PreviewPane.vitest.tsx cases pass unchanged; wheel zoom, pan and props.visible semantics unchanged.",
+        "Targeted vitest, typecheck and biome exit 0 (sibling-owned typecheck errors recorded, not fixed); progress log updated."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/preview/PreviewPane.vitest.tsx",
+        "bun run typecheck",
+        "bunx biome check src/features/preview/PreviewPane.tsx src/features/preview/PreviewPane.vitest.tsx --diagnostic-level=warn"
+      ]
+    },
+    {
+      "planId": "pair-view-component",
+      "planPath": "impl-plans/active/pair-view-component.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/pair-view/pairPaneVisibility.ts",
+        "src/features/pair-view/pairPaneVisibility.vitest.ts",
+        "src/features/pair-view/PairView.tsx",
+        "src/features/pair-view/PairView.css",
+        "src/features/pair-view/PairView.vitest.tsx",
+        "src/features/workspace/workspaceGlyphs.tsx",
+        "impl-plans/active/pair-view-component.md"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [
+        {
+          "path": "src/features/workspace/workspaceGlyphs.tsx",
+          "intendedEdit": "Existing file owned exclusively by this plan in this checkpoint: append EyeGlyph and EyeOffGlyph inline SVGs following SunGlyph; leave existing glyphs unchanged; record sha256 pre/post."
+        }
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "pairPaneVisibility.ts implements the pinned API; no both-hidden state; canHidePairPane is true only for `both`; exhaustive walk up to length 4 keeps a pane visible.",
+        "PairView renders left/right sections (data-pair-pane) in order through WorkspaceDocumentColumn, loads both panes concurrently with per-pane stale guards and errors, eye buttons with aria-label/aria-pressed/aria-disabled, restore strip (data-pair-restore) for the hidden side, hidden panes stay mounted.",
+        "onReloadReady receives a reload function on mount and null on cleanup; reload re-requests both paths.",
+        "Component and visibility vitests pass; typecheck and biome clean; WorkspaceDocumentColumn.tsx diff stays the pre-existing 2+/2- user diff."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/pair-view/pairPaneVisibility.vitest.ts src/features/pair-view/PairView.vitest.tsx",
+        "bun run typecheck",
+        "bunx biome check src/features/pair-view src/features/workspace/workspaceGlyphs.tsx --diagnostic-level=warn",
+        "git diff --stat -- src/features/workspace/WorkspaceDocumentColumn.tsx"
+      ]
+    },
+    {
+      "planId": "pair-view-workspace-integration",
+      "planPath": "impl-plans/active/pair-view-workspace-integration.md",
+      "dependsOn": [
+        "pair-view-rust-startup",
+        "pair-view-component"
+      ],
+      "writePaths": [
+        "src/lib/tauri/document.ts",
+        "src/lib/tauri/document.vitest.ts",
+        "src/features/workspace/WorkspaceFeedback.tsx",
+        "src/features/workspace/WorkspaceFeedback.vitest.tsx",
+        "src/features/workspace/WorkspaceShell.tsx",
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "impl-plans/active/pair-view-workspace-integration.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "TS BrowserRoot has the file_pair variant; the normalizer accepts snake_case and camelCase and throws \"Startup file-pair payload is missing required paths\" when a path is missing.",
+        "WorkspaceFeedback loadingMessage has an explicit file_pair branch (\"Opening the requested files...\").",
+        "WorkspaceShell renders PairView in pair mode with no FileBrowserPane, TOC or \"Expand left pane\" tab; does not call listExplicitFileSet/listDirectory; reload re-requests both previews; handleToggleFileTree is inert.",
+        "directory, explicit_file_set, github_pr and git_diff startup behavior unchanged; existing suites pass.",
+        "typecheck, targeted vitest and biome exit 0; WorkspaceDocumentColumn.tsx diff stays the pre-existing 2+/2- user diff; progress log updated."
+      ],
+      "verification": [
+        "bun run typecheck",
+        "bunx vitest run --config vitest.config.ts src/lib/tauri/document.vitest.ts src/features/workspace/WorkspaceFeedback.vitest.tsx src/features/workspace/WorkspaceShell.vitest.tsx",
+        "bunx biome check src/lib/tauri/document.ts src/lib/tauri/document.vitest.ts src/features/workspace/WorkspaceFeedback.tsx src/features/workspace/WorkspaceFeedback.vitest.tsx src/features/workspace/WorkspaceShell.tsx src/features/workspace/WorkspaceShell.vitest.tsx --diagnostic-level=warn",
+        "git diff --stat -- src/features/workspace/WorkspaceDocumentColumn.tsx"
+      ]
+    },
+    {
+      "planId": "pair-view-hidden-zoom-regression",
+      "planPath": "impl-plans/active/pair-view-hidden-zoom-regression.md",
+      "dependsOn": [
+        "pair-view-preview-guard",
+        "pair-view-component"
+      ],
+      "writePaths": [
+        "src/features/pair-view/PairViewHiddenZoom.vitest.tsx",
+        "impl-plans/active/pair-view-hidden-zoom-regression.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Image/image and markdown/markdown cases pass through the real PairView -> WorkspaceDocumentColumn -> PreviewPane path.",
+        "Both visible: + zooms both panes to 1.1; hiding left (or right) then + - + changes only the visible pane, and the restored pane keeps its pre-hide zoom.",
+        "Progress log quotes the selector targeting a PreviewPane element inside section[data-pair-pane=\"left\"][hidden]; no other source file edited.",
+        "Targeted vitest and biome exit 0."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/pair-view/PairViewHiddenZoom.vitest.tsx",
+        "bunx biome check src/features/pair-view/PairViewHiddenZoom.vitest.tsx --diagnostic-level=warn"
+      ]
+    }
+  ],
+  "reconcileVerification": [
+    "CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "NEXTEST_STATUS_LEVEL=fail NEXTEST_FAILURE_OUTPUT=immediate-final NEXTEST_HIDE_PROGRESS_BAR=1 CARGO_TERM_QUIET=true cargo nextest run --manifest-path src-tauri/Cargo.toml",
+    "bun run typecheck",
+    "bun run test",
+    "bun run test:dom",
+    "bun run lint:biome",
+    "mise run lint",
+    "chilla-post-edit-launch: build and launch target/debug/chilla with two image files"
+  ]
+}

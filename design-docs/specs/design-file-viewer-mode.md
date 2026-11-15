@@ -16,7 +16,8 @@ This document defines the startup behavior, Rust-side file classification, and f
 | `chilla <dir_path>` | requested directory | file view |
 | `chilla <markdown_file>` | requested file | markdown |
 | `chilla <other_file>` | parent directory + selected file | file view |
-| `chilla <file_a> <file_b> ...` | explicit file set + first file selected | file view |
+| `chilla <file_a> <file_b>` (two positional files, two unique) | file pair, side by side (see `design-pair-view.md`) | file view (pair) |
+| `chilla <file_a> <file_b> <file_c> ...` (three or more positional files, two or more unique, for example `a b a`) | explicit file set + first file selected | file view |
 
 Rules:
 
@@ -43,7 +44,7 @@ Rules:
 
 ### Explicit File Set View
 
-- When startup receives two or more explicit filepaths, the left pane switches from directory browsing to explicit file-set selection.
+- When startup receives three or more positional filepaths that resolve to two or more unique files, the left pane switches (exactly two positional files resolving to two unique files open pair view instead, see `design-pair-view.md`) from directory browsing to explicit file-set selection.
 - The pane shows only the provided files; sibling files from the same directories are intentionally excluded.
 - The pane occupies the same left-side slot as the current file browser, but it is implemented as a distinct view model rather than overloading directory-navigation semantics.
 - The first requested file opens immediately in the viewer, and the left pane remains visible by default so the constrained selection set is discoverable.
