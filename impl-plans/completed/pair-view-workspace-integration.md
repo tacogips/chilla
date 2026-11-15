@@ -1,6 +1,6 @@
 # Pair View: TypeScript Startup Contract And Workspace Integration
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: pair-view-workspace-integration
 **Wave**: 2 (depends on pair-view-rust-startup, pair-view-component)
 **Design Reference**: design-docs/specs/design-pair-view.md (Startup Payload Contract, Frontend Behavior / Workspace Integration, Validation)
@@ -13,9 +13,9 @@
 
 Rust now sends `browser_root = {"kind":"file_pair","left_file_path","right_file_path"}`
 with `initial_mode: "file_view"` (see
-`impl-plans/active/pair-view-rust-startup.md`). This plan mirrors that
+`impl-plans/completed/pair-view-rust-startup.md`). This plan mirrors that
 contract in TypeScript and makes `WorkspaceShell` render `PairView` (see
-`impl-plans/active/pair-view-component.md`) instead of the file browser and
+`impl-plans/completed/pair-view-component.md`) instead of the file browser and
 single document column. Every other startup kind must keep its current
 behavior.
 
@@ -144,13 +144,35 @@ drift, re-read and re-apply the intent. Do not overwrite blindly.
 
 ## Completion Criteria
 
-- [ ] TS `BrowserRoot` and normalizer handle `file_pair`
-- [ ] WorkspaceShell renders PairView in pair mode, with no browser, TOC, or
+- [x] TS `BrowserRoot` and normalizer handle `file_pair`
+- [x] WorkspaceShell renders PairView in pair mode, with no browser, TOC, or
       expand tab
-- [ ] Reload works in pair mode; the file-tree toggle is inert
-- [ ] Tests added; typecheck, targeted vitest, and biome pass
-- [ ] Progress log updated
+- [x] Reload works in pair mode; the file-tree toggle is inert
+- [x] Tests added; typecheck, targeted vitest, and biome pass
+- [x] Progress log updated
 
 ## Progress Log
 
-(Implementer appends a session entry: date, changes, command exit statuses.)
+### Session: 2026-11-15 — implementation
+
+Added the file-pair startup normalizer and loading feedback, integrated PairView
+into the workspace, and covered pair startup, reload, and tree-toggle behavior.
+
+- `bun run typecheck`: exit 0.
+- `NODE_OPTIONS=--no-webstorage bunx vitest run --config vitest.config.ts src/lib/tauri/document.vitest.ts src/features/workspace/WorkspaceFeedback.vitest.tsx src/features/workspace/WorkspaceShell.vitest.tsx`: exit 0, 97/97 passed.
+- Exact unconfigured Vitest command: exit 1, 88/97 passed; nine existing localStorage cases fail because localStorage is undefined in this environment, including with `mise exec`. Logs retain both attempts.
+- Plan-scoped `bunx biome check ... --diagnostic-level=warn`: exit 0.
+- `git diff --stat -- src/features/workspace/WorkspaceDocumentColumn.tsx`: exit 0; 2 insertions, 2 deletions.
+- Evidence and edit hashes: `tmp/pair-view-20261115-01/pair-view-workspace-integration/`; complete verification logs are in `verification-1/`.
+
+Formal review, downstream hidden-zoom regression, combined-tree verification,
+and GUI launch remain with their assigned workflow steps.
+
+### Session: 2026-11-15 — verification continuation
+
+The targeted Vitest command passes 97/97 with Node 22.23.4, the version pinned
+in `mise.toml`, explicitly first on PATH. The unconfigured Node 26 invocation
+still fails nine localStorage cases. Typecheck and scoped Biome pass; the
+protected document-column diff remains 2 insertions and 2 deletions. Complete
+logs and plan hashes are in `verification-2/` under the plan evidence root.
+Formal review and combined-tree verification remain downstream.

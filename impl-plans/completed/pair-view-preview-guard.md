@@ -1,6 +1,6 @@
 # Pair View: PreviewPane Hidden-Ancestor Shortcut Guard
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: pair-view-preview-guard
 **Wave**: 1 (no dependencies)
 **Design Reference**: design-docs/specs/design-pair-view.md (Layout, "Hidden-pane shortcut suppression"; Validation)
@@ -85,11 +85,28 @@ the edit. If the pre-hash differs from the last read, stop and re-read.
 
 ## Completion Criteria
 
-- [ ] Guard added in `handleKeyDown` only
-- [ ] Four test cases added and passing
-- [ ] Targeted vitest, typecheck, and biome pass
-- [ ] Progress log updated
+- [x] Guard added in `handleKeyDown` only
+- [x] Four test cases added and passing
+- [x] Targeted vitest, typecheck, and biome pass
+- [x] Progress log updated
 
 ## Progress Log
 
 (Implementer appends a session entry: date, changes, command exit statuses.)
+
+### Session: 2026-11-15
+
+Added the per-event hidden-ancestor keyboard guard and four regression tests.
+On the moving shared tree, targeted Vitest passed 38 tests (exit 0) and scoped
+Biome passed (exit 0). `bun run typecheck` exited 2 on sibling-owned
+`src/features/pair-view/PairView.tsx` and `PairView.vitest.tsx`; no errors
+were reported in this plan’s files. Re-run typecheck after sibling fixes.
+Evidence: `tmp/pair-view-20261115-01/pair-view-preview-guard/attempt-1/`.
+Formal review and final integration remain downstream.
+
+### Continuation: 2026-11-15
+
+On the shared tree, targeted Vitest passed 38 tests, typecheck passed, and
+scoped Biome passed (each exit 0). Evidence:
+`tmp/pair-view-20261115-01/pair-view-preview-guard/attempt-2/`.
+Formal review and integration remain downstream.

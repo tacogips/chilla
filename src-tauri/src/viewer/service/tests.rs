@@ -143,6 +143,7 @@ fn startup_context_is_file_view_for_opening_markdown_file() {
             );
         }
         BrowserRoot::ExplicitFileSet { .. }
+        | BrowserRoot::FilePair { .. }
         | BrowserRoot::GitHubPr { .. }
         | BrowserRoot::GitDiff { .. } => panic!("expected directory startup root"),
     }
@@ -180,9 +181,34 @@ fn startup_context_explicit_file_set_preserves_ordered_paths() {
             assert_eq!(source_order_paths.as_slice(), expected.as_slice());
         }
         BrowserRoot::Directory { .. }
+        | BrowserRoot::FilePair { .. }
         | BrowserRoot::GitHubPr { .. }
         | BrowserRoot::GitDiff { .. } => panic!("expected explicit file-set root"),
     }
+}
+
+#[test]
+fn startup_context_file_pair_serializes_paths_and_mode() {
+    let left = std::path::PathBuf::from("/tmp/left.txt");
+    let right = std::path::PathBuf::from("/tmp/right.txt");
+    let context = ViewerService::new()
+        .startup_context(&StartupTarget::FilePair {
+            left: left.clone(),
+            right: right.clone(),
+        })
+        .expect("startup context");
+    assert_eq!(context.initial_mode, WorkspaceMode::FileView);
+    let value = serde_json::to_value(&context).expect("serialize context");
+    assert_eq!(value["initial_mode"], "file_view");
+    assert_eq!(value["browser_root"]["kind"], "file_pair");
+    assert_eq!(
+        value["browser_root"]["left_file_path"],
+        left.display().to_string()
+    );
+    assert_eq!(
+        value["browser_root"]["right_file_path"],
+        right.display().to_string()
+    );
 }
 
 #[test]

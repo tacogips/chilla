@@ -91,6 +91,14 @@ impl ViewerService {
                     file_open_options,
                 })
             }
+            StartupTarget::FilePair { left, right } => Ok(StartupContext {
+                initial_mode: WorkspaceMode::FileView,
+                browser_root: BrowserRoot::FilePair {
+                    left_file_path: display_path(left.as_path()),
+                    right_file_path: display_path(right.as_path()),
+                },
+                file_open_options,
+            }),
             StartupTarget::GitHubPr(target) => Ok(StartupContext {
                 initial_mode: WorkspaceMode::PrDiff,
                 browser_root: BrowserRoot::GitHubPr {

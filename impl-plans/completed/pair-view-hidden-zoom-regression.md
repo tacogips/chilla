@@ -1,6 +1,6 @@
 # Pair View: Hidden-Pane Zoom Regression Test
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: pair-view-hidden-zoom-regression
 **Wave**: 2 (depends on pair-view-preview-guard, pair-view-component)
 **Design Reference**: design-docs/specs/design-pair-view.md (Layout "Hidden-pane shortcut suppression"; Validation "Hidden-pane zoom regression")
@@ -20,7 +20,7 @@ it.
 
 Inputs: `PairView`, `PairViewProps.loadPreview`, and the DOM hooks
 `data-pair-pane` and `data-pair-restore` pinned in
-`impl-plans/active/pair-view-component.md`. Zoom is read via the
+`impl-plans/completed/pair-view-component.md`. Zoom is read via the
 `--preview-zoom-scale` custom property, as in
 `src/features/preview/PreviewPane.vitest.tsx` (around lines 106-110 and 608).
 
@@ -72,11 +72,24 @@ The new file is owned exclusively by this plan. Re-read it before each edit.
 
 ## Completion Criteria
 
-- [ ] Image and Markdown hidden-zoom regression cases (both sides) pass
-- [ ] Both-visible zoom case passes
-- [ ] biome clean
-- [ ] Progress log updated
+- [x] Image and Markdown hidden-zoom regression cases (both sides) pass
+- [x] Both-visible zoom case passes
+- [x] biome clean
+- [x] Progress log updated
 
 ## Progress Log
 
-(Implementer appends a session entry: date, changes, command exit statuses.)
+### Session: 2026-11-15
+
+Added six image and Markdown cases through the real pair, document column and
+preview components. The left-hidden assertion uses
+`section[data-pair-pane="left"][hidden] .preview__zoom-surface`.
+The symmetric right-hidden assertion also checks that the mounted surface and
+its zoom survive restoration. No other source file was edited by this plan.
+
+- `bunx vitest run --config vitest.config.ts src/features/pair-view/PairViewHiddenZoom.vitest.tsx`: exit 0, 6 passed; `tmp/pair-view-20261115-01/pair-view-hidden-zoom-regression/attempt-1/vitest.log`.
+- `bunx biome check src/features/pair-view/PairViewHiddenZoom.vitest.tsx --diagnostic-level=warn`: exit 0; `tmp/pair-view-20261115-01/pair-view-hidden-zoom-regression/attempt-1/biome.log`.
+- `bun run typecheck`: exit 0; `tmp/pair-view-20261115-01/pair-view-hidden-zoom-regression/attempt-1/typecheck.log`.
+
+Formal review and workflow finalization remain downstream. These checks ran on
+the shared working tree.

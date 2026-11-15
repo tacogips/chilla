@@ -617,6 +617,70 @@ describe("PreviewPane", () => {
     expect(previewZoomText()).toBe("100%");
   });
 
+  it("ignores keyboard zoom inside a hidden ancestor", () => {
+    const root = document.getElementById("root");
+    if (!root) throw new Error("missing root");
+    root.hidden = true;
+    renderPreview();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "+" }));
+
+    expect(
+      document
+        .querySelector<HTMLElement>(".preview__zoom-surface")
+        ?.style.getPropertyValue("--preview-zoom-scale"),
+    ).toBe("1");
+  });
+
+  it("ignores keyboard zoom inside an aria-hidden ancestor", () => {
+    const root = document.getElementById("root");
+    if (!root) throw new Error("missing root");
+    root.setAttribute("aria-hidden", "true");
+    renderPreview();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "+" }));
+
+    expect(
+      document
+        .querySelector<HTMLElement>(".preview__zoom-surface")
+        ?.style.getPropertyValue("--preview-zoom-scale"),
+    ).toBe("1");
+  });
+
+  it("zooms a normally mounted preview with the keyboard", () => {
+    renderPreview();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "+" }));
+
+    expect(
+      document
+        .querySelector<HTMLElement>(".preview__zoom-surface")
+        ?.style.getPropertyValue("--preview-zoom-scale"),
+    ).toBe("1.1");
+  });
+
+  it("resumes keyboard zoom after a hidden ancestor is restored", () => {
+    const root = document.getElementById("root");
+    if (!root) throw new Error("missing root");
+    root.hidden = true;
+    renderPreview();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "+" }));
+    expect(
+      document
+        .querySelector<HTMLElement>(".preview__zoom-surface")
+        ?.style.getPropertyValue("--preview-zoom-scale"),
+    ).toBe("1");
+    root.hidden = false;
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "+" }));
+
+    expect(
+      document
+        .querySelector<HTMLElement>(".preview__zoom-surface")
+        ?.style.getPropertyValue("--preview-zoom-scale"),
+    ).toBe("1.1");
+  });
+
   it("ignores preview zoom shortcuts from editable targets", () => {
     renderPreview();
     const input = document.createElement("input");

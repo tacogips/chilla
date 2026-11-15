@@ -1,6 +1,6 @@
 # chilla: lightweight file and Git viewer
 
-<img src="doc/empty-state-cat.png" alt="Pixel-art cat peeking in from the side" width="320" />
+<img src="doc/branding/chilla-theme.png" alt="Layered documents in a split-pane file viewer" width="320" />
 
 `chilla` is a lightweight file and Git viewer built with Tauri, Bun, Solid.js, and Rust. It opens directories, files, Git diffs, and GitHub diff URLs from the command line, then previews Markdown, text, images, video, PDF content, and changed files inside a desktop UI.
 
@@ -119,6 +119,7 @@ chilla .
 chilla docs/
 chilla notes.md
 chilla movie.mp4
+chilla before.png after.png
 ```
 
 During development:
@@ -155,6 +156,7 @@ The repository design documents started from a Markdown workbench concept, then 
 - `chilla` with no arguments opens the current working directory.
 - `chilla <dir>` opens that directory in file-view mode.
 - `chilla <file>` opens the file's parent directory and previews the selected file.
+- `chilla <file_a> <file_b>` with exactly two distinct regular files opens pair view, which is useful for before/after image comparison. The first file appears on the left and the second on the right, in an even 50/50 split, using the same image, Markdown, text, PDF, media, and CSV previews. Pair view has no file sidebar or table of contents. Each pane has an eye icon at its top-left that hides the pane, and the other pane then fills the width except for a narrow strip that restores the hidden pane. Only one pane can be hidden at a time. A hidden pane keeps its zoom, and `+` / `-` affect only the visible pane. `r` reloads both panes. With three or more file arguments (for example `chilla a b a`), the files appear as a list in the sidebar instead. If the same file is given twice, Chilla opens it as a single file. A directory argument behaves as before. Pair view is available only when files are passed on the command line; opening files through macOS Finder or `open -a` uses the explicit file list.
 - On macOS, `open -a Chilla "/path/to/file.png"` opens a file through the installed app, whether Chilla is already running or starts with the request. Multiple file paths are also supported. If the sandbox grants access only to the selected file, Chilla previews it without listing its parent directory.
 - Markdown files get a richer preview flow with:
   - rendered HTML

@@ -29,6 +29,13 @@ fn startup_context_retains_explicit_options_for_every_target_kind() {
         (StartupTarget::CurrentDirectory(directory.clone()), true),
         (StartupTarget::Directory(directory.clone()), false),
         (StartupTarget::File(first_file.clone()), true),
+        (
+            StartupTarget::FilePair {
+                left: first_file.clone(),
+                right: second_file.clone(),
+            },
+            true,
+        ),
         (StartupTarget::FileSet(vec![first_file, second_file]), false),
         (StartupTarget::GitHubPr(github_target), true),
         (StartupTarget::GitDiff(git_diff_target), false),

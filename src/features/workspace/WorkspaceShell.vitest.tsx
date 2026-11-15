@@ -2645,6 +2645,52 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     },
   );
 
+  it("opens and reloads both pair previews without a file browser", async () => {
+    const paths = ["/workspace/left.txt", "/workspace/right.txt"];
+    documentMocks.getStartupContext.mockResolvedValue({
+      initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
+      browser_root: {
+        kind: "file_pair",
+        left_file_path: paths[0],
+        right_file_path: paths[1],
+      },
+    });
+    documentMocks.openFilePreview.mockImplementation(async (path: string) => ({
+      ...textPreview(),
+      path,
+    }));
+    dispose = renderWorkspace();
+    await waitFor(() => {
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2);
+      expect(
+        document.querySelector('[data-testid="pair-view"]'),
+      ).not.toBeNull();
+    });
+    expect(
+      Array.from(document.querySelectorAll("[data-pair-pane]"), (pane) =>
+        pane.getAttribute("data-pair-pane"),
+      ),
+    ).toEqual(["left", "right"]);
+    expect(
+      documentMocks.openFilePreview.mock.calls.map((call) => call[0]),
+    ).toEqual(paths);
+    expect(documentMocks.listDirectory).not.toHaveBeenCalled();
+    expect(documentMocks.listExplicitFileSet).not.toHaveBeenCalled();
+    expect(document.querySelector(".file-browser")).toBeNull();
+    expect(document.querySelector(".toc-pane")).toBeNull();
+    expect(document.querySelector(".workspace__expand-tab")).toBeNull();
+    modeButton("Expand left pane").click();
+    expect(document.querySelector(".file-browser")).toBeNull();
+    modeButton("Refresh workspace").click();
+    await waitFor(() =>
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(4),
+    );
+    expect(
+      documentMocks.openFilePreview.mock.calls.map((call) => call[0]),
+    ).toEqual([...paths, ...paths]);
+  });
+
   it("refreshes a directory when no file is open", async () => {
     documentMocks.getStartupContext.mockResolvedValue(
       directoryStartupContext(null),

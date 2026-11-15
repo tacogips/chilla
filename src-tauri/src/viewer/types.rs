@@ -24,6 +24,10 @@ pub enum BrowserRoot {
         selected_file_path: String,
         source_order_paths: Vec<String>,
     },
+    FilePair {
+        left_file_path: String,
+        right_file_path: String,
+    },
     #[serde(rename = "github_pr")]
     GitHubPr {
         target: GitHubPrTarget,

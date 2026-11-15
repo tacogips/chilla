@@ -399,7 +399,7 @@ fn csv_first_row_header_option_survives_startup_target_matrix() {
         .expect("file-set startup"),
     );
     assert!(file_set.file_open_options.csv_first_row_as_header);
-    assert!(matches!(file_set.target, StartupTarget::FileSet(_)));
+    assert!(matches!(file_set.target, StartupTarget::FilePair { .. }));
 
     run_git(test_dir.path(), &["init"]);
     run_git(
@@ -828,13 +828,54 @@ fn parses_multi_file_startup_targets() {
 
     match outcome {
         CliParseOutcome::Run(StartupRequest {
-            target: StartupTarget::FileSet(paths),
+            target: StartupTarget::FilePair { left, right },
             ..
         }) => {
-            assert_eq!(paths, vec![first_canon, second_canon]);
+            assert_eq!((left, right), (first_canon, second_canon));
         }
         _ => panic!("unexpected parse outcome"),
     }
+}
+
+#[test]
+fn positional_count_and_deduplication_choose_pair_or_file_set() {
+    let test_dir = TestDir::new();
+    let a = test_dir.path().join("a.txt");
+    let b = test_dir.path().join("b.txt");
+    let c = test_dir.path().join("c.txt");
+    for path in [&a, &b, &c] {
+        fs::write(path, "x").expect("write fixture");
+    }
+    let ac = a.canonicalize().expect("canonical a");
+    let bc = b.canonicalize().expect("canonical b");
+    let cc = c.canonicalize().expect("canonical c");
+    let parse =
+        |args: Vec<std::ffi::OsString>| startup_request(parse_cli(args).expect("parse")).target;
+    let arg = |p: &std::path::PathBuf| p.as_os_str().to_os_string();
+    assert_eq!(
+        parse(vec!["chilla".into(), arg(&b), arg(&a)]),
+        StartupTarget::FilePair {
+            left: bc.clone(),
+            right: ac.clone()
+        }
+    );
+    assert_eq!(
+        parse(vec!["chilla".into(), arg(&a), arg(&b), arg(&a)]),
+        StartupTarget::FileSet(vec![ac.clone(), bc.clone()])
+    );
+    assert_eq!(
+        parse(vec!["chilla".into(), arg(&a), arg(&b), arg(&c)]),
+        StartupTarget::FileSet(vec![ac.clone(), bc.clone(), cc])
+    );
+    assert_eq!(
+        parse(vec!["chilla".into(), arg(&a), arg(&a), arg(&a)]),
+        StartupTarget::File(ac.clone())
+    );
+    let alias = test_dir.path().join(".").join("a.txt");
+    assert_eq!(
+        parse(vec!["chilla".into(), arg(&a), arg(&alias)]),
+        StartupTarget::File(ac)
+    );
 }
 
 #[test]
@@ -856,7 +897,7 @@ fn verbose_composes_with_multi_file_startup_when_interspersed() {
     assert!(matches!(
         outcome,
         CliParseOutcome::Run(StartupRequest {
-            target: StartupTarget::FileSet(_),
+            target: StartupTarget::FilePair { .. },
             ..
         })
     ));
@@ -891,7 +932,7 @@ fn verbose_multi_file_canonicalization_success_logs_canonical_paths() {
     assert!(matches!(
         outcome.expect("parse relative multi-file startup"),
         CliParseOutcome::Run(StartupRequest {
-            target: StartupTarget::FileSet(_),
+            target: StartupTarget::FilePair { .. },
             ..
         })
     ));
@@ -967,12 +1008,16 @@ fn multi_file_startup_rejects_directory_arguments() {
     let file_path = test_dir.path().join("x.txt");
     fs::write(&file_path, "x").expect("write file");
 
-    assert!(parse_cli([
+    let error = parse_cli([
         "chilla",
         test_dir.path().to_str().expect("utf-8"),
         file_path.to_str().unwrap(),
     ])
-    .is_err());
+    .expect_err("directory must be rejected");
+    assert_eq!(error.exit_code(), 2);
+    assert!(error
+        .to_string()
+        .contains("multi-path startup only accepts regular files"));
 }
 
 fn run_git(repo: &Path, args: &[&str]) {

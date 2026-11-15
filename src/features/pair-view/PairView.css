@@ -1,0 +1,73 @@
+.pair-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.pair-view--left-hidden {
+  grid-template-columns: 28px minmax(0, 1fr);
+}
+.pair-view--right-hidden {
+  grid-template-columns: minmax(0, 1fr) 28px;
+}
+.pair-view__slot,
+.pair-view__pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.pair-view__pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.pair-view__pane[hidden] {
+  display: none;
+}
+.pair-view__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  background: var(--bg-pane-head);
+  border-bottom: 1px solid var(--border);
+}
+.pair-view__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.pair-view__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  border: 0;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.pair-view__button:hover {
+  background: var(--bg-hover);
+}
+.pair-view__button svg {
+  width: 18px;
+  height: 18px;
+}
+.pair-view__restore {
+  height: 100%;
+  background: var(--bg-pane-head);
+  border-inline: 1px solid var(--border);
+}
+.pair-view__pane > .workspace__document-column {
+  flex: 1;
+  overflow: hidden;
+}
+.pair-view__error {
+  color: var(--danger);
+  padding: 8px;
+}

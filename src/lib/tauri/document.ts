@@ -127,6 +127,11 @@ export type BrowserRoot =
       readonly selected_file_path: string | null;
     }
   | {
+      readonly kind: "file_pair";
+      readonly left_file_path: string;
+      readonly right_file_path: string;
+    }
+  | {
       readonly kind: "explicit_file_set";
       readonly file_count: number;
       readonly selected_file_path: string;
@@ -826,6 +831,31 @@ export function normalizeStartupContextPayload(
         kind: "directory",
         current_directory_path: currentDirectoryPath,
         selected_file_path: selectedFilePath,
+      },
+    };
+  }
+
+  if (kind === "file_pair" || kind === "filePair") {
+    const leftFilePath = readStringProperty(
+      browserRootRaw,
+      "left_file_path",
+      "leftFilePath",
+    );
+    const rightFilePath = readStringProperty(
+      browserRootRaw,
+      "right_file_path",
+      "rightFilePath",
+    );
+    if (leftFilePath === null || rightFilePath === null) {
+      throw new Error("Startup file-pair payload is missing required paths");
+    }
+    return {
+      initial_mode: initialMode,
+      file_open_options: fileOpenOptions,
+      browser_root: {
+        kind: "file_pair",
+        left_file_path: leftFilePath,
+        right_file_path: rightFilePath,
       },
     };
   }

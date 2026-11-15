@@ -256,3 +256,22 @@ export function CloseWindowGlyph() {
     </WorkspaceHeaderIcon>
   );
 }
+
+export function EyeGlyph() {
+  return <PreviewGlyph />;
+}
+
+export function EyeOffGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M3 3l18 18M10.6 4.1A12 12 0 0 1 12 4c7 0 11 8 11 8a17 17 0 0 1-3.2 4M6.2 6.2C2.9 8.4 1 12 1 12s4 8 11 8c1.8 0 3.4-.5 4.8-1.3M9.9 9.9a3 3 0 0 0 4.2 4.2"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}

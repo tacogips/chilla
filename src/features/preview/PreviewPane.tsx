@@ -674,6 +674,8 @@ export function PreviewPane(props: PreviewPaneProps) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         !props.visible ||
+        preview.closest(".pane--hidden, [hidden], [aria-hidden='true']") !==
+          null ||
         event.ctrlKey ||
         event.metaKey ||
         event.altKey ||

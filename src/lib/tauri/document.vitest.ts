@@ -106,6 +106,46 @@ describe("normalizeStartupContextPayload", () => {
     ).toThrow("Startup file open options");
   });
 
+  it.each([
+    {
+      kind: "file_pair",
+      left_file_path: "/workspace/a",
+      right_file_path: "/workspace/b",
+    },
+    {
+      kind: "filePair",
+      leftFilePath: "/workspace/a",
+      rightFilePath: "/workspace/b",
+    },
+  ])("normalizes file-pair payloads: %o", (browserRoot) => {
+    expect(
+      normalizeStartupContextPayload({
+        initial_mode: "file_view",
+        browser_root: browserRoot,
+      }),
+    ).toEqual({
+      initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
+      browser_root: {
+        kind: "file_pair",
+        left_file_path: "/workspace/a",
+        right_file_path: "/workspace/b",
+      },
+    });
+  });
+
+  it.each([
+    { kind: "file_pair", left_file_path: "/workspace/a" },
+    { kind: "file_pair", right_file_path: "/workspace/b" },
+  ])("rejects file-pair payloads missing a path: %o", (browserRoot) => {
+    expect(() =>
+      normalizeStartupContextPayload({
+        initial_mode: "file_view",
+        browser_root: browserRoot,
+      }),
+    ).toThrow("Startup file-pair payload is missing required paths");
+  });
+
   it("accepts camelCase explicit file-set startup payloads", () => {
     expect(
       normalizeStartupContextPayload({

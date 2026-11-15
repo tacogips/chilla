@@ -69,6 +69,11 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| [Pair View Rust Startup](completed/pair-view-rust-startup.md) | 2026-11-15 | [Pair view startup payload](../design-docs/specs/design-pair-view.md) |
+| [Pair View PreviewPane Guard](completed/pair-view-preview-guard.md) | 2026-11-15 | [Pair view layout](../design-docs/specs/design-pair-view.md) |
+| [Pair View Component](completed/pair-view-component.md) | 2026-11-15 | [Pair view pane visibility](../design-docs/specs/design-pair-view.md) |
+| [Pair View Workspace Integration](completed/pair-view-workspace-integration.md) | 2026-11-15 | [Pair view frontend behavior](../design-docs/specs/design-pair-view.md) |
+| [Pair View Hidden-Pane Zoom Regression](completed/pair-view-hidden-zoom-regression.md) | 2026-11-15 | [Pair view validation](../design-docs/specs/design-pair-view.md) |
 | [Preview Selection Guard Module](completed/preview-selection-guard-module.md) | 2026-11-04 | [Pan gesture contract](../design-docs/specs/architecture.md#pan-gesture-contract) |
 | [Preview Selection Guard PreviewPane Test](completed/preview-selection-guard-preview-pane.md) | 2026-11-04 | [Verification](../design-docs/specs/architecture.md#verification) |
 | [Preview Context-Menu Guard Module](completed/preview-contextmenu-guard-module.md) | 2026-11-04 | [Pan gesture contract](../design-docs/specs/architecture.md#pan-gesture-contract) |
@@ -214,3 +219,5 @@ PHASE_TO_PLANS = {
 - Subtasks should be as independent as possible for parallel execution
 - Always update progress log after each session
 - **Keep each plan file under 400 lines** - split if necessary
+
+- [File viewer branding](completed/file-viewer-branding.md) — Completed 2026-11-15; Runway-generated desktop and theme assets.

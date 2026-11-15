@@ -20,6 +20,7 @@ pub enum StartupTarget {
     Directory(PathBuf),
     File(PathBuf),
     FileSet(Vec<PathBuf>),
+    FilePair { left: PathBuf, right: PathBuf },
     GitHubPr(GitHubPrTarget),
     GitDiff(GitDiffTarget),
 }
@@ -426,6 +427,16 @@ fn resolve_explicit_file_startup(paths: &[PathBuf]) -> AppResult<StartupTarget> 
                 || AppError::State("explicit startup path missing".to_string()),
             )?))
         }
+        std::cmp::Ordering::Greater if paths.len() == 2 && ordered_unique_paths.len() == 2 => {
+            let mut paths = ordered_unique_paths.into_iter();
+            let left = paths
+                .next()
+                .ok_or_else(|| AppError::State("explicit startup left path missing".into()))?;
+            let right = paths
+                .next()
+                .ok_or_else(|| AppError::State("explicit startup right path missing".into()))?;
+            Ok(StartupTarget::FilePair { left, right })
+        }
         std::cmp::Ordering::Greater => Ok(StartupTarget::FileSet(ordered_unique_paths)),
     }
 }
@@ -446,7 +457,7 @@ fn is_no_github_diff_cache_flag(value: &str) -> bool {
 
 fn help_text(binary_name: &str) -> String {
     format!(
-        "Usage:\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] [path ...]\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] --no-github-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] --no-pr-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] [--no-github-diff-cache] github:<owner>/<repo> <pr-id|sha|commit:sha|base...head>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] <git-dir> <commit-or-range>\n  {binary_name} --help\n  {binary_name} --version\n\nIf no paths are provided, chilla opens the current working directory in file view mode.\nIf a GitHub pull request, commit, or compare URL is provided, chilla opens that GitHub diff in read-only mode.\nGitHub .diff and .patch URL forms are also supported.\nThe github: shorthand accepts a positive decimal PR number, a 4-40 character hexadecimal SHA, commit:<sha>, or <base>...<head> (slash refs supported). Use commit:<sha> for all-numeric SHAs.\nIf a Git directory plus commit or range is provided, chilla opens that local Git diff in read-only mode.\nGitHub diffs are cached under the system temp directory and refreshed when GitHub reports a newer updated marker.\n--no-pr-diff-cache remains supported as a compatibility alias for --no-github-diff-cache.\nIf two or more file paths are provided, chilla opens file view mode with the left pane limited to those files.\n\nCSV header option:\n  --csv-first-row-header=true|false  Set the launch-wide default for every CSV preview (default: false). For example: {binary_name} --csv-first-row-header=true report.csv\n\nOptions:\n  --verbose  Write startup and file-I/O diagnostics to {} and mirror them to an attached terminal.\n  --help     Show this help text.\n  --version  Show the application version.",
+        "Usage:\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] [path ...]\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] --no-github-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] --no-pr-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] [--no-github-diff-cache] github:<owner>/<repo> <pr-id|sha|commit:sha|base...head>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] <git-dir> <commit-or-range>\n  {binary_name} --help\n  {binary_name} --version\n\nIf no paths are provided, chilla opens the current working directory in file view mode.\nIf a GitHub pull request, commit, or compare URL is provided, chilla opens that GitHub diff in read-only mode.\nGitHub .diff and .patch URL forms are also supported.\nThe github: shorthand accepts a positive decimal PR number, a 4-40 character hexadecimal SHA, commit:<sha>, or <base>...<head> (slash refs supported). Use commit:<sha> for all-numeric SHAs.\nIf a Git directory plus commit or range is provided, chilla opens that local Git diff in read-only mode.\nGitHub diffs are cached under the system temp directory and refreshed when GitHub reports a newer updated marker.\n--no-pr-diff-cache remains supported as a compatibility alias for --no-github-diff-cache.\nIf two file paths are provided, chilla shows them side by side. If three or more file paths are provided, chilla opens file view mode with the left pane limited to those files.\n\nCSV header option:\n  --csv-first-row-header=true|false  Set the launch-wide default for every CSV preview (default: false). For example: {binary_name} --csv-first-row-header=true report.csv\n\nOptions:\n  --verbose  Write startup and file-I/O diagnostics to {} and mirror them to an attached terminal.\n  --help     Show this help text.\n  --version  Show the application version.",
         verbose_log::VERBOSE_LOG_PATH_PATTERN,
     )
 }

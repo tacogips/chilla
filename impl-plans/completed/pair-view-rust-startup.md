@@ -1,6 +1,6 @@
 # Pair View: Rust Startup Classification And Payload
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: pair-view-rust-startup
 **Wave**: 1 (no dependencies)
 **Design Reference**: design-docs/specs/design-pair-view.md (Startup Classification, Rust Consumers Of The New Variant, Startup Payload Contract, Validation)
@@ -152,15 +152,40 @@ from the last read, stop and re-read; do not overwrite foreign changes.
 
 ## Completion Criteria
 
-- [ ] `StartupTarget::FilePair` and `BrowserRoot::FilePair` exist with the
+- [x] `StartupTarget::FilePair` and `BrowserRoot::FilePair` exist with the
       pinned shapes
-- [ ] Classification uses P and U as specified; `a b a` gives `FileSet`
-- [ ] verbose_log arms the left path
-- [ ] Help text updated
-- [ ] All listed tests added or updated; clippy, nextest, and fmt pass
-- [ ] Progress log below updated
+- [x] Classification uses P and U as specified; `a b a` gives `FileSet`
+- [x] verbose_log arms the left path
+- [x] Help text updated
+- [x] All listed tests added or updated; clippy, nextest, and fmt pass
+- [x] Progress log below updated
 
 ## Progress Log
 
 (Implementer appends a session entry here: date, tasks done, command exit
 statuses.)
+
+### Session: 2026-11-15 (implementation)
+
+Implemented pair classification, startup payload, logging, and regression coverage. Formal review, frontend integration, and workflow finalization remain downstream.
+
+Verification on the moving shared tree with isolated `CARGO_TARGET_DIR=/tmp/chilla-pair-view-rust-startup-target` (all exit 0):
+
+- `CARGO_TERM_QUIET=true cargo check --manifest-path src-tauri/Cargo.toml` — `cargo-check.log`.
+- `CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` — `clippy.log`.
+- `NEXTEST_STATUS_LEVEL=fail NEXTEST_FAILURE_OUTPUT=immediate-final NEXTEST_HIDE_PROGRESS_BAR=1 CARGO_TERM_QUIET=true cargo nextest run --manifest-path src-tauri/Cargo.toml` — `nextest.log`, 321 passed.
+- `NEXTEST_STATUS_LEVEL=fail NEXTEST_FAILURE_OUTPUT=immediate-final NEXTEST_HIDE_PROGRESS_BAR=1 CARGO_TERM_QUIET=true cargo nextest run --manifest-path src-tauri/Cargo.toml cli::` — `nextest-cli.log`, 34 passed.
+- `CARGO_TERM_QUIET=true cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` — `fmt-check.log`.
+- `grep -n "If two file paths are provided" src-tauri/src/cli/mod.rs` — `help-grep.log`, one match.
+
+Logs and per-edit intentions, preimages, and SHA256 records: `tmp/pair-view-20261115-01/pair-view-rust-startup/attempt-1/`. Pre/post hashes for Rust edits (initial / final):
+
+- `src-tauri/src/cli/mod.rs`: `01649ecf1f85014d4ef6aa57cba7991999a48a0b7ee846101211a5ce5aa1bb0a` / `11a574cf6d6cf805db3003e0f33e93916818168ae5c0a1e1fb23e893f2a73ac7`.
+- `src-tauri/src/cli/tests.rs`: `6fd51006c6a1868c1d0b76d38372fd42e1c6cb0f807eebb73c407ff295f9b9c4` / `95bc710a7dab5f9700e607ef3042e3e50628fd41b6c95ac090a3e20c8b1333ff`.
+- `src-tauri/src/verbose_log.rs`: `640ffff6766763eb74029db3dd474e08d09057beb852d3140868cb2f81a8613b` / `ea33a5e5aea338c34ed8c2ac972352f67a786f54099899b2ac30f3575b030111`.
+- `src-tauri/src/viewer/service.rs`: `c046ca7b0b10864868a4c309bdcafe7044e6f83465431960add7f695dc61cfe2` / `cdc92add7e4f81437c7d68e908b8eebfca8cc51abc3d993ff9b17ead1463380d`.
+- `src-tauri/src/viewer/service/tests.rs`: `1685bea16fdbae492c5d3a9e144b3a2ec570563c10af8dfb44058930400e26da` / `130c8693c5f4a56fe99ca2f34550b68da6eaf7c935d589d2637a53ff6a5f3191`.
+- `src-tauri/src/viewer/service/tests/startup_options_tests.rs`: `5853f3bb02e3bcc88c41d10976eee2b228688c1e21a14e2792935455ebbe32d4` / `82f880dabe7be1e76ae55a01f652666f2b8a9e74feaf25753aa8e947ddca5392`.
+- `src-tauri/src/viewer/types.rs`: `159e333e9f9eaa75971dc746ce0fa9c8a240be048455d9c4b11442e8500e66a2` / `095133e50750aecbf3e213c563cc0af6e8505358414b4ebc2be2779223e7e733`.
+
+Plan pre/post hashes are recorded in `tmp/pair-view-20261115-01/pair-view-rust-startup/attempt-1/plan.pre.sha256` and `plan.post.sha256`.

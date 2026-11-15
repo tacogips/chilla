@@ -158,6 +158,10 @@ function loadingMessage(context: StartupContext | null): string {
     return "Opening the requested Git diff...";
   }
 
+  if (context.browser_root.kind === "file_pair") {
+    return "Opening the requested files...";
+  }
+
   if (context.browser_root.kind === "explicit_file_set") {
     return "Opening the requested files...";
   }

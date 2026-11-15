@@ -1,7 +1,37 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
-import { WorkspaceErrorBanner } from "./WorkspaceFeedback";
+import {
+  WorkspaceErrorBanner,
+  WorkspaceLoadingOverlay,
+} from "./WorkspaceFeedback";
+
+describe("workspace loading feedback", () => {
+  it("shows the pair loading message", () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const dispose = render(
+      () => (
+        <WorkspaceLoadingOverlay
+          loading={true}
+          startupContext={{
+            initial_mode: "file_view",
+            file_open_options: { csv_first_row_as_header: false },
+            browser_root: {
+              kind: "file_pair",
+              left_file_path: "/workspace/a",
+              right_file_path: "/workspace/b",
+            },
+          }}
+        />
+      ),
+      root,
+    );
+    expect(root.textContent).toContain("Opening the requested files...");
+    dispose();
+    root.remove();
+  });
+});
 
 describe("transient workspace notifications", () => {
   let dispose: (() => void) | undefined;
