@@ -1,0 +1,32 @@
+{
+  "created": "2026-11-15",
+  "generator": "runwayml-cli mcp call generate_image",
+  "assets": [
+    {
+      "asset": "doc/branding/chilla-icon.png",
+      "taskId": "1ddc3c7f-bfa3-4f94-b620-b28234ca3461",
+      "request": "doc/branding/icon-request.json",
+      "sha256": "517c231f9fe90bf1133b98f836025438769c6ffc84ea74b203c65ce5b7ffcd44",
+      "dimensions": [
+        1920,
+        1920
+      ]
+    },
+    {
+      "asset": "doc/branding/chilla-theme.png",
+      "taskId": "93d41f5f-75f7-4346-91d0-31afbdf0001c",
+      "request": "doc/branding/theme-request.json",
+      "sha256": "54e0c49224004cebc4e1a13a842b701d5e7267283a1b7697575bda90a6993d23",
+      "dimensions": [
+        1440,
+        1920
+      ],
+      "backgroundRemoval": {
+        "tool": "runwayml-cli mcp call remove_image_background",
+        "model": "birefnet-v2",
+        "variant": "general-2k",
+        "taskId": "6f20ecce-47cf-4828-ae95-b4ce7dae5bbc"
+      }
+    }
+  ]
+}

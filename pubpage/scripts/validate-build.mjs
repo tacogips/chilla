@@ -15,7 +15,7 @@ const requiredFiles = [
   "og.png",
   "favicon.png",
   "apple-touch-icon.png",
-  "cat.webp",
+  "viewer.webp",
   "screenshots/browse-fresh.jpg",
   "screenshots/browse-fresh.webp",
   "screenshots/diff-fresh.jpg",
@@ -154,7 +154,7 @@ if (!assets.some((name) => /icon-[\w-]+\.png$/.test(name))) failures.push("bundl
 const ogStats = await stat(new URL("og.png", dist));
 if (ogStats.size < 1_000) failures.push("Open Graph image is unexpectedly small");
 if (ogStats.size > 400_000) failures.push("Open Graph image exceeds the 400 KiB budget");
-for (const relativePath of ["cat.webp", "screenshots/browse-fresh.webp", "screenshots/diff-fresh.webp"]) {
+for (const relativePath of ["viewer.webp", "screenshots/browse-fresh.webp", "screenshots/diff-fresh.webp"]) {
   const stats = await stat(new URL(relativePath, dist));
   if (stats.size > 500_000) failures.push(`${relativePath} exceeds the 500 KiB screenshot budget`);
 }

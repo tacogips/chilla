@@ -1,0 +1,9 @@
+{
+  "model": "gpt-image-2.6-flare",
+  "promptText": "Design one premium macOS desktop application icon for chilla, a fast file viewer. A crisp front-facing rounded square graphite tile with a restrained teal edge highlight. Inside, two overlapping ivory document sheets, front sheet integrated into an elegant split-pane viewer window: narrow teal sidebar, three bold graphite horizontal lines on ivory right pane, tiny folded paper corner. Strong simple geometric silhouette legible at 32 pixels. Sophisticated Swiss industrial design, subtle depth, satin finish, precise rounded corners, balanced generous margins. Tile occupies 84 percent of square canvas, centered, transparent outside tile. No letters, no words, no logos, no animals, no cats, no faces, no magnifying glass, no extra objects, no mockup or presentation board. Deliver a single finished app icon.",
+  "ratio": "1:1",
+  "imageSize": "1K",
+  "transparentBackground": true,
+  "count": 1,
+  "rationale": "Replace chilla cat branding with a stylish file viewer app icon using runwayml-cli as requested."
+}

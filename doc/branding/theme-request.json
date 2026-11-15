@@ -1,0 +1,15 @@
+{
+  "model": "gpt-image-2.6-flare",
+  "promptText": "Create a single sophisticated editorial illustration for a desktop file viewer. Match the graphite, ivory and restrained teal palette and satin geometric finish of @icon. Show a large elegant floating split-pane file viewer window, with a narrow teal file-list sidebar and an ivory document preview with a few abstract graphite typographic bars. Two oversized ivory sheets with folded corners are layered behind the window; a small teal image thumbnail and restrained table grid hint at diverse file types. Precise architectural composition, slightly isometric, sculptural subtle shadows, quiet premium Swiss design. Center the isolated composition in the middle 80 percent of a portrait canvas, generous breathing room, transparent background. Balanced substantial shapes that remain clear at 240 pixels wide. No text, no letters, no animals, no cats, no faces, no people, no desktop screenshot, no app icon tile or enclosing background square. This is one cohesive file-viewer illustration.",
+  "ratio": "3:4",
+  "imageSize": "1K",
+  "transparentBackground": true,
+  "referenceImages": [
+    {
+      "taskId": "1ddc3c7f-bfa3-4f94-b620-b28234ca3461",
+      "tag": "icon"
+    }
+  ],
+  "count": 1,
+  "rationale": "Create matching non-cat theme imagery for chilla empty screen, README and product-page branding."
+}

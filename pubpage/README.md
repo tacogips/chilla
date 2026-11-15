@@ -32,10 +32,19 @@ the repository.
 
 ## Asset provenance
 
-### September 9 cat-led redesign
+### November 15 file viewer branding
 
-The current page uses a warm cream/sage/peach palette, rounded headings, the
-actual Chilla cat, and prominent Yazi-like browsing, keyboard navigation,
+Current branding uses Runway-generated graphite, ivory, and teal document/viewer
+artwork. Generation requests, task IDs, source dimensions, and SHA-256 hashes are
+recorded in `../doc/branding/`. `public/viewer.webp` derives from
+`chilla-theme.png`; favicon, touch icon, and social card derive from
+`chilla-icon.png`. English and Japanese hero imagery and metadata use the new
+identity. Historical screenshots below are retained without retouching.
+
+### September 9 design and capture history
+
+The September page used a warm cream/sage/peach palette, rounded headings, the
+original Chilla cat, and prominent Yazi-like browsing, keyboard navigation,
 lightweight operation, and Git diff sections. English and Japanese share the
 same layout. All content remains visible without JavaScript.
 
@@ -44,12 +53,12 @@ current `target/debug/chilla` executable (September 9, 12:10 JST build), placed
 in a temporary copy of the debug app bundle for unambiguous UI targeting.
 No application source was changed or rebuilt for this website task.
 
-| Current asset | Capture/source | Dimensions | SHA-256 |
+| Historical asset | Capture/source | Dimensions | SHA-256 |
 | --- | --- | --- | --- |
 | `public/screenshots/browse-fresh.jpg` | Actual app, repository README, file browser visible, ignored entries hidden; 13:36 JST | 1277×768 | `64f417cd0976944d7d04463acb655c8dee084291ed2b45a00c32979f8bbe1803` |
 | `public/screenshots/diff-fresh.jpg` | Actual app, local Git diff, README selected in split comparison; 13:37 JST | 1277×768 | `723a410d745179e10ebc4d370b8577a8b07a76bc485756de1707ba6e9798662a` |
-| `public/cat.webp` | Existing `doc/empty-state-cat.png`, WebP conversion | 1024×1536 | `797e20aac4d5dad56921ce6a12268d93ef81e622104891b65fbe8bb4fae73663` |
-| `public/og.png` | Exact `src-tauri/icons/icon.png`, square social card | 512×512 | `35f682ce10b3e596e1bebae43e904878281c8e2c783ee04040fb6e090d8d22d8` |
+| `public/cat.webp` (removed November 15) | Existing `doc/empty-state-cat.png`, WebP conversion | 1024×1536 | `797e20aac4d5dad56921ce6a12268d93ef81e622104891b65fbe8bb4fae73663` |
+| `public/og.png` (superseded November 15) | Exact `src-tauri/icons/icon.png`, square social card | 512×512 | `35f682ce10b3e596e1bebae43e904878281c8e2c783ee04040fb6e090d8d22d8` |
 
 Fresh screenshot WebP derivatives use `cwebp -q 86` and are about 54 and 90 KiB.
 Screenshots are non-interactive and do not open when clicked. Captures are unretouched;

@@ -299,3 +299,14 @@ retain the query for each search mode when returning or reopening search. Typing
 `s` or `S` in an editable field remains ordinary text entry. Respect configured
 search bindings. Replace the containing-directory external-link glyph with a
 plain right arrow, retaining its accessible label and reveal behavior.
+
+## File Viewer Visual Identity
+
+Replace cat branding with a document/viewer motif generated through `runwayml-cli`.
+Use graphite, ivory, and restrained teal: layered documents inside a split-pane
+viewer for the app icon, with matching editorial document artwork for the empty
+screen, README, and English/Japanese product pages. Keep the icon legible at small
+sizes and preserve transparent surroundings for use on light and dark surfaces.
+Store generation requests and task provenance under `doc/branding/`; never store
+credentials or expiring signed download URLs. Regenerate native icon formats from
+one master. Existing historical app captures remain historical evidence.

@@ -246,20 +246,19 @@ kbd {
   margin-top: 18px;
   line-height: 1.7;
 }
-.hero-mascot {
+.hero-artwork {
   position: relative;
   align-self: end;
   text-align: center;
   padding-top: 24px;
 }
-.hero-mascot img {
+.hero-artwork img {
   width: 240px;
   height: 335px;
   object-fit: contain;
   margin: auto;
-  mix-blend-mode: multiply;
 }
-.cat-note {
+.viewer-note {
   font-size: 12px;
   max-width: 200px;
   padding: 11px 18px;
@@ -270,7 +269,7 @@ kbd {
   line-height: 1.5;
   color: #675b49;
 }
-.cat-keys {
+.viewer-keys {
   display: flex;
   gap: 8px;
   justify-content: center;
@@ -278,12 +277,12 @@ kbd {
   margin-top: -22px;
   position: relative;
 }
-.cat-keys kbd {
+.viewer-keys kbd {
   min-width: 45px;
   background: #f4e1cc;
   border-color: #d9bfa4;
 }
-.cat-keys kbd:nth-child(2) {
+.viewer-keys kbd:nth-child(2) {
   transform: translateY(-8px);
 }
 .feature-strip {
@@ -496,7 +495,7 @@ kbd {
 .product-preview.section {
   padding-block: 64px 0;
 }
-.install-cat {
+.install-icon {
   width: 68px;
   height: 68px;
   margin-bottom: 21px;
@@ -736,7 +735,7 @@ pre code {
   .hero-top {
     grid-template-columns: minmax(0, 1fr) 310px;
   }
-  .hero-mascot img {
+  .hero-artwork img {
     height: 355px;
   }
 }
@@ -758,7 +757,7 @@ pre code {
     grid-template-columns: minmax(0, 1fr) 200px;
     gap: 25px;
   }
-  .hero-mascot img {
+  .hero-artwork img {
     height: 280px;
     width: 190px;
   }
@@ -858,7 +857,7 @@ pre code {
     font-size: 15px;
     margin-top: 22px;
   }
-  .hero-mascot {
+  .hero-artwork {
     display: grid;
     grid-template-columns: 1fr 160px;
     align-items: center;
@@ -868,13 +867,13 @@ pre code {
     padding-top: 0;
     margin-top: 0;
   }
-  .hero-mascot img {
+  .hero-artwork img {
     height: 210px;
     width: 150px;
     grid-column: 2;
     grid-row: 1 / 3;
   }
-  .cat-note {
+  .viewer-note {
     grid-column: 1;
     grid-row: 1;
     font-size: 11px;
@@ -882,14 +881,14 @@ pre code {
     max-width: 150px;
     margin: 0;
   }
-  .cat-keys {
+  .viewer-keys {
     grid-column: 1;
     grid-row: 2;
     gap: 5px;
     align-self: start;
     margin-top: 19px;
   }
-  .cat-keys kbd {
+  .viewer-keys kbd {
     min-width: 30px;
     min-height: 35px;
     padding: 4px 8px;
@@ -978,7 +977,7 @@ pre code {
   .diff-shortcuts kbd {
     margin-left: 5px;
   }
-  .install-cat {
+  .install-icon {
     width: 56px;
     height: 56px;
   }
@@ -1027,10 +1026,10 @@ pre code {
   .hero h1 {
     font-size: 28px;
   }
-  .hero-mascot {
+  .hero-artwork {
     grid-template-columns: 1fr 140px;
   }
-  .hero-mascot img {
+  .hero-artwork img {
     width: 140px;
   }
   .feature-strip li {

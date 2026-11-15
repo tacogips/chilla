@@ -25,7 +25,7 @@ import {
 } from "./workspacePreviewModel";
 import { ShortcutSectionList } from "./workspaceShortcuts";
 
-const EMPTY_STATE_IMAGE_PATH = "/empty-state-cat.png";
+const EMPTY_STATE_IMAGE_PATH = "/empty-state-viewer.png";
 
 type MarkdownPane = "raw" | "preview";
 type CsvPreview = Extract<FilePreview, { readonly kind: "csv" }>;
@@ -226,7 +226,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
                 <img
                   class="file-preview-empty__image"
                   src={EMPTY_STATE_IMAGE_PATH}
-                  alt="Pixel-art cat peeking in from the side"
+                  alt="Layered documents in a split-pane file viewer"
                 />
                 <p class="file-preview-empty__title">Please select a file.</p>
                 <div class="file-preview-empty__shortcuts">
