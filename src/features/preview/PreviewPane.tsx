@@ -745,18 +745,23 @@ export function PreviewPane(props: PreviewPaneProps) {
       ([visible, html, documentPath, colorScheme]) => {
         const container = containerRef;
 
-        if (!visible || container === undefined) {
+        if (container === undefined) {
           return;
         }
 
         const currentRunId = ++enhancementRunId;
 
-        // Source HTML contains only escaped code and file metadata. Markdown
-        // enhancements are unnecessary. JSX owns source HTML updates, so avoid
-        // parsing and building its potentially large DOM a second time here.
-        if (props.layout === "source") return;
-
+        // This effect is the only writer of the container markup. A separate
+        // JSX innerHTML binding could run after it when the pane is reused
+        // (for example when a pair view switches files) and replace the
+        // enhanced nodes with raw markup whose local image sources are
+        // unresolved.
         container.innerHTML = html;
+
+        // Source HTML contains only escaped code and file metadata, so
+        // Markdown enhancements are unnecessary. Hidden panes are enhanced
+        // when they become visible.
+        if (!visible || props.layout === "source") return;
 
         void enhancePreviewContent(
           container,
@@ -812,7 +817,6 @@ export function PreviewPane(props: PreviewPaneProps) {
             ...previewThemeStyle(props.colorScheme),
             ...previewZoomStyle(zoom()),
           }}
-          innerHTML={props.html}
         />
       </div>
     </section>
