@@ -65,6 +65,10 @@
       {
         "decision": "The workspace grep is word-bounded (grep -rnwE) and sourceOrderPaths / source_order_paths is retained (PCW-GREP-SOURCEORDER-01).",
         "rationale": "sourceOrderPaths belongs to the 9aa3772 explicit_file_set contract. Only the rejected standalone sourceOrder option, prop and field are removed."
+      },
+      {
+        "decision": "Amendment 2026-11-16 round 1: authorize Cargo build output under tmp/pair-compare-20261116-01/pair-compare-rust/cargo-target (a pair-compare-rust writePath and its only artifactRoot; CARGO_TARGET_DIR is set per command, never globally). Exclude the accepted negative test src/lib/tauri/document-invoke.vitest.ts from the workspace word-bounded grep. Switch the workspace test gate to the Node-run vitest (mise exec -- node node_modules/vitest/vitest.mjs) that test:dom uses. Record ts-contract, pair-view, file-browser and readme as acceptedDependencies at 95ddf6a.",
+        "rationale": "Blocked plans: pair-compare-rust had no authorized Cargo build-output location (artifactRoots []). pair-compare-workspace's grep matched the sibling-owned negative sourceOrder assertions at document-invoke.vitest.ts:83,105, and bunx vitest failed 9/95 because window.localStorage was undefined, while the Node vitest passed 95/95. There is no design or contract change. Plan IDs, taskId, originalHead and evidenceRoot are unchanged. The dated amendment sections are in pair-compare-rust.md and pair-compare-workspace.md."
       }
     ],
     "intentionalTradeoffs": [
@@ -118,7 +122,32 @@
       "README.md"
     ]
   },
-  "acceptedDependencies": [],
+  "acceptedDependencies": [
+    {
+      "planId": "pair-compare-ts-contract",
+      "planPath": "impl-plans/active/pair-compare-ts-contract.md",
+      "commit": "95ddf6ac0b73f2537182f222321868a5848ec702",
+      "provides": "TypeScript FilePairPaths and BrowserRoot file_pair { pairs } startup contract and normalizer; listExplicitFileSet restored to the 9aa3772 signature without sourceOrder (wave-1 implementation accepted, uncommitted in the working tree)."
+    },
+    {
+      "planId": "pair-compare-pair-view",
+      "planPath": "impl-plans/active/pair-compare-pair-view.md",
+      "commit": "95ddf6ac0b73f2537182f222321868a5848ec702",
+      "provides": "PairState module (initialPairState, selectPair, selectedPair, setPairVisibility), PairView without active-pane props, and the PairListPane component (wave-1 implementation accepted, uncommitted in the working tree)."
+    },
+    {
+      "planId": "pair-compare-file-browser",
+      "planPath": "impl-plans/active/pair-compare-file-browser.md",
+      "commit": "95ddf6ac0b73f2537182f222321868a5848ec702",
+      "provides": "FileBrowserPane without pair markers or sourceOrder, with an onCollapse / CollapsePaneButton header, plus the App.css pane collapse styles (wave-1 implementation accepted, uncommitted in the working tree)."
+    },
+    {
+      "planId": "pair-compare-readme",
+      "planPath": "impl-plans/active/pair-compare-readme.md",
+      "commit": "95ddf6ac0b73f2537182f222321868a5848ec702",
+      "provides": "README documentation of 2-file pairs, --compare, the folded pair list and the { / } toggles (wave-1 implementation accepted, uncommitted in the working tree)."
+    }
+  ],
   "plans": [
     {
       "planId": "pair-compare-rust",
@@ -135,10 +164,13 @@
         "src-tauri/src/commands/document.rs",
         "src-tauri/src/viewer/directory_listing.rs",
         "src-tauri/src/viewer/directory_listing/tests.rs",
-        "impl-plans/active/pair-compare-rust.md"
+        "impl-plans/active/pair-compare-rust.md",
+        "tmp/pair-compare-20261116-01/pair-compare-rust/cargo-target"
       ],
       "sharedPaths": [],
-      "artifactRoots": [],
+      "artifactRoots": [
+        "tmp/pair-compare-20261116-01/pair-compare-rust/cargo-target"
+      ],
       "acceptanceCriteria": [
         "commands/document.rs, viewer/directory_listing.rs and viewer/directory_listing/tests.rs are byte-identical to 9aa3772; the other Rust files carry only the listed edits on top of 9aa3772.",
         "FilePairPaths and StartupTarget::FilePairs { first, rest } exist, and StartupTarget::FileSet is restored. FilePairEntry and BrowserRoot::FilePair { pairs } serialize as {\"kind\":\"file_pair\",\"pairs\":[{left_file_path,right_file_path}]} with no top-level path keys.",
@@ -147,111 +179,10 @@
         "All listed tests pass. clippy -D warnings, cargo test and fmt --check exit 0. The progress log records commands, exit codes, log paths and sha256 before and after."
       ],
       "verification": [
-        "CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
-        "CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml",
+        "CARGO_TARGET_DIR=\"$PWD/tmp/pair-compare-20261116-01/pair-compare-rust/cargo-target\" CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+        "CARGO_TARGET_DIR=\"$PWD/tmp/pair-compare-20261116-01/pair-compare-rust/cargo-target\" CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml",
         "CARGO_TERM_QUIET=true cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
         "git diff 9aa3772 -- src-tauri/src/commands/document.rs src-tauri/src/viewer/directory_listing.rs src-tauri/src/viewer/directory_listing/tests.rs"
-      ]
-    },
-    {
-      "planId": "pair-compare-ts-contract",
-      "planPath": "impl-plans/active/pair-compare-ts-contract.md",
-      "dependsOn": [],
-      "writePaths": [
-        "src/lib/tauri/document.ts",
-        "src/lib/tauri/document.vitest.ts",
-        "src/lib/tauri/document-invoke.vitest.ts",
-        "impl-plans/active/pair-compare-ts-contract.md"
-      ],
-      "sharedPaths": [],
-      "artifactRoots": [],
-      "acceptanceCriteria": [
-        "document.ts exports FilePairPaths { left_file_path, right_file_path }. The BrowserRoot file_pair variant is { kind: \"file_pair\", pairs: readonly FilePairPaths[] } with no top-level paths.",
-        "The normalizer accepts snake_case and camelCase pairs and returns fresh snake_case objects. It throws \"Startup file-pair payload is missing required paths\" for a missing, empty or non-array pairs value, a malformed element, or the legacy shape.",
-        "listExplicitFileSet(paths, sort, query, offset, limit) matches 9aa3772 and never sends sourceOrder.",
-        "Owned vitest files and biome pass, and tsc reports no errors in src/lib/tauri/. The progress log records sha256 before and after."
-      ],
-      "verification": [
-        "bunx vitest run --config vitest.config.ts src/lib/tauri/document.vitest.ts src/lib/tauri/document-invoke.vitest.ts",
-        "bunx tsc --noEmit 2>&1 | grep \"src/lib/tauri/\"",
-        "bunx biome check src/lib/tauri"
-      ]
-    },
-    {
-      "planId": "pair-compare-pair-view",
-      "planPath": "impl-plans/active/pair-compare-pair-view.md",
-      "dependsOn": [],
-      "writePaths": [
-        "src/features/pair-view/pairPaneVisibility.ts",
-        "src/features/pair-view/pairPaneVisibility.vitest.ts",
-        "src/features/pair-view/PairView.tsx",
-        "src/features/pair-view/PairView.css",
-        "src/features/pair-view/PairView.vitest.tsx",
-        "src/features/pair-view/PairViewHiddenZoom.vitest.tsx",
-        "src/features/pair-view/PairListPane.tsx",
-        "src/features/pair-view/PairListPane.css",
-        "src/features/pair-view/PairListPane.vitest.tsx",
-        "impl-plans/active/pair-compare-pair-view.md"
-      ],
-      "sharedPaths": [],
-      "artifactRoots": [],
-      "acceptanceCriteria": [
-        "pairPaneVisibility.ts provides PairState { pairs, selectedIndex, visibility }, initialPairState, selectPair (same object for an invalid or current index, never changes visibility), selectedPair and setPairVisibility. activatePairSide, assignPathToActivePane, pairMarkerForPath and PairListMarker are removed.",
-        "PairView has no activeSide or onActivate prop, no --active class, data-pair-active or aria-current. Per-side loads, eye buttons, the restore strip and reload registration are unchanged.",
-        "PairListPane renders a section.pane.pair-list with a CollapsePaneButton, a 'Pairs' title and an 'N pair(s)' count, and a listbox of option buttons 'a.png <-> b.png' with full-path titles, aria-selected and roving tabindex. Click, j/k (no wrap) and Enter call onSelect.",
-        "Pair-view vitest and biome pass, scoped tsc shows no pair-view errors, and the rejected-model grep finds nothing. The progress log records sha256 before and after."
-      ],
-      "verification": [
-        "bunx vitest run --config vitest.config.ts src/features/pair-view",
-        "bunx biome check src/features/pair-view",
-        "bunx tsc --noEmit 2>&1 | grep \"src/features/pair-view/\"",
-        "grep -rn \"activeSide\\|onActivate\\|pair-view__pane--active\\|data-pair-active\\|pairMarkerForPath\" src/features/pair-view"
-      ]
-    },
-    {
-      "planId": "pair-compare-file-browser",
-      "planPath": "impl-plans/active/pair-compare-file-browser.md",
-      "dependsOn": [],
-      "writePaths": [
-        "src/features/file-view/FileBrowserPane.tsx",
-        "src/features/file-view/FileBrowserPane.vitest.tsx",
-        "src/app/App.css",
-        "impl-plans/active/pair-compare-file-browser.md"
-      ],
-      "sharedPaths": [],
-      "artifactRoots": [],
-      "acceptanceCriteria": [
-        "FileBrowserPane has no pairMarkerForPath or sourceOrder props, marker span or source-order summary or guard. Its diff against 9aa3772 shows only the onCollapse / CollapsePaneButton / pane__header-lead hunks.",
-        "The two rejected-model tests are deleted, and a Collapse-left-pane button test is added for both with and without onCollapse.",
-        "App.css drops .file-browser__pair-marker and keeps .pane__header-lead and .pane__collapse with their hover and focus rules.",
-        "Scoped vitest, biome, grep and tsc checks pass. The progress log records sha256 before and after."
-      ],
-      "verification": [
-        "bunx vitest run --config vitest.config.ts src/features/file-view/FileBrowserPane.vitest.tsx",
-        "bunx biome check src/features/file-view/FileBrowserPane.tsx src/features/file-view/FileBrowserPane.vitest.tsx src/app/App.css",
-        "grep -rn \"pairMarkerForPath\\|sourceOrder\\|pair-marker\\|Order: command line\" src/features/file-view src/app/App.css",
-        "bunx tsc --noEmit 2>&1 | grep \"src/features/file-view/\""
-      ]
-    },
-    {
-      "planId": "pair-compare-readme",
-      "planPath": "impl-plans/active/pair-compare-readme.md",
-      "dependsOn": [],
-      "writePaths": [
-        "README.md",
-        "impl-plans/active/pair-compare-readme.md"
-      ],
-      "sharedPaths": [],
-      "artifactRoots": [],
-      "acceptanceCriteria": [
-        "README documents: the 2-file pair (0.4.0 facts), `chilla --compare <left>..<right> [...]` with split, error, order and dedup rules, the folded pair list with its fold controls, selection and { / }, and 3+ files as an explicit list.",
-        "No mention of an active pane, the accent border or L / R markers remains. The { / } shortcut and the pair.left.toggle / pair.right.toggle lines are kept.",
-        "The grep and diff --check checks pass, and no emojis are used."
-      ],
-      "verification": [
-        "grep -n \"active pane\\|accent border\\|L\\` / \\`R\\|more files\" README.md",
-        "grep -n -- \"--compare\" README.md",
-        "git diff --check -- README.md"
       ]
     },
     {
@@ -276,13 +207,13 @@
         "While the tree is open in pair mode, PairListPane renders with onSelect=selectPair and onCollapse=handleToggleFileTree; FileBrowserPane is not mounted. focusVisiblePane includes .pair-list.",
         "All activeSide, assignPathToActivePane, pairMarkerForPath, activatePairSide and sourceOrder plumbing is removed. sourceOrderPaths / source_order_paths is retained.",
         "Rewritten workspace tests cover: two-pair and single-pair folded startup, the header toggle, the expand strip and Shift+L, click and j/k selection, the collapse button, } hiding persisting across selection, a { no-op, { / } inert outside pair mode and in inputs, r reloading only the shown pair, and no rejected-model selectors.",
-        "bun run typecheck, workspace vitest, biome and the word-bounded grep pass. The progress log records sha256 before and after for owned files and consumed contracts."
+        "bun run typecheck, the Node-run workspace vitest, biome and the word-bounded grep (excluding the accepted negative test src/lib/tauri/document-invoke.vitest.ts) pass. The progress log records sha256 before and after for owned files and consumed contracts."
       ],
       "verification": [
         "bun run typecheck",
-        "bunx vitest run --config vitest.config.ts src/features/workspace",
+        "mise exec -- node node_modules/vitest/vitest.mjs run --config vitest.config.ts src/features/workspace",
         "bunx biome check src/features/workspace",
-        "grep -rnwE \"sourceOrder|activeSide|assignPathToActivePane|pairMarkerForPath|activatePairSide\" src"
+        "grep -rnwE \"sourceOrder|activeSide|assignPathToActivePane|pairMarkerForPath|activatePairSide\" src --exclude=document-invoke.vitest.ts"
       ]
     }
   ],

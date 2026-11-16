@@ -230,3 +230,28 @@ relative cases.
 ### Session: 2026-11-16
 **Tasks Completed**: Plan created
 **Notes**: Supersedes pair-multi-rust.
+
+## Amendment 2026-11-16 (blocked-wave-scope-or-contract, round 1)
+
+Blocker: no authorized Cargo build-output location. The previous artifactRoots
+was `[]` and `CARGO_TARGET_DIR` was unset.
+
+Decision (additive; the rest of the plan is unchanged):
+
+- Authorized Cargo output directory:
+  `tmp/pair-compare-20261116-01/pair-compare-rust/cargo-target`. It is added
+  to this plan's `writePaths` and declared as this plan's only `artifactRoots`
+  entry, so the runtime records it as a digest/count manifest, not as source.
+- Run every cargo command with `CARGO_TARGET_DIR` set to the absolute path of
+  that directory, for example:
+  `CARGO_TARGET_DIR="$PWD/tmp/pair-compare-20261116-01/pair-compare-rust/cargo-target" CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`.
+  Do the same for `cargo test`. `cargo fmt --check` writes no build output and
+  needs no target dir.
+- Do not write to the repository `target/` directory or `src-tauri/target/`,
+  and do not delete them. Do not set `CARGO_TARGET_DIR` globally (shell
+  profile, `.cargo/config.toml`, `mise.toml`).
+- The first build in the new directory is a full cold build and may take
+  several minutes. Run it in the foreground and keep the complete log under
+  `tmp/pair-compare-20261116-01/pair-compare-rust/<attempt>/`.
+- Record the exact command lines, exit codes and log paths in the progress
+  log. Verification commands and acceptance criteria are otherwise unchanged.

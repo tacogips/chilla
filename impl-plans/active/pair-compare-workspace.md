@@ -1,6 +1,6 @@
 # Pair Compare: WorkspaceShell Integration
 
-**Status**: Ready
+**Status**: In Progress
 **Plan ID**: pair-compare-workspace
 **Wave**: 2 (dependsOn: pair-compare-ts-contract, pair-compare-pair-view, pair-compare-file-browser)
 **Design Reference**: design-docs/specs/design-pair-view.md (State Ownership, Workspace Integration, Pane Toggle Shortcuts, Validation/TypeScript WorkspaceShell)
@@ -165,9 +165,9 @@ Test cases:
 
 ## Completion Criteria
 
-- [ ] Pair startup uses `pairs` and renders PairListPane / PairView
-- [ ] All rejected-model code removed from the workspace files
-- [ ] Workspace tests rewritten and passing
+- [x] Pair startup uses `pairs` and renders PairListPane / PairView
+- [x] All rejected-model code removed from the workspace files
+- [x] Workspace tests rewritten and passing under configured Node 22
 - [ ] typecheck, vitest, biome, and the word-bounded grep checks pass
       (`sourceOrderPaths` retained)
 
@@ -182,3 +182,65 @@ Test cases:
 **Notes**: The grep is now word-bounded (`grep -rnwE`). Added an invariant
 that the explicit_file_set `sourceOrderPaths` is retained. Aligned the
 completion criteria with the new grep.
+
+### Session: 2026-11-16 (workspace implementation)
+**Tasks Completed**: Pair state, list selection and folded startup integrated; rejected workspace plumbing removed; workspace tests rewritten.
+**Verification**: `bun run typecheck` exit 0; `bunx biome check src/features/workspace` exit 0; `mise exec -- node node_modules/vitest/vitest.mjs run --config vitest.config.ts src/features/workspace` exit 0, 95 tests. The exact `bunx vitest` command on Node 26 exited 1 (85 passed, 9 existing tests failed due to undefined localStorage); logs are in `tmp/pair-compare-20261116-01/pair-compare-workspace/attempt-1/`. The word-bounded grep exits 0 due to sibling-owned `src/lib/tauri/document-invoke.vitest.ts` lines 83 and 105.
+**SHA256 before (owned and consumed contracts)**:
+```
+b235c69d93a946f7d1d7a7c486fc18b5f339a6f2531a7838aaa93a622b4c915c  src/features/workspace/WorkspaceShell.tsx
+d0e3f08ace17f0da9b8a02b74efe7540824e07712d3ff2b2b69bc79f6d7167a8  src/features/workspace/WorkspaceShell.vitest.tsx
+4c3dbd5a273ae601497a8159f7438cfa5d06141bb02057f9ebaa01426daf587f  src/features/workspace/WorkspaceFeedback.vitest.tsx
+5a551870d378d5137169d99596277073d9ad744d681a6f0f2f733d8f7c5611fa  src/features/workspace/workspaceDirectoryState.ts
+9fa358fa18af9754a628202c919d85f5143e2ebb60b1a47812983c76a7ea1a72  impl-plans/active/pair-compare-workspace.md
+dc921af434ef3568eb21be449bf0da107587ee1950d012db250bbabb9a5a1f2d  src/lib/tauri/document.ts
+716fee25402aa83f14c1c4cae26d8145e52ad1ebc85ba7a73a56141d8e959064  src/features/pair-view/pairPaneVisibility.ts
+28b697be7a36c652661452fabb01e2405f6655d2c44342e1233e4bc266ec784c  src/features/pair-view/PairView.tsx
+89a15976bfcf9351877912a089d409a7fd89c03a00e54216063b010c4ae37413  src/features/pair-view/PairListPane.tsx
+0e255f480dc6d861a8a076d10c484471cc0d407456a077b4e047655c0b219bef  src/features/file-view/FileBrowserPane.tsx
+```
+**SHA256 after (owned and consumed contracts)**:
+```
+495a5b70d788cce8d0fb8dfdcc25ac595de33fab97cb1ca4a6726e16a2161c1c  src/features/workspace/WorkspaceShell.tsx
+3a8014515c6501ca62f87efae3e42e995cfd1a8117d5565e0641c26c871300a8  src/features/workspace/WorkspaceShell.vitest.tsx
+6712fc73572cd6fd3b53f47bab79351a91d51a173bb5ed23d56daf6b4e483836  src/features/workspace/WorkspaceFeedback.vitest.tsx
+f2c93134503b3ae86592802f28982e3d5177ce599bb93c60da766b0c1c7e6db7  src/features/workspace/workspaceDirectoryState.ts
+dc921af434ef3568eb21be449bf0da107587ee1950d012db250bbabb9a5a1f2d  src/lib/tauri/document.ts
+716fee25402aa83f14c1c4cae26d8145e52ad1ebc85ba7a73a56141d8e959064  src/features/pair-view/pairPaneVisibility.ts
+28b697be7a36c652661452fabb01e2405f6655d2c44342e1233e4bc266ec784c  src/features/pair-view/PairView.tsx
+89a15976bfcf9351877912a089d409a7fd89c03a00e54216063b010c4ae37413  src/features/pair-view/PairListPane.tsx
+0e255f480dc6d861a8a076d10c484471cc0d407456a077b4e047655c0b219bef  src/features/file-view/FileBrowserPane.tsx
+```
+The plan after-hash is recorded separately in `attempt-1/plan-after.sha256`.
+
+## Amendment 2026-11-16 (blocked-wave-scope-or-contract, round 1)
+
+Blocker 1: the word-bounded grep matches sibling-owned
+`src/lib/tauri/document-invoke.vitest.ts` lines 83 and 105.
+
+- Decision: those lines are the intended negative regression test from the
+  accepted plan `pair-compare-ts-contract`. They assert that
+  `list_explicit_file_set` sends no `sourceOrder` key, so they are not
+  leftovers. Do NOT edit that file; it is not in this plan's writePaths and
+  its plan is accepted.
+- The grep gate is replaced with:
+  `grep -rnwE "sourceOrder|activeSide|assignPathToActivePane|pairMarkerForPath|activatePairSide" src --exclude=document-invoke.vitest.ts`
+  -> no output (exit 1). The completion criterion "word-bounded grep checks
+  pass" refers to this form.
+
+Blocker 2: `bunx vitest run ...` fails 9 of 95 tests (window.localStorage is
+undefined under the bunx/Bun runtime). The Node-run vitest passes 95/95.
+
+- Decision: this is a test-runner selection issue, not a product defect, and
+  the workspace tests are not changed to work around it. The required
+  workspace test gate is now the Node-run vitest, which matches how the
+  project's `test:dom` script runs:
+  `mise exec -- node node_modules/vitest/vitest.mjs run --config vitest.config.ts src/features/workspace`
+  -> exit 0 with all tests passing. Do not use `bunx vitest`.
+- Do not modify `vitest.config.ts`, test setup files, or `package.json`.
+- Other gates are unchanged: `bun run typecheck` and
+  `bunx biome check src/features/workspace` must both exit 0.
+
+The existing implementation is kept. Re-run the amended gates on the current
+tree, record exit codes, log paths and sha256 values in the progress log, and
+set the status once all gates pass.
