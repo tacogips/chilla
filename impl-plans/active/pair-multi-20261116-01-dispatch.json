@@ -1,0 +1,328 @@
+{
+  "taskId": "pair-multi-20261116-01",
+  "workflowMode": "issue-resolution",
+  "issueReference": "none: inline workflowInput request, no GitHub issue URL or number given (workflowExecutionId opus-terra-design-and-implement-review-loop-session-860; plans accepted in comm-020353)",
+  "implementationBranch": "main",
+  "baseBranch": "main",
+  "remote": "origin",
+  "gitPush": false,
+  "originalHead": "333bdaf3d601e7e85ca62d94753c4a44d2d720f7",
+  "evidenceRoot": "tmp/pair-multi-20261116-01",
+  "designDocPaths": [
+    "design-docs/specs/design-pair-view.md",
+    "design-docs/specs/design-file-viewer-mode.md",
+    "design-docs/user-qa/qa-pair-view.md",
+    "design-docs/specs/command.md",
+    "design-docs/specs/architecture.md"
+  ],
+  "reviewContext": {
+    "issueReference": "none: inline workflowInput request, no GitHub issue URL or number given (workflowExecutionId opus-terra-design-and-implement-review-loop-session-860; plans accepted in comm-020353)",
+    "userProblem": "The pair (comparison) view in 0.4.0 hides the left file list entirely, has no keyboard shortcuts to hide/show panes, and only supports exactly two files; three or more files fall back to the single-document explicit file set view.",
+    "requiredOutcomes": [
+      "`chilla a.png b.png` opens pair view with a.png left, b.png right and the file list folded; the header sidebar toggle, the left-edge strip (.workspace__expand-tab) and Shift+L expand/fold the list, which shows both files with L/R markers.",
+      "`chilla a.png b.png c.png` opens pair view with a.png left and b.png right; the list shows all three in CLI order; activating the right pane and choosing c.png shows c.png on the right.",
+      "'{' and '}' toggle the left and right pane through the keymap (rebindable, in keyboard help), are no-ops outside pair view and in editable fields; both panes can never be hidden.",
+      "Single-file and directory launches behave exactly as before.",
+      "Rust and TypeScript unit/DOM tests cover CLI classification for 2 and 3+ files, initial folded list, active-pane selection and loading, list markers and the new shortcuts.",
+      "cargo clippy -D warnings, cargo test, bun run typecheck, mise run test (bun test, vitest DOM) and biome pass; the debug app is launched with three image files per chilla-post-edit-launch."
+    ],
+    "nonGoals": [
+      "No change to macOS Finder / Apple Event open-files or the frontend picker path (startupContextForPickedTarget); they still build explicit_file_set contexts.",
+      "No editing, TOC or markdown-mode switching in pair view; no pane resize, synchronized scroll/zoom, per-pane file watching, or persistence of pane assignment/active pane/visibility.",
+      "No directory browsing from the pair file list.",
+      "No edits to unrelated files; .riela/ untracked directories are left alone."
+    ],
+    "constraints": [
+      "Two or more distinct regular-file CLI arguments open pair view: first unique file left, second right, all unique files in argument order in the folded list; fewer than two unique files is a single-file open; directory arguments keep current behavior.",
+      "StartupTarget::FileSet and BrowserRoot::ExplicitFileSet startup variants are removed; FilePair carries rest and source_order_paths; Rust and TypeScript sides of the file_pair payload and list_explicit_file_set source_order argument change together.",
+      "Keep per-pane eye icons, restore strip, hidden-pane zoom guard, '+'/'-' visible-pane zoom and 'r' reload of shown files.",
+      "Reuse existing viewers and FileBrowserPane explicit-list rendering; no duplicated viewers; no emojis.",
+      "Follow AGENTS.md, rust-coding-standards and ts-coding-standards; CARGO_TERM_QUIET=true for cargo commands.",
+      "Each worker edits only its plan's writePaths, records pre/post sha256 for edited existing files, and appends to its own plan progress log; evidence goes under tmp/pair-multi-20261116-01/<planId>/<attempt>/ (untracked, data only).",
+      "src/app/App.css is shared: pair-multi-file-browser adds one localized .file-browser__pair-marker block in wave 1; pair-multi-workspace may add a minimal pair-mode grid rule in wave 2 only if needed.",
+      "Runtime launch must be a bounded foreground run logging to /tmp/chilla-pair-multi-launch.log; no nohup or background launch.",
+      "Commit messages must not contain AI attribution or Co-Authored-By lines."
+    ],
+    "designDecisionsAndRationale": [
+      {
+        "decision": "Classification becomes unique >= 2 -> StartupTarget::FilePair { left, right, rest }; FileSet startup variant removed.",
+        "rationale": "Every multi-file CLI launch now opens pair view; a single variant keeps exhaustive matches on both sides honest (design-pair-view.md Startup Classification)."
+      },
+      {
+        "decision": "BrowserRoot::FilePair gains source_order_paths (list[0] == left, list[1] == right, length >= 2) validated by the TS normalizer.",
+        "rationale": "The frontend needs the full ordered list to populate the folded file list; validation rejects inconsistent payloads (Startup Payload Contract)."
+      },
+      {
+        "decision": "list_explicit_file_set gains an optional source_order flag that skips sorting; FileBrowserPane gains sourceOrder and a pair marker callback.",
+        "rationale": "The pair list must show files in CLI order and reuse existing explicit-list rendering with L / R / LR badges (Source-Order Listing Contract, List Markers)."
+      },
+      {
+        "decision": "Pair state (left/right paths, active pane, visibility) is owned by WorkspaceShell; PairView becomes controlled and is no longer keyed.",
+        "rationale": "List choices from FileBrowserPane must route into the active pane and re-show a hidden pane without remounting the viewers (State Ownership)."
+      },
+      {
+        "decision": "List choices route through WorkspaceShell handleConfirmEntry (click and Enter); onSelectEntry cursor moves load nothing.",
+        "rationale": "FileBrowserPane row click and confirmEntry both call onConfirmEntry, so one branch covers both inputs as the design requires."
+      },
+      {
+        "decision": "New keymap actions pair.left.toggle / pair.right.toggle with default bindings '{' / '}' and static help entries.",
+        "rationale": "Registered through the existing keymap system, so they are rebindable and listed in keyboard help (Pane Toggle Shortcuts)."
+      },
+      {
+        "decision": "Two waves: six independent wave-1 plans with disjoint writePaths, then pair-multi-workspace integrates and runs the full gates.",
+        "rationale": "Maximizes parallelism; WorkspaceShell integration depends on all pinned wave-1 contracts."
+      }
+    ],
+    "intentionalTradeoffs": [
+      "Launches with three or more files (including `a b a`) now open pair view instead of the explicit file set single-document view; this intentionally replaces prior behavior.",
+      "Users with a custom workspace keymap that replaces defaults do not get '{' / '}' until they add them.",
+      "Until wave 2 lands, the WorkspaceShell.vitest file_pair fixture fails the new normalizer validation and WorkspaceShell.tsx has type errors from new PairView props; wave-1 plans scope typecheck to owned paths and wave 2 runs the full gates.",
+      "The GUI launch check may be recorded as partial with /tmp/chilla-pair-multi-launch.log if no GUI interaction is possible."
+    ],
+    "supportedEdgeCases": [
+      "`a b` -> FilePair(a, b, rest []); `a b c` -> FilePair(a, b, rest [c]); `a b a` -> FilePair(a, b, rest []).",
+      "`a a`, `a ./a` -> File(a); directory or mixed directory+file arguments keep the existing behavior and errors.",
+      "The same file shown in both panes gets an LR marker.",
+      "Choosing a file while the active pane is hidden loads it and shows that pane again.",
+      "Pressing the toggle key for the only visible pane is a no-op; '{' / '}' outside pair view or while typing do nothing.",
+      "Sort key bindings are inert in source-order list mode; the list keeps CLI order."
+    ],
+    "outOfScopeEdgeCases": [
+      "macOS Apple Event open-files or picker delivery of two or more files.",
+      "Synchronized zoom/scroll and live file watching per pane.",
+      "Persisting pane assignment, active pane or visibility across launches.",
+      "Directory browsing from the pair file list."
+    ],
+    "reviewFindingsCarriedForward": [
+      "low: wave-1 WorkspaceShell.vitest file_pair fixture failure is expected until pair-multi-workspace updates it.",
+      "low: runtime GUI check may be partial."
+    ],
+    "sourcePaths": [
+      "design-docs/specs/design-pair-view.md",
+      "design-docs/specs/design-file-viewer-mode.md",
+      "design-docs/user-qa/qa-pair-view.md",
+      "design-docs/specs/command.md",
+      "design-docs/specs/architecture.md",
+      "impl-plans/active/pair-multi-rust.md",
+      "impl-plans/active/pair-multi-ts-contract.md",
+      "impl-plans/active/pair-multi-pair-view.md",
+      "impl-plans/active/pair-multi-file-browser.md",
+      "impl-plans/active/pair-multi-keymap.md",
+      "impl-plans/active/pair-multi-readme.md",
+      "impl-plans/active/pair-multi-workspace.md",
+      "src-tauri/src/cli/mod.rs",
+      "src-tauri/src/viewer/types.rs",
+      "src-tauri/src/viewer/service.rs",
+      "src-tauri/src/viewer/directory_listing.rs",
+      "src-tauri/src/commands/document.rs",
+      "src-tauri/src/verbose_log.rs",
+      "src/lib/tauri/document.ts",
+      "src/features/pair-view/PairView.tsx",
+      "src/features/file-view/FileBrowserPane.tsx",
+      "src/features/keymap/keymap.ts",
+      "src/features/workspace/WorkspaceShell.tsx"
+    ]
+  },
+  "acceptedDependencies": [],
+  "plans": [
+    {
+      "planId": "pair-multi-rust",
+      "planPath": "impl-plans/active/pair-multi-rust.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src-tauri/src/cli/mod.rs",
+        "src-tauri/src/cli/tests.rs",
+        "src-tauri/src/viewer/types.rs",
+        "src-tauri/src/viewer/service.rs",
+        "src-tauri/src/viewer/service/tests.rs",
+        "src-tauri/src/viewer/service/tests/startup_options_tests.rs",
+        "src-tauri/src/viewer/directory_listing.rs",
+        "src-tauri/src/viewer/directory_listing/tests.rs",
+        "src-tauri/src/commands/document.rs",
+        "src-tauri/src/verbose_log.rs",
+        "impl-plans/active/pair-multi-rust.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "StartupTarget::FileSet and BrowserRoot::ExplicitFileSet removed; FilePair has rest and source_order_paths.",
+        "Classification is unique >= 2 -> FilePair; help text updated to the pinned sentence.",
+        "list_explicit_file_set has source_order; sort skipped when true; command takes source_order: Option<bool>.",
+        "All listed test cases present and passing; verification 1-4 pass; progress log updated with exit codes."
+      ],
+      "verification": [
+        "CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+        "CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml",
+        "CARGO_TERM_QUIET=true cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
+        "grep -rn \"StartupTarget::FileSet\\|BrowserRoot::ExplicitFileSet\" src-tauri/src"
+      ]
+    },
+    {
+      "planId": "pair-multi-ts-contract",
+      "planPath": "impl-plans/active/pair-multi-ts-contract.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/lib/tauri/document.ts",
+        "src/lib/tauri/document.vitest.ts",
+        "src/lib/tauri/document-invoke.vitest.ts",
+        "impl-plans/active/pair-multi-ts-contract.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "file_pair type and normalizer carry source_order_paths with the pinned validation rules.",
+        "listExplicitFileSet accepts { sourceOrder } and sends the key only when true.",
+        "All test cases present and passing; verification 1-3 pass; progress log updated."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/lib/tauri/document.vitest.ts src/lib/tauri/document-invoke.vitest.ts",
+        "bunx tsc --noEmit 2>&1 | grep \"src/lib/tauri/\"",
+        "bunx biome check src/lib/tauri/document.ts src/lib/tauri/document.vitest.ts src/lib/tauri/document-invoke.vitest.ts"
+      ]
+    },
+    {
+      "planId": "pair-multi-pair-view",
+      "planPath": "impl-plans/active/pair-multi-pair-view.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/pair-view/pairPaneVisibility.ts",
+        "src/features/pair-view/pairPaneVisibility.vitest.ts",
+        "src/features/pair-view/PairView.tsx",
+        "src/features/pair-view/PairView.css",
+        "src/features/pair-view/PairView.vitest.tsx",
+        "src/features/pair-view/PairViewHiddenZoom.vitest.tsx",
+        "impl-plans/active/pair-multi-pair-view.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "New pure helpers exported with the pinned signatures.",
+        "PairView is controlled, loads per side on path change, marks the active pane, and activates on pointerdown/focusin except on its buttons.",
+        "All test cases pass; verification 1-3 pass; progress log updated."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/pair-view",
+        "bunx tsc --noEmit 2>&1 | grep \"src/features/pair-view/\"",
+        "bunx biome check src/features/pair-view"
+      ]
+    },
+    {
+      "planId": "pair-multi-file-browser",
+      "planPath": "impl-plans/active/pair-multi-file-browser.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/file-view/FileBrowserPane.tsx",
+        "src/features/file-view/FileBrowserPane.vitest.tsx",
+        "impl-plans/active/pair-multi-file-browser.md"
+      ],
+      "sharedPaths": [
+        "src/app/App.css"
+      ],
+      "sharedPathNotes": [
+        {
+          "path": "src/app/App.css",
+          "intendedEdit": "Wave 1: one localized insertion of the .file-browser__pair-marker badge rule next to the existing .file-browser__button--active rules; no other changes."
+        }
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Optional pair marker and sourceOrder props implemented as specified; no behavior change without them.",
+        "Badge CSS added in one localized App.css hunk.",
+        "Test cases pass; verification 1-4 pass; progress log updated."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/file-view/FileBrowserPane.vitest.tsx",
+        "bunx tsc --noEmit 2>&1 | grep \"src/features/file-view/\"",
+        "bunx biome check src/features/file-view/FileBrowserPane.tsx src/features/file-view/FileBrowserPane.vitest.tsx",
+        "git diff --stat src/app/App.css"
+      ]
+    },
+    {
+      "planId": "pair-multi-keymap",
+      "planPath": "impl-plans/active/pair-multi-keymap.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/keymap/keymap.ts",
+        "src/features/keymap/keymap.vitest.ts",
+        "src/features/workspace/workspaceShortcuts.tsx",
+        "impl-plans/active/pair-multi-keymap.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "pair.left.toggle and pair.right.toggle actions with default bindings '{' and '}' added.",
+        "Static help entries added in workspaceShortcuts.tsx.",
+        "Tests pass; verification 1-3 pass; progress log updated."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/keymap",
+        "bunx tsc --noEmit 2>&1 | grep -E \"src/features/keymap/|workspaceShortcuts\"",
+        "bunx biome check src/features/keymap src/features/workspace/workspaceShortcuts.tsx"
+      ]
+    },
+    {
+      "planId": "pair-multi-readme",
+      "planPath": "impl-plans/active/pair-multi-readme.md",
+      "dependsOn": [],
+      "writePaths": [
+        "README.md",
+        "impl-plans/active/pair-multi-readme.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Pair-view bullet rewritten per Required Content (2+ files, folded list, active pane, L/R markers, '{' / '}').",
+        "Verification 1-4 pass; progress log updated."
+      ],
+      "verification": [
+        "git diff --stat README.md",
+        "grep -n \"three or more file arguments\" README.md",
+        "grep -n \"pair.left.toggle\" README.md",
+        "grep -n \"folded\" README.md",
+        "git diff --check README.md"
+      ]
+    },
+    {
+      "planId": "pair-multi-workspace",
+      "planPath": "impl-plans/active/pair-multi-workspace.md",
+      "dependsOn": [
+        "pair-multi-rust",
+        "pair-multi-ts-contract",
+        "pair-multi-pair-view",
+        "pair-multi-file-browser",
+        "pair-multi-keymap"
+      ],
+      "writePaths": [
+        "src/features/workspace/workspaceDirectoryState.ts",
+        "src/features/workspace/WorkspaceShell.tsx",
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "impl-plans/active/pair-multi-workspace.md"
+      ],
+      "sharedPaths": [
+        "src/app/App.css"
+      ],
+      "sharedPathNotes": [
+        {
+          "path": "src/app/App.css",
+          "intendedEdit": "Wave 2, only if needed: a minimal pair-mode viewer grid rule (for example workspace__body--pair) so FileBrowserPane and PairView lay out with the tree open; must not disturb the wave-1 .file-browser__pair-marker block."
+        }
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Pair state owned by WorkspaceShell; PairView controlled and not keyed.",
+        "Folded list in source order with L/R markers; header toggle, left-edge strip and Shift+L work in pair mode.",
+        "List choices (click/Enter) load into the active pane and re-show it if hidden; cursor moves do not load.",
+        "'{' / '}' wired; no-op outside pair mode; single-file and directory flows unchanged.",
+        "All test cases pass; verification 1-5 pass; runtime launch done or recorded as partial with /tmp/chilla-pair-multi-launch.log; progress log updated."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/workspace src/features/pair-view src/features/file-view src/features/keymap src/lib/tauri",
+        "bun run typecheck",
+        "bunx biome check src",
+        "mise run test",
+        "CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+        "bun run tauri build --debug --no-bundle"
+      ]
+    }
+  ]
+}
