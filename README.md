@@ -156,7 +156,10 @@ The repository design documents started from a Markdown workbench concept, then 
 - `chilla` with no arguments opens the current working directory.
 - `chilla <dir>` opens that directory in file-view mode.
 - `chilla <file>` opens the file's parent directory and previews the selected file.
-- `chilla <file_a> <file_b>` with exactly two distinct regular files opens pair view, which is useful for before/after image comparison. The first file appears on the left and the second on the right, in an even 50/50 split, using the same image, Markdown, text, PDF, media, and CSV previews. Pair view has no file sidebar or table of contents. Each pane has an eye icon at its top-left that hides the pane, and the other pane then fills the width except for a narrow strip that restores the hidden pane. Only one pane can be hidden at a time. A hidden pane keeps its zoom, and `+` / `-` affect only the visible pane. `r` reloads both panes. With three or more file arguments (for example `chilla a b a`), the files appear as a list in the sidebar instead. If the same file is given twice, Chilla opens it as a single file. A directory argument behaves as before. Pair view is available only when files are passed on the command line; opening files through macOS Finder or `open -a` uses the explicit file list.
+- `chilla <file_a> <file_b>` with exactly two distinct regular files opens one pair in an even 50/50 split, using the same image, Markdown, text, PDF, media, and CSV previews as single-file view. Each pane has an eye icon and a hidden pane has a restore strip; at most one pane can be hidden. A hidden pane keeps its zoom, `+` / `-` affect only visible panes, and `r` reloads the shown pair. Repeating the same file opens a single file, and a directory argument behaves as before. Opening files through macOS Finder or `open -a` uses the explicit file list.
+- `chilla --compare <left>..<right> [<left>..<right> ...]` opens one or more pairs. Each specification is tested at every overlapping `..` split; exactly one split must identify two existing regular files, with relative paths resolved against the working directory. For example, `../a.png..../b.png` can resolve to `../a.png` and `../b.png`. Missing or ambiguous paths, the same canonical file on both sides, and a bare `--compare` produce a usage error and exit code 2. Pairs retain command-line order; duplicate canonical left/right pairs appear once, while reversed pairs remain distinct. `--compare` must be the first argument after global `--verbose` and `--csv-first-row-header` options and cannot be mixed with positional paths.
+- The pair list has one entry per pair, such as `left.png <-> right.png`, with full paths on hover. It starts folded even for one pair. Use the header sidebar toggle, left-edge strip, list-header `‹` button, or `Shift+L` to fold or expand it. Click a pair, press `Enter`, or use `j` / `k` to select it; the shown pair is highlighted and selection keeps any hidden pane hidden. `{` / `}` toggle the left / right pane.
+- Three or more file arguments, such as `chilla a b c` or `chilla a b a`, open an explicit file list in the sidebar.
 - On macOS, `open -a Chilla "/path/to/file.png"` opens a file through the installed app, whether Chilla is already running or starts with the request. Multiple file paths are also supported. If the sandbox grants access only to the selected file, Chilla previews it without listing its parent directory.
 - Markdown files get a richer preview flow with:
   - rendered HTML
@@ -241,6 +244,7 @@ Default global shortcuts:
 - `j` or `ArrowDown`: scroll the active file view down one line when the file tree is hidden
 - `k` or `ArrowUp`: scroll the active file view up one line when the file tree is hidden
 - `Shift+L`: collapse or expand the left pane; the sidebar icon in the main toolbar provides the same action, including in Git diff mode. When folded, a small tab at the left edge of the content area also expands it with the mouse.
+- `{` / `}`: in pair view, hide or show the left / right pane (the last visible pane cannot be hidden).
 - Collapsing the left pane moves keyboard focus to the preview and disables hidden browser controls and shortcuts. Expanding restores browser focus and navigation. Starting chilla with file arguments opens the preview with the left pane collapsed; opening a directory keeps it expanded.
 - `g`: toggle local Git diff for the opened repository
 - `y`: copy the selected file or directory absolute path
@@ -412,7 +416,7 @@ Diff actions: `diff.previous`, `diff.next`, `diff.view.cycle`, `diff.view.split`
 mode have no effect.
 
 Workspace actions: `help`, `quit`, `files.open`, `document.save`,
-`document.reload`, `path.copy`, `sidebar.toggle`, `git.toggle`, `toc.toggle`,
+`document.reload`, `path.copy`, `sidebar.toggle`, `pair.left.toggle`, `pair.right.toggle`, `git.toggle`, `toc.toggle`,
 `presentation.toggle`, `presentation.raw`, `presentation.rendered`,
 `format.toggle`, `syntax.toggle`, `theme.toggle`, `scroll.up`, `scroll.down`,
 `document.previous`, and `document.next`. `noop` is valid in either context.

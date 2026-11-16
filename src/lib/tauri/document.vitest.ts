@@ -108,36 +108,43 @@ describe("normalizeStartupContextPayload", () => {
 
   it.each([
     {
-      kind: "file_pair",
-      left_file_path: "/workspace/a",
-      right_file_path: "/workspace/b",
+      input: [{ left_file_path: "/a", right_file_path: "/b" }],
+      expected: [{ left_file_path: "/a", right_file_path: "/b" }],
     },
     {
-      kind: "filePair",
-      leftFilePath: "/workspace/a",
-      rightFilePath: "/workspace/b",
+      input: [
+        { leftFilePath: "/a", rightFilePath: "/b" },
+        { leftFilePath: "/c", rightFilePath: "/d" },
+      ],
+      expected: [
+        { left_file_path: "/a", right_file_path: "/b" },
+        { left_file_path: "/c", right_file_path: "/d" },
+      ],
     },
-  ])("normalizes file-pair payloads: %o", (browserRoot) => {
-    expect(
-      normalizeStartupContextPayload({
-        initial_mode: "file_view",
-        browser_root: browserRoot,
-      }),
-    ).toEqual({
+  ])("normalizes ordered file-pair payloads", ({ input, expected }) => {
+    const result = normalizeStartupContextPayload({
       initial_mode: "file_view",
-      file_open_options: { csv_first_row_as_header: false },
-      browser_root: {
-        kind: "file_pair",
-        left_file_path: "/workspace/a",
-        right_file_path: "/workspace/b",
-      },
+      browser_root: { kind: "file_pair", pairs: input },
     });
+    expect(result.browser_root).toEqual({ kind: "file_pair", pairs: expected });
+    if (result.browser_root.kind !== "file_pair")
+      throw new Error("Expected file pair");
+    expect(result.browser_root.pairs).not.toBe(input);
+    expect(result.browser_root.pairs[0]).not.toBe(input[0]);
   });
 
   it.each([
-    { kind: "file_pair", left_file_path: "/workspace/a" },
-    { kind: "file_pair", right_file_path: "/workspace/b" },
-  ])("rejects file-pair payloads missing a path: %o", (browserRoot) => {
+    { kind: "file_pair" },
+    { kind: "file_pair", pairs: [] },
+    { kind: "file_pair", pairs: "x" },
+    { kind: "file_pair", pairs: [{ left_file_path: "/a" }] },
+    { kind: "file_pair", pairs: [null] },
+    {
+      kind: "file_pair",
+      pairs: [{ left_file_path: "/a", right_file_path: 1 }],
+    },
+    { kind: "file_pair", left_file_path: "/a", right_file_path: "/b" },
+  ])("rejects malformed file-pair payloads: %o", (browserRoot) => {
     expect(() =>
       normalizeStartupContextPayload({
         initial_mode: "file_view",

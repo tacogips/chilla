@@ -1,3 +1,4 @@
+import { CollapsePaneButton } from "../workspace/CollapsePaneButton";
 import {
   For,
   Show,
@@ -131,6 +132,8 @@ export interface FileBrowserSelectOptions {
 }
 
 interface FileBrowserPaneProps {
+  /** When set, the header shows a button that folds this pane. */
+  readonly onCollapse?: () => void;
   readonly listingKind: "directory" | "explicit_file_set";
   readonly active: boolean;
   readonly directory: {
@@ -838,10 +841,15 @@ export function FileBrowserPane(props: FileBrowserPaneProps) {
   return (
     <section class="pane">
       <header class="pane__header">
-        <span class="pane__title">
-          {props.listingKind === "explicit_file_set"
-            ? "Selected Files"
-            : "File View"}
+        <span class="pane__header-lead">
+          <Show when={props.onCollapse} keyed>
+            {(onCollapse) => <CollapsePaneButton onCollapse={onCollapse} />}
+          </Show>
+          <span class="pane__title">
+            {props.listingKind === "explicit_file_set"
+              ? "Selected Files"
+              : "File View"}
+          </span>
         </span>
         <span>
           {filterSummary()} | {sortSummary()}

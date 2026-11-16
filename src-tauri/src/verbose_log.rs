@@ -313,7 +313,7 @@ fn startup_load_path(target: &StartupTarget) -> Option<&Path> {
     match target {
         StartupTarget::File(path) => Some(path),
         StartupTarget::FileSet(paths) => paths.first().map(PathBuf::as_path),
-        StartupTarget::FilePair { left, .. } => Some(left.as_path()),
+        StartupTarget::FilePairs { first, .. } => Some(first.left.as_path()),
         StartupTarget::CurrentDirectory(_)
         | StartupTarget::Directory(_)
         | StartupTarget::GitHubPr(_)
@@ -1583,9 +1583,12 @@ mod tests {
             Some(first_path.as_path())
         );
 
-        let pair_target = StartupTarget::FilePair {
-            left: first_path.clone(),
-            right: PathBuf::from("/tmp/second.md"),
+        let pair_target = StartupTarget::FilePairs {
+            first: crate::cli::FilePairPaths {
+                left: first_path.clone(),
+                right: PathBuf::from("/tmp/second.md"),
+            },
+            rest: vec![],
         };
         assert_eq!(startup_load_path(&pair_target), Some(first_path.as_path()));
 

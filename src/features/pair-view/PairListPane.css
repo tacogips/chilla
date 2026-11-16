@@ -1,0 +1,23 @@
+.pair-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pair-list__button {
+  width: 100%;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.45rem 0.75rem;
+}
+
+.pair-list__button--selected {
+  background: var(--bg-hover);
+  box-shadow: inset 3px 0 var(--accent);
+}

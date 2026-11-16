@@ -98,6 +98,35 @@ describe("keymap compilation", () => {
     }
   });
 
+  it("registers pair pane toggles as rebindable workspace shortcuts", () => {
+    const defaults = compileKeymap({});
+    for (const [key, action] of [
+      ["{", "pair.left.toggle"],
+      ["}", "pair.right.toggle"],
+    ] as const) {
+      expect(matchingBindings(defaults.workspace, [key])[0]?.actions).toEqual([
+        action,
+      ]);
+      for (const context of ["file", "diff"] as const) {
+        expect(matchingBindings(defaults[context], [key])).toEqual([]);
+      }
+      expect(
+        eventKey(new KeyboardEvent("keydown", { key, shiftKey: true })),
+      ).toBe(key);
+    }
+    const custom = compileKeymap({
+      workspace: { append_keymap: [{ on: "<C-h>", run: "pair.left.toggle" }] },
+    });
+    expect(matchingBindings(custom.workspace, ["<C-h>"])[0]?.actions).toEqual([
+      "pair.left.toggle",
+    ]);
+    expect(() =>
+      compileKeymap({
+        workspace: { append_keymap: [{ on: "z", run: "pair.unknown.toggle" }] },
+      }),
+    ).toThrow();
+  });
+
   it("preserves defaults and merges prepend/default/append with first-key priority", () => {
     const defaults = compileKeymap({});
     expect(matchingBindings(defaults.file, ["s"])[0]?.actions).toEqual([

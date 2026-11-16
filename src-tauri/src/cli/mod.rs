@@ -15,12 +15,21 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FilePairPaths {
+    pub left: PathBuf,
+    pub right: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StartupTarget {
     CurrentDirectory(PathBuf),
     Directory(PathBuf),
     File(PathBuf),
     FileSet(Vec<PathBuf>),
-    FilePair { left: PathBuf, right: PathBuf },
+    FilePairs {
+        first: FilePairPaths,
+        rest: Vec<FilePairPaths>,
+    },
     GitHubPr(GitHubPrTarget),
     GitDiff(GitDiffTarget),
 }
@@ -139,6 +148,19 @@ pub fn parse_normalized_cli(input: NormalizedCli) -> AppResult<CliParseOutcome> 
     }
 
     args.remove(0); // discard binary path
+
+    if args.first().is_some_and(|arg| arg == "--compare") {
+        let cwd = std::env::current_dir()
+            .map_err(|source| AppError::io("resolve current directory", Path::new("."), source))?;
+        return parse_compare_arguments(&args[1..], &cwd)
+            .map(|target| run_outcome(target, file_open_options));
+    }
+    if args.iter().any(|arg| arg == "--compare") {
+        return Err(AppError::cli_usage(
+            "--compare must be the first argument and cannot be combined with positional paths",
+            2,
+        ));
+    }
 
     if args.iter().any(|argument| {
         argument
@@ -435,10 +457,134 @@ fn resolve_explicit_file_startup(paths: &[PathBuf]) -> AppResult<StartupTarget> 
             let right = paths
                 .next()
                 .ok_or_else(|| AppError::State("explicit startup right path missing".into()))?;
-            Ok(StartupTarget::FilePair { left, right })
+            Ok(StartupTarget::FilePairs {
+                first: FilePairPaths { left, right },
+                rest: vec![],
+            })
         }
         std::cmp::Ordering::Greater => Ok(StartupTarget::FileSet(ordered_unique_paths)),
     }
+}
+
+fn parse_compare_arguments(specs: &[OsString], cwd: &Path) -> AppResult<StartupTarget> {
+    if specs.is_empty() {
+        return Err(AppError::cli_usage(
+            "--compare requires at least one LEFT..RIGHT SPEC",
+            2,
+        ));
+    }
+    let mut pairs = Vec::new();
+    let mut seen = HashSet::new();
+    for spec in specs {
+        let spec = spec
+            .to_str()
+            .ok_or_else(|| AppError::cli_usage("path arguments must be valid UTF-8", 2))?;
+        let pair = resolve_compare_spec(spec, cwd)?;
+        if seen.insert((pair.left.clone(), pair.right.clone())) {
+            pairs.push(pair);
+        }
+    }
+    let mut pairs = pairs.into_iter();
+    let first = pairs
+        .next()
+        .ok_or_else(|| AppError::State("compare pair missing".into()))?;
+    Ok(StartupTarget::FilePairs {
+        first,
+        rest: pairs.collect(),
+    })
+}
+
+fn resolve_compare_spec(spec: &str, cwd: &Path) -> AppResult<FilePairPaths> {
+    let mut candidates = Vec::new();
+    for i in 0..spec.len().saturating_sub(1) {
+        if &spec.as_bytes()[i..i + 2] != b".." {
+            continue;
+        }
+        let (left, right) = (&spec[..i], &spec[i + 2..]);
+        if left.is_empty() || right.is_empty() {
+            continue;
+        }
+        let left_path = cwd.join(left);
+        let right_path = cwd.join(right);
+        let is_file = |path: &Path| {
+            let started = verbose_log::is_enabled().then(Instant::now);
+            let result = fs::metadata(path);
+            if let Some(started) = started {
+                match &result {
+                    Ok(meta) => verbose_log::record_io(
+                        "metadata",
+                        path,
+                        started,
+                        VerboseIoOutcome::Success {
+                            size_bytes: Some(meta.len()),
+                        },
+                    ),
+                    Err(error) => verbose_log::record_io(
+                        "metadata",
+                        path,
+                        started,
+                        VerboseIoOutcome::Failure { error },
+                    ),
+                }
+            }
+            result.is_ok_and(|meta| meta.is_file())
+        };
+        if is_file(&left_path) && is_file(&right_path) {
+            candidates.push((left, right, left_path, right_path));
+        }
+    }
+    if candidates.is_empty() {
+        return Err(AppError::cli_usage(
+            format!(
+                "--compare SPEC \"{spec}\" does not name two existing files (expected LEFT..RIGHT)"
+            ),
+            2,
+        ));
+    }
+    if candidates.len() > 1 {
+        let splits = candidates
+            .iter()
+            .map(|(left, right, _, _)| format!("\"{left}\" .. \"{right}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(AppError::cli_usage(
+            format!("--compare SPEC \"{spec}\" is ambiguous: {splits}"),
+            2,
+        ));
+    }
+    let (_, _, left, right) = candidates
+        .pop()
+        .ok_or_else(|| AppError::State("compare split missing".into()))?;
+    let canonicalize = |path: &Path| -> AppResult<PathBuf> {
+        let started = verbose_log::is_enabled().then(Instant::now);
+        let result = fs::canonicalize(path);
+        if let Some(started) = started {
+            match &result {
+                Ok(canonical) => verbose_log::record_io(
+                    "canonicalize",
+                    canonical,
+                    started,
+                    VerboseIoOutcome::Success { size_bytes: None },
+                ),
+                Err(error) => verbose_log::record_io(
+                    "canonicalize",
+                    path,
+                    started,
+                    VerboseIoOutcome::Failure { error },
+                ),
+            }
+        }
+        result.map_err(|source| AppError::io("canonicalize", path, source))
+    };
+    let left = canonicalize(&left)?;
+    let right = canonicalize(&right)?;
+    if left == right {
+        return Err(AppError::cli_usage(
+            format!("both sides of --compare SPEC \"{spec}\" are the same file"),
+            2,
+        ));
+    }
+    Ok(FilePairPaths { left, right })
 }
 
 fn absolute_diagnostic_path(path: &Path) -> PathBuf {
@@ -457,7 +603,7 @@ fn is_no_github_diff_cache_flag(value: &str) -> bool {
 
 fn help_text(binary_name: &str) -> String {
     format!(
-        "Usage:\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] [path ...]\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] --no-github-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] --no-pr-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] [--no-github-diff-cache] github:<owner>/<repo> <pr-id|sha|commit:sha|base...head>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] <git-dir> <commit-or-range>\n  {binary_name} --help\n  {binary_name} --version\n\nIf no paths are provided, chilla opens the current working directory in file view mode.\nIf a GitHub pull request, commit, or compare URL is provided, chilla opens that GitHub diff in read-only mode.\nGitHub .diff and .patch URL forms are also supported.\nThe github: shorthand accepts a positive decimal PR number, a 4-40 character hexadecimal SHA, commit:<sha>, or <base>...<head> (slash refs supported). Use commit:<sha> for all-numeric SHAs.\nIf a Git directory plus commit or range is provided, chilla opens that local Git diff in read-only mode.\nGitHub diffs are cached under the system temp directory and refreshed when GitHub reports a newer updated marker.\n--no-pr-diff-cache remains supported as a compatibility alias for --no-github-diff-cache.\nIf two file paths are provided, chilla shows them side by side. If three or more file paths are provided, chilla opens file view mode with the left pane limited to those files.\n\nCSV header option:\n  --csv-first-row-header=true|false  Set the launch-wide default for every CSV preview (default: false). For example: {binary_name} --csv-first-row-header=true report.csv\n\nOptions:\n  --verbose  Write startup and file-I/O diagnostics to {} and mirror them to an attached terminal.\n  --help     Show this help text.\n  --version  Show the application version.",
+        "Usage:\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] [path ...]\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] --compare <left>..<right> [<left>..<right> ...]\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] --no-github-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] --no-pr-diff-cache <github-diff-url>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] [--no-github-diff-cache] github:<owner>/<repo> <pr-id|sha|commit:sha|base...head>\n  {binary_name} [--verbose] [--csv-first-row-header=true|false] <git-dir> <commit-or-range>\n  {binary_name} --help\n  {binary_name} --version\n\nIf no paths are provided, chilla opens the current working directory in file view mode.\nIf a GitHub pull request, commit, or compare URL is provided, chilla opens that GitHub diff in read-only mode.\nGitHub .diff and .patch URL forms are also supported.\nThe github: shorthand accepts a positive decimal PR number, a 4-40 character hexadecimal SHA, commit:<sha>, or <base>...<head> (slash refs supported). Use commit:<sha> for all-numeric SHAs.\nIf a Git directory plus commit or range is provided, chilla opens that local Git diff in read-only mode.\nGitHub diffs are cached under the system temp directory and refreshed when GitHub reports a newer updated marker.\n--no-pr-diff-cache remains supported as a compatibility alias for --no-github-diff-cache.\nIf two file paths are provided, chilla shows them side by side. If three or more file paths are provided, chilla opens file view mode with the left pane limited to those files.\n--compare LEFT..RIGHT [LEFT..RIGHT ...] opens each pair in a pair list; each SPEC must split at exactly one \"..\" into two existing files.\n\nCSV header option:\n  --csv-first-row-header=true|false  Set the launch-wide default for every CSV preview (default: false). For example: {binary_name} --csv-first-row-header=true report.csv\n\nOptions:\n  --verbose  Write startup and file-I/O diagnostics to {} and mirror them to an attached terminal.\n  --help     Show this help text.\n  --version  Show the application version.",
         verbose_log::VERBOSE_LOG_PATH_PATTERN,
     )
 }

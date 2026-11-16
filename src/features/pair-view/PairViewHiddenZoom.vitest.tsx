@@ -1,7 +1,9 @@
+import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FilePreview } from "../../lib/tauri/document";
 import { PairView } from "./PairView";
+import type { PairPaneVisibility } from "./pairPaneVisibility";
 
 vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (path: string) => `asset://localhost/${path}`,
@@ -46,18 +48,21 @@ function preview(kind: PreviewKind, path: string): FilePreview {
 async function mount(kind: PreviewKind): Promise<HTMLElement> {
   const root = document.createElement("div");
   document.body.append(root);
-  dispose = render(
-    () => (
+  dispose = render(() => {
+    const [visibility, setVisibility] =
+      createSignal<PairPaneVisibility>("both");
+    return (
       <PairView
         leftPath="/before"
         rightPath="/after"
+        visibility={visibility()}
+        onChangeVisibility={setVisibility}
         colorScheme="dark"
         fileOpenOptions={{ csv_first_row_as_header: true }}
         loadPreview={async (path) => preview(kind, path)}
       />
-    ),
-    root,
-  );
+    );
+  }, root);
   await vi.waitFor(() => {
     expect(root.querySelectorAll(".preview__zoom-surface")).toHaveLength(2);
     expect(root.textContent).not.toContain("Loading...");

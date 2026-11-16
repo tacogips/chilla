@@ -8,7 +8,7 @@ use std::{
 
 use super::{
     normalize_cli, parse_cli, parse_normalized_cli, CliNormalizationOutcome, CliParseOutcome,
-    StartupRequest, StartupTarget,
+    FilePairPaths, StartupRequest, StartupTarget,
 };
 use crate::{
     git_diff::GitDiffSource as LocalGitDiffSource, github_pr_diff::GitHubDiffSource, verbose_log,
@@ -399,7 +399,7 @@ fn csv_first_row_header_option_survives_startup_target_matrix() {
         .expect("file-set startup"),
     );
     assert!(file_set.file_open_options.csv_first_row_as_header);
-    assert!(matches!(file_set.target, StartupTarget::FilePair { .. }));
+    assert!(matches!(file_set.target, StartupTarget::FilePairs { .. }));
 
     run_git(test_dir.path(), &["init"]);
     run_git(
@@ -828,10 +828,15 @@ fn parses_multi_file_startup_targets() {
 
     match outcome {
         CliParseOutcome::Run(StartupRequest {
-            target: StartupTarget::FilePair { left, right },
+            target:
+                StartupTarget::FilePairs {
+                    first: FilePairPaths { left, right },
+                    rest,
+                },
             ..
         }) => {
             assert_eq!((left, right), (first_canon, second_canon));
+            assert!(rest.is_empty());
         }
         _ => panic!("unexpected parse outcome"),
     }
@@ -854,9 +859,12 @@ fn positional_count_and_deduplication_choose_pair_or_file_set() {
     let arg = |p: &std::path::PathBuf| p.as_os_str().to_os_string();
     assert_eq!(
         parse(vec!["chilla".into(), arg(&b), arg(&a)]),
-        StartupTarget::FilePair {
-            left: bc.clone(),
-            right: ac.clone()
+        StartupTarget::FilePairs {
+            first: FilePairPaths {
+                left: bc.clone(),
+                right: ac.clone()
+            },
+            rest: vec![]
         }
     );
     assert_eq!(
@@ -897,7 +905,7 @@ fn verbose_composes_with_multi_file_startup_when_interspersed() {
     assert!(matches!(
         outcome,
         CliParseOutcome::Run(StartupRequest {
-            target: StartupTarget::FilePair { .. },
+            target: StartupTarget::FilePairs { .. },
             ..
         })
     ));
@@ -932,7 +940,7 @@ fn verbose_multi_file_canonicalization_success_logs_canonical_paths() {
     assert!(matches!(
         outcome.expect("parse relative multi-file startup"),
         CliParseOutcome::Run(StartupRequest {
-            target: StartupTarget::FilePair { .. },
+            target: StartupTarget::FilePairs { .. },
             ..
         })
     ));
@@ -1039,4 +1047,87 @@ fn git_output(repo: &Path, args: &[&str]) -> String {
         .expect("run git");
     assert!(output.status.success(), "git command failed: {args:?}");
     String::from_utf8_lossy(&output.stdout).to_string()
+}
+
+#[test]
+fn compare_specs_resolve_deduplicate_and_keep_order() {
+    let dir = TestDir::new();
+    let a = dir.path().join("a");
+    let b = dir.path().join("b");
+    let c = dir.path().join("c");
+    let d = dir.path().join("d");
+    for p in [&a, &b, &c, &d] {
+        fs::write(p, "x").expect("fixture");
+    }
+    let ab = format!("{}..{}", a.display(), b.display());
+    let alias = format!("{}/./a..{}", dir.path().display(), b.display());
+    let ba = format!("{}..{}", b.display(), a.display());
+    let cd = format!("{}..{}", c.display(), d.display());
+    let request = startup_request(
+        parse_cli([
+            "chilla",
+            "--verbose",
+            "--compare",
+            &ab,
+            &ab,
+            &alias,
+            &cd,
+            &ba,
+            "--csv-first-row-header=true",
+        ])
+        .expect("parse"),
+    );
+    assert!(request.file_open_options.csv_first_row_as_header);
+    assert_eq!(
+        request.target,
+        StartupTarget::FilePairs {
+            first: FilePairPaths {
+                left: a.canonicalize().unwrap(),
+                right: b.canonicalize().unwrap()
+            },
+            rest: vec![
+                FilePairPaths {
+                    left: c.canonicalize().unwrap(),
+                    right: d.canonicalize().unwrap()
+                },
+                FilePairPaths {
+                    left: b.canonicalize().unwrap(),
+                    right: a.canonicalize().unwrap()
+                }
+            ]
+        }
+    );
+}
+
+#[test]
+fn compare_split_and_usage_errors() {
+    let dir = TestDir::new();
+    let sub = dir.path().join("sub");
+    fs::create_dir(&sub).unwrap();
+    for name in ["x.png", "y.png", "a", ".b", "a.", "b"] {
+        fs::write(dir.path().join(name), "x").unwrap();
+    }
+    let pair = super::resolve_compare_spec("../x.png..../y.png", &sub).unwrap();
+    assert_eq!(pair.left, dir.path().join("x.png").canonicalize().unwrap());
+    assert_eq!(pair.right, dir.path().join("y.png").canonicalize().unwrap());
+    let err = super::resolve_compare_spec("a...b", dir.path()).unwrap_err();
+    assert_eq!(err.exit_code(), 2);
+    let message = err.to_string();
+    assert!(message.contains("\"a\" .. \".b\""));
+    assert!(message.contains("\"a.\" .. \"b\""));
+    for spec in ["x..missing", "nodots", "a..sub", "a..a"] {
+        let err = super::resolve_compare_spec(spec, dir.path()).unwrap_err();
+        assert_eq!(err.exit_code(), 2);
+        assert!(err.to_string().contains(spec));
+    }
+    assert_eq!(
+        parse_cli(["chilla", "--compare"]).unwrap_err().exit_code(),
+        2
+    );
+    assert_eq!(
+        parse_cli(["chilla", "a", "--compare", "b..c"])
+            .unwrap_err()
+            .exit_code(),
+        2
+    );
 }

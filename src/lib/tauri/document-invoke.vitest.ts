@@ -13,6 +13,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 import {
   detectGitRepository,
   listDirectory,
+  listExplicitFileSet,
   loadGitDiff,
   loadGitDiffFileText,
   loadPrDiff,
@@ -71,6 +72,37 @@ describe("listDirectory", () => {
     );
 
     expect(invokeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("listExplicitFileSet", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("sends the explicit file-set request without sourceOrder", async () => {
+    const paths = ["/workspace/a", "/workspace/b"];
+    const sort: DirectoryListSort = { field: "name", direction: "asc" };
+    const response = {
+      entries: [],
+      total_entry_count: 0,
+      offset: 0,
+      limit: 200,
+      has_more: false,
+    };
+    invokeMock.mockResolvedValue(response);
+
+    await expect(listExplicitFileSet(paths, sort, "", 0, 200)).resolves.toEqual(
+      response,
+    );
+    expect(invokeMock).toHaveBeenCalledWith("list_explicit_file_set", {
+      paths,
+      sort,
+      query: "",
+      offset: 0,
+      limit: 200,
+    });
+    expect(invokeMock.mock.calls[0]?.[1]).not.toHaveProperty("sourceOrder");
   });
 });
 

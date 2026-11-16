@@ -2,7 +2,7 @@ use std::fs;
 
 use super::{TestDir, ViewerService};
 use crate::{
-    cli::StartupTarget,
+    cli::{FilePairPaths, StartupTarget},
     git_diff::{GitDiffSource, GitDiffTarget},
     github_pr_diff::GitHubPrTarget,
     viewer::types::FileOpenOptions,
@@ -30,9 +30,12 @@ fn startup_context_retains_explicit_options_for_every_target_kind() {
         (StartupTarget::Directory(directory.clone()), false),
         (StartupTarget::File(first_file.clone()), true),
         (
-            StartupTarget::FilePair {
-                left: first_file.clone(),
-                right: second_file.clone(),
+            StartupTarget::FilePairs {
+                first: FilePairPaths {
+                    left: first_file.clone(),
+                    right: second_file.clone(),
+                },
+                rest: vec![],
             },
             true,
         ),

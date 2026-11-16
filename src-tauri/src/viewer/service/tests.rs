@@ -13,7 +13,7 @@ mod structured_format_tests;
 use super::test_epub::{write_test_epub, write_test_epub_with_toc_mode, EpubFixtureTocMode};
 use super::{fallback_media_mime_type, ViewerService};
 use crate::{
-    cli::StartupTarget,
+    cli::{FilePairPaths, StartupTarget},
     error::AppError,
     syntax_highlight::SyntaxUiTheme,
     verbose_log,
@@ -192,9 +192,15 @@ fn startup_context_file_pair_serializes_paths_and_mode() {
     let left = std::path::PathBuf::from("/tmp/left.txt");
     let right = std::path::PathBuf::from("/tmp/right.txt");
     let context = ViewerService::new()
-        .startup_context(&StartupTarget::FilePair {
-            left: left.clone(),
-            right: right.clone(),
+        .startup_context(&StartupTarget::FilePairs {
+            first: FilePairPaths {
+                left: left.clone(),
+                right: right.clone(),
+            },
+            rest: vec![FilePairPaths {
+                left: right.clone(),
+                right: left.clone(),
+            }],
         })
         .expect("startup context");
     assert_eq!(context.initial_mode, WorkspaceMode::FileView);
@@ -202,13 +208,14 @@ fn startup_context_file_pair_serializes_paths_and_mode() {
     assert_eq!(value["initial_mode"], "file_view");
     assert_eq!(value["browser_root"]["kind"], "file_pair");
     assert_eq!(
-        value["browser_root"]["left_file_path"],
+        value["browser_root"]["pairs"][0]["left_file_path"],
         left.display().to_string()
     );
     assert_eq!(
-        value["browser_root"]["right_file_path"],
-        right.display().to_string()
+        value["browser_root"]["pairs"][1]["right_file_path"],
+        left.display().to_string()
     );
+    assert!(value["browser_root"].get("left_file_path").is_none());
 }
 
 #[test]

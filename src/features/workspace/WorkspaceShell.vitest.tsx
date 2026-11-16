@@ -588,6 +588,15 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       expectVisibility(false);
       button.click();
       expectVisibility(true);
+      const collapse = document
+        .querySelector(selector)
+        ?.closest(".pane")
+        ?.querySelector<HTMLButtonElement>(".pane__collapse");
+      expect(collapse?.getAttribute("aria-label")).toBe("Collapse left pane");
+      collapse?.click();
+      expectVisibility(false);
+      button.click();
+      expectVisibility(true);
       if (kind !== "directory") {
         expect(
           kind === "git_diff"
@@ -2650,15 +2659,208 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     },
   );
 
-  it("opens and reloads both pair previews without a file browser", async () => {
-    const paths = ["/workspace/left.txt", "/workspace/right.txt"];
+  it("starts folded, selects pairs, preserves visibility and reloads the shown pair", async () => {
+    const pairs = [
+      {
+        left_file_path: "/workspace/a.png",
+        right_file_path: "/workspace/b.png",
+      },
+      {
+        left_file_path: "/workspace/c.png",
+        right_file_path: "/workspace/d.png",
+      },
+    ];
+    documentMocks.getStartupContext.mockResolvedValue({
+      initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
+      browser_root: { kind: "file_pair", pairs },
+    });
+    documentMocks.openFilePreview.mockImplementation(async (path: string) => ({
+      ...textPreview(),
+      path,
+    }));
+    dispose = renderWorkspace();
+    await waitFor(() =>
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2),
+    );
+    expect(
+      documentMocks.openFilePreview.mock.calls.map((call) => call[0]),
+    ).toEqual(["/workspace/a.png", "/workspace/b.png"]);
+    expect(
+      document.querySelector('[data-pair-pane="left"] .pair-view__name')
+        ?.textContent,
+    ).toBe("a.png");
+    expect(
+      document.querySelector('[data-pair-pane="right"] .pair-view__name')
+        ?.textContent,
+    ).toBe("b.png");
+    expect(documentMocks.listExplicitFileSet).not.toHaveBeenCalled();
+    expect(documentMocks.listDirectory).not.toHaveBeenCalled();
+    expect(document.querySelector(".pair-list")).toBeNull();
+    expect(document.querySelector(".file-browser")).toBeNull();
+    expect(document.querySelector(".workspace__expand-tab")).not.toBeNull();
+    modeButton("Expand left pane").click();
+    const rows = () =>
+      Array.from(
+        document.querySelectorAll<HTMLButtonElement>(
+          '.pair-list [role="option"]',
+        ),
+      );
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    expect(rows()[0]?.getAttribute("aria-selected")).toBe("true");
+    rows()[1]?.click();
+    await waitFor(() =>
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(4),
+    );
+    expect(rows()[1]?.getAttribute("aria-selected")).toBe("true");
+    expect(
+      document.querySelector('[data-pair-pane="left"] .pair-view__name')
+        ?.textContent,
+    ).toBe("c.png");
+    expect(
+      document.querySelector('[data-pair-pane="right"] .pair-view__name')
+        ?.textContent,
+    ).toBe("d.png");
+    const key = (key: string, target: EventTarget = window) =>
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key,
+          shiftKey: key === "{" || key === "}" || key === "L",
+          bubbles: true,
+        }),
+      );
+    rows()[1]?.focus();
+    key("k");
+    await waitFor(() =>
+      expect(rows()[0]?.getAttribute("aria-selected")).toBe("true"),
+    );
+    key("}");
+    expect(
+      document
+        .querySelector('[data-pair-pane="right"]')
+        ?.hasAttribute("hidden"),
+    ).toBe(true);
+    key("j");
+    await waitFor(() =>
+      expect(rows()[1]?.getAttribute("aria-selected")).toBe("true"),
+    );
+    expect(
+      document
+        .querySelector('[data-pair-pane="right"]')
+        ?.hasAttribute("hidden"),
+    ).toBe(true);
+    key("{");
+    expect(
+      document.querySelector('[data-pair-pane="left"]')?.hasAttribute("hidden"),
+    ).toBe(false);
+    key("}");
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+    key("{", input);
+    key("}", input);
+    expect(
+      document.querySelector('[data-pair-pane="left"]')?.hasAttribute("hidden"),
+    ).toBe(false);
+    expect(
+      document
+        .querySelector('[data-pair-pane="right"]')
+        ?.hasAttribute("hidden"),
+    ).toBe(false);
+    input.remove();
+    const before = documentMocks.openFilePreview.mock.calls.length;
+    key("r");
+    await waitFor(() =>
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(before + 2),
+    );
+    expect(
+      documentMocks.openFilePreview.mock.calls.slice(-2).map((call) => call[0]),
+    ).toEqual(["/workspace/c.png", "/workspace/d.png"]);
+    expect(
+      document.querySelector(
+        "[data-pair-active], .pair-view__pane--active, [data-pair-marker]",
+      ),
+    ).toBeNull();
+    document
+      .querySelector<HTMLButtonElement>(
+        '.pair-list [aria-label="Collapse left pane"]',
+      )
+      ?.click();
+    expect(document.querySelector(".pair-list")).toBeNull();
+    document
+      .querySelector<HTMLButtonElement>(".workspace__expand-tab")
+      ?.click();
+    expect(document.querySelector(".pair-list")).not.toBeNull();
+    modeButton("Collapse left pane").click();
+    expect(document.querySelector(".pair-list")).toBeNull();
+    key("L");
+    expect(document.querySelector(".pair-list")).not.toBeNull();
+    key("L");
+    expect(document.querySelector(".pair-list")).toBeNull();
+  });
+
+  it("keeps the pair list mounted and focused during selection and visibility changes", async () => {
+    const pairs = [
+      { left_file_path: "/workspace/a", right_file_path: "/workspace/b" },
+      { left_file_path: "/workspace/c", right_file_path: "/workspace/d" },
+      { left_file_path: "/workspace/e", right_file_path: "/workspace/f" },
+    ];
+    documentMocks.getStartupContext.mockResolvedValue({
+      initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
+      browser_root: { kind: "file_pair", pairs },
+    });
+    documentMocks.openFilePreview.mockImplementation(async (path: string) => ({
+      ...textPreview(),
+      path,
+    }));
+    dispose = renderWorkspace();
+    await waitFor(() =>
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2),
+    );
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "L", shiftKey: true, bubbles: true }),
+    );
+    const list = document.querySelector(".pair-list");
+    expect(list).not.toBeNull();
+    const first = list?.querySelector<HTMLButtonElement>(
+      '[data-pair-index="0"]',
+    );
+    expect(first).not.toBeNull();
+    first?.focus();
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "j", bubbles: true }),
+    );
+    await waitFor(() => {
+      expect(document.querySelector(".pair-list")).toBe(list);
+      expect(document.activeElement?.getAttribute("data-pair-index")).toBe("1");
+      expect(document.activeElement?.getAttribute("aria-selected")).toBe(
+        "true",
+      );
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(4);
+    });
+    expect(
+      new Set(
+        documentMocks.openFilePreview.mock.calls
+          .slice(-2)
+          .map((call) => call[0]),
+      ),
+    ).toEqual(new Set(["/workspace/c", "/workspace/d"]));
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "}", shiftKey: true, bubbles: true }),
+    );
+    expect(document.querySelector(".pair-list")).toBe(list);
+  });
+
+  it("starts a single pair folded and opens its list", async () => {
     documentMocks.getStartupContext.mockResolvedValue({
       initial_mode: "file_view",
       file_open_options: { csv_first_row_as_header: false },
       browser_root: {
         kind: "file_pair",
-        left_file_path: paths[0],
-        right_file_path: paths[1],
+        pairs: [
+          { left_file_path: "/workspace/a", right_file_path: "/workspace/b" },
+        ],
       },
     });
     documentMocks.openFilePreview.mockImplementation(async (path: string) => ({
@@ -2666,34 +2868,34 @@ describe("WorkspaceShell numeric view shortcuts", () => {
       path,
     }));
     dispose = renderWorkspace();
-    await waitFor(() => {
-      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2);
-      expect(
-        document.querySelector('[data-testid="pair-view"]'),
-      ).not.toBeNull();
-    });
-    expect(
-      Array.from(document.querySelectorAll("[data-pair-pane]"), (pane) =>
-        pane.getAttribute("data-pair-pane"),
-      ),
-    ).toEqual(["left", "right"]);
-    expect(
-      documentMocks.openFilePreview.mock.calls.map((call) => call[0]),
-    ).toEqual(paths);
-    expect(documentMocks.listDirectory).not.toHaveBeenCalled();
-    expect(documentMocks.listExplicitFileSet).not.toHaveBeenCalled();
-    expect(document.querySelector(".file-browser")).toBeNull();
-    expect(document.querySelector(".toc-pane")).toBeNull();
-    expect(document.querySelector(".workspace__expand-tab")).toBeNull();
-    modeButton("Expand left pane").click();
-    expect(document.querySelector(".file-browser")).toBeNull();
-    modeButton("Refresh workspace").click();
     await waitFor(() =>
-      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(4),
+      expect(documentMocks.openFilePreview).toHaveBeenCalledTimes(2),
     );
+    expect(document.querySelector(".pair-list")).toBeNull();
+    modeButton("Expand left pane").click();
     expect(
-      documentMocks.openFilePreview.mock.calls.map((call) => call[0]),
-    ).toEqual([...paths, ...paths]);
+      document.querySelectorAll('.pair-list [role="option"]'),
+    ).toHaveLength(1);
+  });
+
+  it("ignores pair pane shortcuts in directory mode", async () => {
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(null),
+    );
+    documentMocks.listDirectory.mockResolvedValue(emptyDirectoryPage());
+    dispose = renderWorkspace();
+    await waitForElement(".file-browser");
+    for (const key of ["{", "}"]) {
+      const event = new KeyboardEvent("keydown", {
+        key,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      window.dispatchEvent(event);
+    }
+    expect(document.querySelector(".file-browser")).not.toBeNull();
+    expect(document.querySelector('[data-testid="pair-view"]')).toBeNull();
   });
 
   it("refreshes a directory when no file is open", async () => {

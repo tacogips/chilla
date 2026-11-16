@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  initialPairState,
+  selectPair,
+  selectedPair,
+  setPairVisibility,
+  togglePairPane,
   canHidePairPane,
   hidePairPane,
   isPairPaneVisible,
@@ -47,5 +52,47 @@ describe("pair pane visibility", () => {
       }
     };
     walk("both", 4);
+  });
+});
+
+describe("pair state", () => {
+  it("toggles every visibility and preserves at least one pane through sequences", () => {
+    const expected = [
+      ["right_only", "left_only"],
+      ["left_only", "both"],
+      ["both", "right_only"],
+    ] as const;
+    const states: PairPaneVisibility[] = ["both", "left_only", "right_only"];
+    for (const [index, state] of states.entries()) {
+      expect(togglePairPane(state, "left")).toBe(expected[index]?.[0]);
+      expect(togglePairPane(state, "right")).toBe(expected[index]?.[1]);
+    }
+    const walk = (state: PairPaneVisibility, depth: number): void => {
+      expect(
+        isPairPaneVisible(state, "left") || isPairPaneVisible(state, "right"),
+      ).toBe(true);
+      if (depth > 0)
+        for (const side of ["left", "right"] as const)
+          walk(togglePairPane(state, side), depth - 1);
+    };
+    for (const state of states) walk(state, 4);
+  });
+
+  it("selects pairs without changing visibility and rejects invalid indices", () => {
+    const pairs = [
+      { left_file_path: "a", right_file_path: "b" },
+      { left_file_path: "c", right_file_path: "d" },
+    ];
+    const initial = initialPairState(pairs);
+    expect(initial).toEqual({ pairs, selectedIndex: 0, visibility: "both" });
+    expect(selectedPair(initial)).toBe(pairs[0]);
+    for (const index of [0, 2, -1, 0.5])
+      expect(selectPair(initial, index)).toBe(initial);
+    const hidden = setPairVisibility(initial, "right_only");
+    const next = selectPair(hidden, 1);
+    expect(next.visibility).toBe("right_only");
+    expect(next.selectedIndex).toBe(1);
+    expect(selectedPair(next)).toBe(pairs[1]);
+    expect(selectedPair(initialPairState([]))).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 # Pair Compare: TypeScript Startup Contract
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: pair-compare-ts-contract
 **Wave**: 1 (dependsOn: none)
 **Design Reference**: design-docs/specs/design-pair-view.md (Startup Payload Contract, Validation/TypeScript)
@@ -115,13 +115,23 @@ mutating git commands).
 
 ## Completion Criteria
 
-- [ ] `FilePairPaths` exported; `file_pair` variant uses `pairs`
-- [ ] Normalizer accepts snake and camel case and rejects malformed input
-- [ ] `listExplicitFileSet` has the `9aa3772` signature
-- [ ] Owned vitest files pass; biome passes; no tsc errors in owned files
+- [x] `FilePairPaths` exported; `file_pair` variant uses `pairs`
+- [x] Normalizer accepts snake and camel case and rejects malformed input
+- [x] `listExplicitFileSet` has the `9aa3772` signature
+- [x] Owned vitest files pass; biome passes; no tsc errors in owned files
 
 ## Progress Log
 
 ### Session: 2026-11-16
 **Tasks Completed**: Plan created
 **Notes**: Supersedes pair-multi-ts-contract.
+
+
+### Session: 2026-11-16 — implementation
+**Tasks Completed**: Ordered pair contract, validation, explicit file-set invoke restoration and focused tests.
+**Verification**: Vitest 45 passed; biome passed; tsc reported no `src/lib/tauri/` diagnostics (other workspace diagnostics remain downstream). Logs are under `tmp/pair-compare-20261116-01/pair-compare-ts-contract/attempt-1/`. Formal review and workflow finalization remain downstream.
+**SHA-256 before → after**:
+- `src/lib/tauri/document.ts`: `3512ea83cb15b895477b899884de9bed82409cafb66c45fb10122a3876b216a5` → `dc921af434ef3568eb21be449bf0da107587ee1950d012db250bbabb9a5a1f2d`
+- `src/lib/tauri/document.vitest.ts`: `0b24a8d0c290920a158727dc7b376d18cb181928588efb64f4ebde4e8c524da8` → `e73d29dbfce8b81de03c070c89004ac7418ab619ba1a81c022ab0c54904d6a23`
+- `src/lib/tauri/document-invoke.vitest.ts`: `7d8b502cdf3a9d6b5cad5430a8e861606c95410dd91fef6676694f3a1915c5f9` → `80c6e5a77f8bac9f4354dc0fb7b04f1dd2e8da4e76ee20587cedceab9fc9a432`
+- This plan before: `6d74ca1e317da071ee71704d2c42f2b1bb46a98ed2701f7a3ea4995d069724b9`; its after hash is recorded in `attempt-1/plan-after.sha256` to avoid a self-referential digest.

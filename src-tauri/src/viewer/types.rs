@@ -13,6 +13,12 @@ pub enum WorkspaceMode {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct FilePairEntry {
+    pub left_file_path: String,
+    pub right_file_path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum BrowserRoot {
     Directory {
@@ -25,8 +31,7 @@ pub enum BrowserRoot {
         source_order_paths: Vec<String>,
     },
     FilePair {
-        left_file_path: String,
-        right_file_path: String,
+        pairs: Vec<FilePairEntry>,
     },
     #[serde(rename = "github_pr")]
     GitHubPr {

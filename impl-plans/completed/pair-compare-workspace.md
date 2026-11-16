@@ -1,6 +1,6 @@
 # Pair Compare: WorkspaceShell Integration
 
-**Status**: In Progress
+**Status**: Completed
 **Plan ID**: pair-compare-workspace
 **Wave**: 2 (dependsOn: pair-compare-ts-contract, pair-compare-pair-view, pair-compare-file-browser)
 **Design Reference**: design-docs/specs/design-pair-view.md (State Ownership, Workspace Integration, Pane Toggle Shortcuts, Validation/TypeScript WorkspaceShell)
@@ -168,7 +168,7 @@ Test cases:
 - [x] Pair startup uses `pairs` and renders PairListPane / PairView
 - [x] All rejected-model code removed from the workspace files
 - [x] Workspace tests rewritten and passing under configured Node 22
-- [ ] typecheck, vitest, biome, and the word-bounded grep checks pass
+- [x] typecheck, vitest, biome, and the word-bounded grep checks pass
       (`sourceOrderPaths` retained)
 
 ## Progress Log
@@ -244,3 +244,29 @@ undefined under the bunx/Bun runtime). The Node-run vitest passes 95/95.
 The existing implementation is kept. Re-run the amended gates on the current
 tree, record exit codes, log paths and sha256 values in the progress log, and
 set the status once all gates pass.
+
+### Session: 2026-11-16 (amended verification)
+**Tasks Completed**: Confirmed workspace integration and added explicit initial
+preview-path and editable-field shortcut assertions. Implementation criteria
+are complete; formal review remains downstream.
+**Verification**: `bun run typecheck` exit 0 (`attempt-2/typecheck-final2.log`);
+`mise exec -- node node_modules/vitest/vitest.mjs run --config vitest.config.ts src/features/workspace`
+exit 0, 95 passed (`attempt-2/vitest-final2.log`); `bunx biome check src/features/workspace`
+exit 0 (`attempt-2/biome-final2.log`); amended word-bounded grep exit 1 with
+no matches (`attempt-2/grep-final2.log`). Logs are under
+`tmp/pair-compare-20261116-01/pair-compare-workspace/`.
+**SHA256 before and after**: The initial hashes for all owned files and
+consumed contracts are in `attempt-2/hashes-before.txt`; the final source
+hashes are in `attempt-2/hashes-pre-plan.txt` under the same evidence root.
+The test file changed from `3a8014515c6501ca62f87efae3e42e995cfd1a8117d5565e0641c26c871300a8`
+to `3d5e17ebddd52409a9d07d7c54cea280ff3c48a2f8362070b3358aca2f22514d`.
+The plan's before and after hashes are in `attempt-2/hashes-before.txt` and
+`attempt-2/plan-after.sha256`, respectively. Other listed hashes are unchanged.
+
+### Session: 2026-11-16 (integration review repair INT-PCW-KEYED-REMOUNT-01)
+**Tasks Completed**: Removed the keyed pair-list conditional and used reactive accessors, preserving the mounted list and focus. Added a three-pair regression for selection, preview paths, and visibility changes. Formal review and GUI verification remain downstream.
+**SHA256 before / after**:
+- `src/features/workspace/WorkspaceShell.tsx`: `495a5b70d788cce8d0fb8dfdcc25ac595de33fab97cb1ca4a6726e16a2161c1c` / `e359fb1eccf3e59581051765828d1fdaa5ec7d99db4b302737fb5316e8111354`
+- `src/features/workspace/WorkspaceShell.vitest.tsx`: `3d5e17ebddd52409a9d07d7c54cea280ff3c48a2f8362070b3358aca2f22514d` / `e5adf10bcb38ca0cfb26c1ddbfccb6f4204e269f872490e482a09c10b9fcd9c4`
+- This plan before: `4ba946031b670d5c6d72f11e77805860dcea418d701c57f544975bed38f76891`; after hash recorded in `attempt-3/plan-after.sha256` to avoid self-reference. Per-edit snapshots and intentions are in `attempt-3/`.
+**Verification**: `bun run typecheck` exit 0 (`attempt-3/typecheck-final2.log`); Node workspace vitest exit 0, 96 passed (`attempt-3/workspace-vitest-final2.log`); full Node vitest exit 0, 546 passed (`attempt-3/full-vitest-final2.log`); `bunx biome check src/features/workspace` exit 0 (`attempt-3/biome-final2.log`); amended word-bounded grep exit 1 with no matches (`attempt-3/grep-final2.log`). Logs are under `tmp/pair-compare-20261116-01/pair-compare-workspace/`. Earlier workspace regression failed due to asynchronous preview ordering (`attempt-3/workspace-vitest.log`); the assertion was corrected. Earlier Biome formatting failed (`attempt-3/biome-final.log`); formatting was corrected.

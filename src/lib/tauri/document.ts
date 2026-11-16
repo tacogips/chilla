@@ -120,6 +120,11 @@ export type DiffWorkspaceTarget =
       readonly target: GitDiffTarget;
     };
 
+export interface FilePairPaths {
+  readonly left_file_path: string;
+  readonly right_file_path: string;
+}
+
 export type BrowserRoot =
   | {
       readonly kind: "directory";
@@ -128,8 +133,7 @@ export type BrowserRoot =
     }
   | {
       readonly kind: "file_pair";
-      readonly left_file_path: string;
-      readonly right_file_path: string;
+      readonly pairs: readonly FilePairPaths[];
     }
   | {
       readonly kind: "explicit_file_set";
@@ -836,27 +840,25 @@ export function normalizeStartupContextPayload(
   }
 
   if (kind === "file_pair" || kind === "filePair") {
-    const leftFilePath = readStringProperty(
-      browserRootRaw,
-      "left_file_path",
-      "leftFilePath",
-    );
-    const rightFilePath = readStringProperty(
-      browserRootRaw,
-      "right_file_path",
-      "rightFilePath",
-    );
-    if (leftFilePath === null || rightFilePath === null) {
+    const rawPairs = browserRootRaw["pairs"];
+    if (!Array.isArray(rawPairs) || rawPairs.length === 0) {
       throw new Error("Startup file-pair payload is missing required paths");
     }
+    const pairs = rawPairs.map((entry: unknown): FilePairPaths => {
+      const pair = readStringRecord(entry);
+      const leftFilePath =
+        pair && readStringProperty(pair, "left_file_path", "leftFilePath");
+      const rightFilePath =
+        pair && readStringProperty(pair, "right_file_path", "rightFilePath");
+      if (leftFilePath === null || rightFilePath === null) {
+        throw new Error("Startup file-pair payload is missing required paths");
+      }
+      return { left_file_path: leftFilePath, right_file_path: rightFilePath };
+    });
     return {
       initial_mode: initialMode,
       file_open_options: fileOpenOptions,
-      browser_root: {
-        kind: "file_pair",
-        left_file_path: leftFilePath,
-        right_file_path: rightFilePath,
-      },
+      browser_root: { kind: "file_pair", pairs },
     };
   }
 

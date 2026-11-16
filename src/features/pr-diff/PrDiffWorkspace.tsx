@@ -1,3 +1,4 @@
+import { CollapsePaneButton } from "../workspace/CollapsePaneButton";
 import {
   For,
   Show,
@@ -60,6 +61,8 @@ type DiffViewMode = "left_right" | "full_file" | "stack" | "image";
 interface PrDiffWorkspaceProps {
   readonly target: DiffWorkspaceTarget;
   readonly isFileTreeOpen?: boolean;
+  /** When set, the changed-files header shows a button that folds the pane. */
+  readonly onCollapseFileTree?: () => void;
   readonly onReloadReady?: (reload: (() => Promise<void>) | null) => void;
 }
 
@@ -1479,7 +1482,12 @@ export function PrDiffWorkspace(props: PrDiffWorkspaceProps) {
         inert={props.isFileTreeOpen === false}
       >
         <header class="pane__header">
-          <span class="pane__title">Changed Files</span>
+          <span class="pane__header-lead">
+            <Show when={props.onCollapseFileTree} keyed>
+              {(onCollapse) => <CollapsePaneButton onCollapse={onCollapse} />}
+            </Show>
+            <span class="pane__title">Changed Files</span>
+          </span>
           <span>{files().length} files</span>
         </header>
         <div class="pane__body pr-browser__body">

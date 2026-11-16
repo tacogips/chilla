@@ -375,9 +375,10 @@ Commands:
   more positional files keep the pre-0.5 explicit file list.
 - Users with a custom `workspace` keymap section that replaces the defaults do
   not get `{` / `}` until they add them (existing keymap behavior).
-- The `impl-plans/active/pair-multi-*.md` plans and
-  `impl-plans/active/pair-multi-20261116-01-dispatch.json` describe the
-  rejected model and are superseded by new plans derived from this document.
+- The former `impl-plans/active/pair-multi-*.md` plans and
+  `impl-plans/active/pair-multi-20261116-01-dispatch.json` described the
+  rejected model; they were removed and superseded by the
+  `impl-plans/completed/pair-compare-*.md` plans derived from this document.
 - `README.md` documents `--compare`, the pair list, the fold controls, and
   `{` / `}`, and drops the active pane and `L` / `R` markers.
 - Default decisions still open for user confirmation are listed in

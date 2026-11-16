@@ -25,6 +25,54 @@ describe("FileBrowserPane", () => {
     document.body.innerHTML = "";
   });
 
+  it("shows the collapse button only when onCollapse is provided", () => {
+    const root = document.getElementById("root");
+    if (root === null) throw new Error("missing test root");
+    const onCollapse = vi.fn();
+    const renderPane = (withCollapse: boolean) =>
+      render(
+        () => (
+          <FileBrowserPane
+            active={true}
+            listingKind="directory"
+            directory={{
+              current_directory_path: "/workspace",
+              parent_directory_path: "/",
+              entries: [],
+              total_entry_count: 0,
+            }}
+            sort={{ field: "name", direction: "asc" }}
+            query=""
+            hideGitIgnored={false}
+            selectedPath={null}
+            canLoadMore={false}
+            isLoadingMore={false}
+            {...(withCollapse ? { onCollapse } : {})}
+            onChangeQuery={() => {}}
+            onChangeSort={() => {}}
+            onLoadMore={() => {}}
+            onSelectEntry={() => {}}
+            onConfirmEntry={() => {}}
+            onNavigateToParent={() => {}}
+            onToggleGitIgnored={() => {}}
+          />
+        ),
+        root,
+      );
+    dispose = renderPane(true);
+    const button = root.querySelector<HTMLButtonElement>(
+      'button[aria-label="Collapse left pane"]',
+    );
+    expect(button).not.toBeNull();
+    button?.click();
+    expect(onCollapse).toHaveBeenCalledTimes(1);
+    dispose();
+    dispose = renderPane(false);
+    expect(
+      root.querySelector('button[aria-label="Collapse left pane"]'),
+    ).toBeNull();
+  });
+
   it("refocuses search with s/Shift+S and retains separate queries across mode switches and reopen", async () => {
     const root = document.getElementById("root");
     if (root === null) throw new Error("missing test root");

@@ -1,4 +1,12 @@
-import { createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  type JSX,
+} from "solid-js";
 import {
   openFilePreview,
   type FileOpenOptions,
@@ -20,6 +28,8 @@ import "./PairView.css";
 export interface PairViewProps {
   readonly leftPath: string;
   readonly rightPath: string;
+  readonly visibility: PairPaneVisibility;
+  readonly onChangeVisibility: (next: PairPaneVisibility) => void;
   readonly colorScheme: ColorScheme;
   readonly fileOpenOptions: FileOpenOptions;
   readonly localResourceGeneration?: number;
@@ -31,7 +41,6 @@ export interface PairViewProps {
 }
 
 export function PairView(props: PairViewProps): JSX.Element {
-  const [visibility, setVisibility] = createSignal<PairPaneVisibility>("both");
   const [leftPreview, setLeftPreview] = createSignal<FilePreview | null>(null);
   const [rightPreview, setRightPreview] = createSignal<FilePreview | null>(
     null,
@@ -71,8 +80,19 @@ export function PairView(props: PairViewProps): JSX.Element {
   }
   onMount(() => {
     props.onReloadReady?.(reload);
-    void reload();
   });
+  createEffect(
+    on(
+      () => props.leftPath,
+      () => void load("left"),
+    ),
+  );
+  createEffect(
+    on(
+      () => props.rightPath,
+      () => void load("right"),
+    ),
+  );
   onCleanup(() => {
     disposed = true;
     props.onReloadReady?.(null);
@@ -83,7 +103,7 @@ export function PairView(props: PairViewProps): JSX.Element {
     const preview = () => (side === "left" ? leftPreview() : rightPreview());
     const error = () => (side === "left" ? leftError() : rightError());
     const loading = () => (side === "left" ? leftLoading() : rightLoading());
-    const visible = () => isPairPaneVisible(visibility(), side);
+    const visible = () => isPairPaneVisible(props.visibility, side);
     const csv = () => {
       const value = preview();
       return value?.kind === "csv" ? value : null;
@@ -105,13 +125,15 @@ export function PairView(props: PairViewProps): JSX.Element {
               class="pair-view__button"
               aria-label={`Hide ${side} pane`}
               aria-pressed="true"
-              aria-disabled={!canHidePairPane(visibility(), side)}
+              aria-disabled={!canHidePairPane(props.visibility, side)}
               title={
-                canHidePairPane(visibility(), side)
+                canHidePairPane(props.visibility, side)
                   ? `Hide ${side} pane`
                   : "Cannot hide the only visible pane"
               }
-              onClick={() => setVisibility(hidePairPane(visibility(), side))}
+              onClick={() =>
+                props.onChangeVisibility(hidePairPane(props.visibility, side))
+              }
             >
               <EyeGlyph />
             </button>
@@ -159,7 +181,9 @@ export function PairView(props: PairViewProps): JSX.Element {
               aria-label={`Show ${side} pane`}
               aria-pressed="false"
               title={`Show ${side} pane`}
-              onClick={() => setVisibility(showPairPane(visibility(), side))}
+              onClick={() =>
+                props.onChangeVisibility(showPairPane(props.visibility, side))
+              }
             >
               <EyeOffGlyph />
             </button>
@@ -173,8 +197,8 @@ export function PairView(props: PairViewProps): JSX.Element {
       data-testid="pair-view"
       classList={{
         "pair-view": true,
-        "pair-view--left-hidden": visibility() === "right_only",
-        "pair-view--right-hidden": visibility() === "left_only",
+        "pair-view--left-hidden": props.visibility === "right_only",
+        "pair-view--right-hidden": props.visibility === "left_only",
       }}
     >
       {pane("left")}

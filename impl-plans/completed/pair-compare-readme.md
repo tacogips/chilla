@@ -1,6 +1,6 @@
 # Pair Compare: README
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: pair-compare-readme
 **Wave**: 1 (dependsOn: none)
 **Design Reference**: design-docs/specs/design-pair-view.md (Compare CLI, Pair List Pane, Workspace Integration, Rollout Constraints)
@@ -77,13 +77,18 @@ accepted model. This is documentation only.
 
 ## Completion Criteria
 
-- [ ] README describes the 2-file pair, `--compare`, the pair list, and the
+- [x] README describes the 2-file pair, `--compare`, the pair list, and the
       3+ file explicit list
-- [ ] No rejected-model wording remains
-- [ ] grep and diff checks pass
+- [x] No rejected-model wording remains
+- [x] grep and diff checks pass
 
 ## Progress Log
 
 ### Session: 2026-11-16
 **Tasks Completed**: Plan created
 **Notes**: Supersedes pair-multi-readme.
+
+### Session: 2026-11-16 (implementation)
+**Tasks Completed**: Updated the pair comparison README and verified the assigned checks. Formal review and workflow finalization remain downstream.
+**SHA256**: `README.md` before `6a16344f33cbf6d809471702e564ac36324ea2561e447680a68e3c129d7f52dd`; after `a3dd65cd4754ce6769e17d7893ec1662b3f25cbe6502d6d1a25a55d09380158a`. This plan before `65a99a61f75f0e4908192878bb2e902009782823e2db8f3b215d15e7b6d7b2de`; its final digest is recorded in plan-local evidence to avoid a self-referential hash.
+**Verification**: Rejected wording grep found no matches (exit 1); compare and retained shortcut greps passed; `git diff --check -- README.md` passed. Logs are in `tmp/pair-compare-20261116-01/pair-compare-readme/attempt-1/`.

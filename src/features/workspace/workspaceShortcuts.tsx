@@ -67,6 +67,8 @@ export const SHORTCUT_SECTIONS: readonly {
         keys: ["Shift", "L"],
         description: "Toggle file tree",
       },
+      { keys: ["{"], description: "Toggle left comparison pane (pair view)" },
+      { keys: ["}"], description: "Toggle right comparison pane (pair view)" },
       {
         keys: ["G"],
         description: "Toggle local Git diff for the opened repository",

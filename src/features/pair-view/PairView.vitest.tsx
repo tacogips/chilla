@@ -1,7 +1,9 @@
+import { createSignal } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "solid-js/web";
 import type { FileOpenOptions, FilePreview } from "../../lib/tauri/document";
 import { PairView } from "./PairView";
+import type { PairPaneVisibility } from "./pairPaneVisibility";
 
 vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (path: string) => `asset://localhost/${path}`,
@@ -37,22 +39,34 @@ function button(root: HTMLElement, label: string): HTMLButtonElement {
 function mount(
   loadPreview: (path: string, options: FileOpenOptions) => Promise<FilePreview>,
   onReloadReady?: (reload: (() => Promise<void>) | null) => void,
+  controls?: {
+    onVisibility: (visibility: PairPaneVisibility) => void;
+    setRightPath: (setter: (path: string) => void) => void;
+  },
 ): HTMLElement {
   const root = document.createElement("div");
   document.body.append(root);
-  dispose = render(
-    () => (
+  dispose = render(() => {
+    const [visibility, setVisibility] =
+      createSignal<PairPaneVisibility>("both");
+    const [right, setRight] = createSignal(rightPath);
+    controls?.setRightPath(setRight);
+    return (
       <PairView
         leftPath={leftPath}
-        rightPath={rightPath}
+        rightPath={right()}
+        visibility={visibility()}
+        onChangeVisibility={(next) => {
+          setVisibility(next);
+          controls?.onVisibility(next);
+        }}
         colorScheme="dark"
         fileOpenOptions={options}
         loadPreview={loadPreview}
         {...(onReloadReady ? { onReloadReady } : {})}
       />
-    ),
-    root,
-  );
+    );
+  }, root);
   return root;
 }
 async function flush(): Promise<void> {
@@ -109,6 +123,60 @@ describe("PairView", () => {
         hiddenPane,
       );
     }
+  });
+
+  it("does not mark either pane as active", () => {
+    const root = mount(async (path) => preview(path));
+    expect(
+      root.querySelector(
+        `[data-pair-${"active"}], .pair-view__pane--${"active"}, section[aria-current]`,
+      ),
+    ).toBeNull();
+  });
+
+  it("loads only the changed pane on a path update", async () => {
+    const load = vi.fn(async (path: string) => preview(path));
+    let setRight: ((path: string) => void) | undefined;
+    mount(load, undefined, {
+      onVisibility: () => {},
+      setRightPath: (setter) => {
+        setRight = setter;
+      },
+    });
+    await flush();
+    expect(load).toHaveBeenCalledTimes(2);
+    if (!setRight) throw new Error("missing setter");
+    setRight("/c/new.png");
+    await flush();
+    expect(load.mock.calls).toEqual([
+      [leftPath, options],
+      [rightPath, options],
+      ["/c/new.png", options],
+    ]);
+  });
+
+  it("ignores a stale response after the pane path changes", async () => {
+    const pending: Array<(value: FilePreview) => void> = [];
+    const load = vi.fn(
+      (_path: string) =>
+        new Promise<FilePreview>((resolve) => pending.push(resolve)),
+    );
+    let setRight: ((path: string) => void) | undefined;
+    const root = mount(load, undefined, {
+      onVisibility: () => {},
+      setRightPath: (setter) => {
+        setRight = setter;
+      },
+    });
+    if (!setRight) throw new Error("missing setter");
+    setRight("/c/new.png");
+    expect(pending).toHaveLength(3);
+    pending[2]?.(preview("/c/new.png", "new right"));
+    await flush();
+    pending[1]?.(preview(rightPath, "old right"));
+    await flush();
+    expect(root.textContent).toContain("new right");
+    expect(root.textContent).not.toContain("old right");
   });
 
   it("isolates a failed load from the other pane", async () => {

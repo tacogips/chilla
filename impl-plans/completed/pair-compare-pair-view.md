@@ -1,6 +1,6 @@
 # Pair Compare: Pair State, PairView Without Active Pane, PairListPane
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: pair-compare-pair-view
 **Wave**: 1 (dependsOn: none; imports the type `FilePairPaths` pinned by pair-compare-ts-contract)
 **Design Reference**: design-docs/specs/design-pair-view.md (State Ownership, Active-Pane Removal, Pair List Pane, Pane Rendering And Visibility, Validation/TypeScript)
@@ -200,13 +200,45 @@ Imitate the render and dispose setup of `FileBrowserPane.vitest.tsx`.
 
 ## Completion Criteria
 
-- [ ] Pair state module per contract, with tests
-- [ ] PairView has no active-pane code; its tests are updated
-- [ ] PairListPane and its CSS and tests are added
-- [ ] vitest, biome, and the scoped tsc and grep checks pass
+- [x] Pair state module per contract, with tests
+- [x] PairView has no active-pane code; its tests are updated
+- [x] PairListPane and its CSS and tests are added
+- [x] vitest, biome, and the scoped tsc and grep checks pass
 
 ## Progress Log
 
 ### Session: 2026-11-16
 **Tasks Completed**: Plan created
 **Notes**: Supersedes pair-multi-pair-view.
+
+### Session: 2026-11-16 implementation
+**Tasks Completed**: Pair state, controlled PairView, PairListPane, and scoped tests.
+**Verification**: Pair-view Vitest: 21 passed; Biome: exit 0; scoped tsc and rejected-model grep: no matches (grep exit 1). Shared tree may still change; workspace integration, GUI launch, and formal review are downstream.
+
+**SHA256 before edits** (absent denotes new file):
+```
+cc71f4c8ddfd5c4bd23e64121a68791f75c3c9885eae73070ce8bcddd2611bc5  src/features/pair-view/pairPaneVisibility.ts
+ac1d1485a1f2018e3772e276613b47abb1201b8da88a3b739957116532017187  src/features/pair-view/pairPaneVisibility.vitest.ts
+817c218f1a08668f6d2f98a80311de4c29667cc0b3f6bc5e07974aa91a2fb83c  src/features/pair-view/PairView.tsx
+51dd7dce46b70ac35632d57b86b3230dc206b5825338c8a13b6bfad35f269efc  src/features/pair-view/PairView.css
+ca23e2ad52c92a253ae356a70d3d0cf2484d8caafa2d8027f2f24a3c41896fa2  src/features/pair-view/PairView.vitest.tsx
+adf9ac1561e81e2e96b357854a21369a912201b0226b638f30aec27cb7d1f966  src/features/pair-view/PairViewHiddenZoom.vitest.tsx
+absent  src/features/pair-view/PairListPane.tsx
+absent  src/features/pair-view/PairListPane.css
+absent  src/features/pair-view/PairListPane.vitest.tsx
+7175d39942e584f8b05427f1416ba60cbd326413d6ad6e9e9020326f27b2604f  impl-plans/active/pair-compare-pair-view.md
+```
+
+**SHA256 after edits**:
+```
+716fee25402aa83f14c1c4cae26d8145e52ad1ebc85ba7a73a56141d8e959064  src/features/pair-view/pairPaneVisibility.ts
+30844ad7b4dfb8dd0b3e78bcdc496a13e0250ce39d179e97a9f9d8d8d6373414  src/features/pair-view/pairPaneVisibility.vitest.ts
+28b697be7a36c652661452fabb01e2405f6655d2c44342e1233e4bc266ec784c  src/features/pair-view/PairView.tsx
+5a44ebce414a7c2dd2eaa5e5789c96c3091c00a3a3477e0689eb7a6ee27f62d2  src/features/pair-view/PairView.css
+7925d3d5c5ea597fa96982c1d35ac455932bccd830296f7d9aff8007c7f3a305  src/features/pair-view/PairView.vitest.tsx
+b5db679e054d081974b57ecc160a5a0e932d2b035970aa3b4687fe03050c19c7  src/features/pair-view/PairViewHiddenZoom.vitest.tsx
+89a15976bfcf9351877912a089d409a7fd89c03a00e54216063b010c4ae37413  src/features/pair-view/PairListPane.tsx
+f0b985536e47cd223eec6acbed8d77b295cb798a335415b7cf526c5156b3243a  src/features/pair-view/PairListPane.css
+078d4223d9270fa9c76b7fd313d5f53ec91ac277373723b9b43919e6f78828e6  src/features/pair-view/PairListPane.vitest.tsx
+```
+The plan hash before this progress update is recorded above; its final hash is recorded in plan-local evidence because embedding it in the plan would change it.

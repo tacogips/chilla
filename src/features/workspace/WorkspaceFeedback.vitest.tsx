@@ -19,8 +19,12 @@ describe("workspace loading feedback", () => {
             file_open_options: { csv_first_row_as_header: false },
             browser_root: {
               kind: "file_pair",
-              left_file_path: "/workspace/a",
-              right_file_path: "/workspace/b",
+              pairs: [
+                {
+                  left_file_path: "/workspace/a",
+                  right_file_path: "/workspace/b",
+                },
+              ],
             },
           }}
         />

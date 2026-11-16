@@ -1,6 +1,6 @@
 # Pair Compare: Rust CLI `--compare`, Classification Revert, Pair-List Payload
 
-**Status**: Ready
+**Status**: Completed
 **Plan ID**: pair-compare-rust
 **Wave**: 1 (dependsOn: none)
 **Design Reference**: design-docs/specs/design-pair-view.md (Compare CLI, Startup Classification, Startup Payload Contract, Validation/Rust); design-docs/specs/command.md
@@ -219,11 +219,11 @@ relative cases.
 
 ## Completion Criteria
 
-- [ ] Rust files restored to `9aa3772` except for the listed edits
-- [ ] `--compare` parsing and errors implemented per design
-- [ ] `FilePairs` / `FilePairEntry` contract implemented
-- [ ] All listed tests added or updated and passing
-- [ ] clippy, cargo test, and fmt check pass
+- [x] Rust files restored to `9aa3772` except for the listed edits
+- [x] `--compare` parsing and errors implemented per design
+- [x] `FilePairs` / `FilePairEntry` contract implemented
+- [x] All listed tests added or updated and passing
+- [x] clippy, cargo test, and fmt check pass
 
 ## Progress Log
 
@@ -255,3 +255,29 @@ Decision (additive; the rest of the plan is unchanged):
   `tmp/pair-compare-20261116-01/pair-compare-rust/<attempt>/`.
 - Record the exact command lines, exit codes and log paths in the progress
   log. Verification commands and acceptance criteria are otherwise unchanged.
+
+
+### Session: 2026-11-16 — Rust implementation
+Implemented compare parsing, ordered pair payloads, and restored explicit file-set behavior. Formal review and integration remain downstream. Per-edit intentions are in `tmp/pair-compare-20261116-01/pair-compare-rust/attempt-2/edits/`.
+
+| File | Before SHA-256 | After SHA-256 |
+| --- | --- | --- |
+| `src-tauri/src/cli/mod.rs` | `7de1bbe598f3a90b8ae1c71ac828e2d6d03cfd2e1651a2d6c5d4416316a98508` | `7c698bd0c8f59103abd919b06b1ae39d682a396c94e8e892df1c2a8bb7a8aff5` |
+| `src-tauri/src/cli/tests.rs` | `eb283546d240fde9aa4c63f1d4ef66e2dc4caf8465d3e6ef9b87ed2f09a7d4e9` | `d7e5042b759c3412c5724a926bd70ff9f8ad6704c28e7577fffbd92a7e5f3dde` |
+| `src-tauri/src/viewer/types.rs` | `8039a83fedccfe65d2d1020b87c9cd2cdd6ca8ae29c14aa7c14cc1e463ca0850` | `8668e0dfb3c51d215023f7fd7b4f8155f8f50c759d823c5e2a4a8833933a7d53` |
+| `src-tauri/src/viewer/service.rs` | `a6f38fbfd1bdd2ed61dfc1814a17940f2ef98efe2044d6ae7464aefad80a3e26` | `bb3f6c0450e89e4b99b6b04cbb3eaa66e7ba3dbc19f295fd6dca28ec2c3b152b` |
+| `src-tauri/src/viewer/service/tests.rs` | `e1984a8e587df3a5af7f2fc04692deb11cfc18f399f47b6d69e0ad842490a968` | `63c853f86ae4e76ade1acad044892056756b12d38e409e60e8c0c03297869133` |
+| `src-tauri/src/viewer/service/tests/startup_options_tests.rs` | `743cddee37b5877143ac2b8b677f896fd76c3cb9488fb06ef111fc8cb8d66d55` | `e04858c47e9cf83d0f2368db43c94b70a99baa6a5f801f7d2e4a3ab53c8af28d` |
+| `src-tauri/src/verbose_log.rs` | `62e274b0bcf9e3b1ca308409dd8922779e80ad153c5e97ebf3b96726307b4c7b` | `aba9e8f4b09a9be47592efa6ead596c7db428b1429bdb73e665d61e8f0754e03` |
+| `src-tauri/src/commands/document.rs` | `2ee984f3bc56b876349b8cfa6c0b56f33b452942c611722f47f1d7659d8bb703` | `e04e2e8cf86db3e3d7310f981646f558b8396400b2b9d2a203e071ef3b0cde87` |
+| `src-tauri/src/viewer/directory_listing.rs` | `65efee66148ca2c54a662072282b6085756949d07be153610e72afe658181ff6` | `0753a595f536e9bcfd49ebced62865e5cd179295da9bda439f8bf3114a7a9f67` |
+| `src-tauri/src/viewer/directory_listing/tests.rs` | `e761dbaff247c6a2f0f6d93caa0964a284ff26b7dfb243a9188f8e50fc863ff1` | `a29446665a6dd1bab021839c1ce64a2fa45ec221faf930e3971c3be4f2f4e99d` |
+
+Verification (complete logs under `tmp/pair-compare-20261116-01/pair-compare-rust/attempt-2/`):
+
+- `CARGO_TARGET_DIR="$PWD/tmp/pair-compare-20261116-01/pair-compare-rust/cargo-target" CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`: exit 0, `clippy-final.log`.
+- `CARGO_TARGET_DIR="$PWD/tmp/pair-compare-20261116-01/pair-compare-rust/cargo-target" CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml`: exit 0, 323 passed, `cargo-test-final.log`.
+- `CARGO_TERM_QUIET=true cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`: exit 0, `fmt-final.log`.
+- `git diff 9aa3772 -- src-tauri/src/commands/document.rs src-tauri/src/viewer/directory_listing.rs src-tauri/src/viewer/directory_listing/tests.rs`: exit 0, empty, `baseline-diff-final.log`.
+
+Plan file before/after hashes are recorded in `attempt-2/edits/plan-intent.txt`; embedding its own final digest in the file would change that digest.

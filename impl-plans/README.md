@@ -71,6 +71,12 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| [Pair Compare Rust CLI](completed/pair-compare-rust.md) | 2026-11-16 | [Compare CLI](../design-docs/specs/design-pair-view.md#compare-cli) |
+| [Pair Compare TS Contract](completed/pair-compare-ts-contract.md) | 2026-11-16 | [Startup payload contract](../design-docs/specs/design-pair-view.md#startup-payload-contract) |
+| [Pair Compare PairView and PairListPane](completed/pair-compare-pair-view.md) | 2026-11-16 | [Pair list pane](../design-docs/specs/design-pair-view.md#pair-list-pane) |
+| [Pair Compare FileBrowserPane Cleanup](completed/pair-compare-file-browser.md) | 2026-11-16 | [Active-pane removal](../design-docs/specs/design-pair-view.md#active-pane-removal) |
+| [Pair Compare Workspace Integration](completed/pair-compare-workspace.md) | 2026-11-16 | [Workspace integration](../design-docs/specs/design-pair-view.md#workspace-integration) |
+| [Pair Compare README](completed/pair-compare-readme.md) | 2026-11-16 | [Rollout constraints](../design-docs/specs/design-pair-view.md#rollout-constraints) |
 | [Pair View Rust Startup](completed/pair-view-rust-startup.md) | 2026-11-15 | [Pair view startup payload](../design-docs/specs/design-pair-view.md) |
 | [Pair View PreviewPane Guard](completed/pair-view-preview-guard.md) | 2026-11-15 | [Pair view layout](../design-docs/specs/design-pair-view.md) |
 | [Pair View Component](completed/pair-view-component.md) | 2026-11-15 | [Pair view pane visibility](../design-docs/specs/design-pair-view.md) |

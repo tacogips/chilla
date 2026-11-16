@@ -26,7 +26,7 @@ use crate::{
     },
     viewer::types::{
         BrowserRoot, CsvRowCountStatus, DirectoryListSort, DirectoryPage, ExplicitFileSetPage,
-        FileOpenOptions, FilePreview, StartupContext, WorkspaceMode,
+        FileOpenOptions, FilePairEntry, FilePreview, StartupContext, WorkspaceMode,
     },
 };
 
@@ -91,11 +91,16 @@ impl ViewerService {
                     file_open_options,
                 })
             }
-            StartupTarget::FilePair { left, right } => Ok(StartupContext {
+            StartupTarget::FilePairs { first, rest } => Ok(StartupContext {
                 initial_mode: WorkspaceMode::FileView,
                 browser_root: BrowserRoot::FilePair {
-                    left_file_path: display_path(left.as_path()),
-                    right_file_path: display_path(right.as_path()),
+                    pairs: std::iter::once(first)
+                        .chain(rest)
+                        .map(|pair| FilePairEntry {
+                            left_file_path: display_path(&pair.left),
+                            right_file_path: display_path(&pair.right),
+                        })
+                        .collect(),
                 },
                 file_open_options,
             }),
