@@ -16,7 +16,9 @@ This document defines the startup behavior, Rust-side file classification, and f
 | `chilla <dir_path>` | requested directory | file view |
 | `chilla <markdown_file>` | requested file | markdown |
 | `chilla <other_file>` | parent directory + selected file | file view |
-| `chilla <file_a> <file_b> ...` (two or more positional files, two or more unique, for example `a b`, `a b c`, `a b a`) | file pair: first two unique files side by side, all unique files in the folded left list (see `design-pair-view.md`) | file view (pair) |
+| `chilla <file_a> <file_b>` (two positional files, two unique) | file pair list with one pair, side by side (see `design-pair-view.md`) | file view (pair) |
+| `chilla <file_a> <file_b> <file_c> ...` (three or more positional files, two or more unique, for example `a b a`) | explicit file set + first file selected | file view |
+| `chilla --compare L1..R1 [L2..R2 ...]` | file pair list, first pair side by side (see `design-pair-view.md`) | file view (pair) |
 
 Rules:
 
@@ -24,7 +26,7 @@ Rules:
 - Unsupported paths still fail fast before window creation.
 - Bare startup uses the current working directory rather than treating missing input as an error.
 - Multi-file startup is accepted only when every positional argument resolves to a readable file.
-- Multi-file CLI startup with two or more unique files opens pair view (`design-pair-view.md`); its left list is constrained to the provided files rather than the containing directories.
+- Multi-file startup preserves the first unique canonicalized CLI filepath as the initially opened file but constrains left-pane selection to the explicit file set rather than the containing directories.
 
 ## Modes
 
@@ -43,7 +45,7 @@ Rules:
 
 ### Explicit File Set View
 
-- Explicit file-set view is used when files are delivered through macOS open-files or the file picker (`openFiles.ts`). CLI startup with two or more unique files opens pair view instead (`design-pair-view.md`), which reuses the explicit file-set list in its folded left pane.
+- When startup receives three or more positional filepaths that resolve to two or more unique files, the left pane switches (exactly two positional files resolving to two unique files open pair view instead, see `design-pair-view.md`) from directory browsing to explicit file-set selection.
 - The pane shows only the provided files; sibling files from the same directories are intentionally excluded.
 - The pane occupies the same left-side slot as the current file browser, but it is implemented as a distinct view model rather than overloading directory-navigation semantics.
 - The first requested file opens immediately in the viewer, and the left pane remains visible by default so the constrained selection set is discoverable.
@@ -196,7 +198,7 @@ Behavior rules:
 
 ### Explicit File Set Contract
 
-The `explicit_file_set` browser root below is built by the frontend for macOS open-files and picker targets; Rust no longer emits it from CLI startup (CLI multi-file startup emits `file_pair`, see `design-pair-view.md`). Rust still serves `list_explicit_file_set` pages:
+Rust also provides an explicit-file-set contract for multi-file startup:
 
 ```text
 StartupContext
@@ -233,8 +235,7 @@ Behavior rules:
 - Duplicate canonical paths are removed while preserving the first occurrence as the selected/opened file candidate.
 - Filtering matches both basename and path hint so files with identical names remain searchable.
 - Sorting keeps the existing field set (`name`, `extension`, `mtime`, `size`).
-- For macOS open-files and picker explicit lists, the displayed list may default to name ascending for implementation simplicity, but the initially opened file is still determined by deduplicated source order, not sorted order.
-- Pair-view exception: when the caller passes `source_order = true` (only the pair-view list does), rows keep first-occurrence source order, the query filter still applies, sorting is skipped, and pagination slices that fixed order. Name sorting never reorders the pair list. See `design-pair-view.md`, Source-Order Listing Contract.
+- The displayed list may default to name ascending for implementation simplicity, but the initially opened file is still determined by deduplicated CLI order, not sorted order.
 
 ## Frontend Interaction Model
 

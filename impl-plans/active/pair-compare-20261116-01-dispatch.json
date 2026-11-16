@@ -1,0 +1,295 @@
+{
+  "taskId": "pair-compare-20261116-01",
+  "workflowMode": "issue-resolution",
+  "issueReference": "none: inline workflowInput request, no GitHub issue (workflowExecutionId opus-terra-design-and-implement-review-loop-session-862; intake comm-020409, design accepted comm-020411, plan review comm-020413 PCW-GREP-SOURCEORDER-01, plan revision comm-020414, plans accepted comm-020415)",
+  "implementationBranch": "main",
+  "baseBranch": "main",
+  "remote": "origin",
+  "gitPush": false,
+  "originalHead": "9aa3772bf903ea19fbadf354faf1b450a6e90f50",
+  "evidenceRoot": "tmp/pair-compare-20261116-01",
+  "designDocPaths": [
+    "design-docs/specs/design-pair-view.md",
+    "design-docs/specs/command.md",
+    "design-docs/specs/design-file-viewer-mode.md",
+    "design-docs/user-qa/qa-pair-view.md"
+  ],
+  "reviewContext": {
+    "issueReference": "none: inline workflowInput request, no GitHub issue (workflowExecutionId opus-terra-design-and-implement-review-loop-session-862; intake comm-020409, design accepted comm-020411, plans accepted comm-020415)",
+    "userProblem": "The uncommitted pair-multi work used an 'active pane + individual file list + L/R badges' model, and the user rejected it. Users need several LEFT/RIGHT comparisons listed as pairs. Choosing a pair should show both of its files at once.",
+    "requiredOutcomes": [
+      "`chilla --compare a.png..b.png c.png..d.png` opens comparison view showing a.png | b.png with the list folded; expanding it shows two pair entries; choosing the second shows c.png | d.png.",
+      "`chilla --compare ../x.png..../y.png` resolves correctly; an ambiguous or missing SPEC, or `--compare` with no SPEC, exits non-zero with a clear error.",
+      "`chilla a.png b.png` opens one pair as in 0.4.0; `chilla a b c` opens the plain explicit file list as before 0.4.0; single-file and directory launches are unchanged.",
+      "No active-pane UI or L/R badges remain; '{' '}' and the eye icons toggle panes with the never-both-hidden rule; the list folds/expands via header toggle, left-edge strip, pane fold button and Shift+L.",
+      "Rust tests cover --compare parsing (split resolution, ambiguity, errors, order, dedup) and 2-file / 3-file classification; TypeScript DOM tests cover pair list rendering/selection, folded start, fold controls and shortcuts.",
+      "CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings, mise run test, and bunx biome check src all pass."
+    ],
+    "nonGoals": [
+      "No filtering, sorting, pagination, drag or runtime editing of pairs.",
+      "No persistence of pair selection, pane visibility, zoom or scroll.",
+      "No change to GitHub / Git diff detection, directory startup, macOS Finder / open -a open-files, or list_directory.",
+      "Do not touch or commit pubpage/**, design-docs/specs/design-product-website.md, or untracked .riela/ directories.",
+      "No edits to src/features/workspace/CollapsePaneButton.tsx, src/features/keymap/**, src/features/workspace/workspaceShortcuts.tsx or src/features/pr-diff/PrDiffWorkspace.tsx: their uncommitted accepted-reuse changes stay as they are."
+    ],
+    "constraints": [
+      "Each --compare SPEC is LEFT..RIGHT. Try every (overlapping) `..` occurrence as the split point. Exactly one split must leave two existing regular files; relative paths resolve against cwd. Zero or several valid splits, a missing file, or a bare --compare is a usage error with exit code 2.",
+      "--compare must be the first argument (after the stripped --verbose / --csv-first-row-header options) and cannot be mixed with positional paths. Pairs keep command-line order and are deduplicated on canonical (left, right).",
+      "Without --compare: exactly two distinct regular files -> one pair (0.4.0). One file, 3+ plain files (explicit file list), directories and Finder delivery keep their pre-existing behavior. The uncommitted 3+-files-as-pair change is reverted to 9aa3772.",
+      "The Rust StartupTarget::FilePairs / BrowserRoot::FilePair { pairs } and the TypeScript FilePairPaths / file_pair { pairs } contract change in the same change set. list_explicit_file_set returns to its 9aa3772 signature (no sourceOrder).",
+      "Remove the active-pane concept entirely: no activeSide, active class, aria-current pane marker, L/R/LR badges, or single-file assignment. Keep the eye icons, restore strip, hidden-pane zoom guard, +/- visible-pane zoom, and r reloading the shown pair.",
+      "Each worker edits only its plan's writePaths and records sha256 before and after each edited file in its own plan progress log. Evidence (data only) goes under tmp/pair-compare-20261116-01/<planId>/<attempt>/ and stays untracked. Mutating git commands (checkout, restore, stash) are forbidden; `git show 9aa3772:<path>` is read-only and allowed.",
+      "Follow AGENTS.md, rust-coding-standards and ts-coding-standards. Use CARGO_TERM_QUIET=true. No emojis. No AI attribution in commit messages."
+    ],
+    "designDecisionsAndRationale": [
+      {
+        "decision": "StartupTarget::FilePairs { first: FilePairPaths, rest: Vec<FilePairPaths> } replaces FilePair, and BrowserRoot::FilePair { pairs: Vec<FilePairEntry> } keeps kind \"file_pair\".",
+        "rationale": "The type guarantees at least one pair, and one variant covers both the 2-file and the --compare launch (design-pair-view.md Startup Payload Contract)."
+      },
+      {
+        "decision": "SPEC resolution tries every overlapping `..` byte index and requires exactly one split that leaves two existing files.",
+        "rationale": "Paths such as `../a.png..../b.png` contain several `..`. Checking the filesystem picks the one correct split, and ambiguity is reported instead of guessed (design-pair-view.md Compare CLI)."
+      },
+      {
+        "decision": "A new PairListPane, not FileBrowserPane, renders the pair list. Pair state (pairs, selectedIndex, visibility) is a pure module owned by WorkspaceShell.",
+        "rationale": "One entry per pair does not fit the file-row model. Keeping FileBrowserPane free of pair markers removes the rejected badge code (design-pair-view.md Pair List Pane, State Ownership)."
+      },
+      {
+        "decision": "Selecting a pair never changes pane visibility.",
+        "rationale": "This is a user requirement: a hidden pane stays hidden when the pair changes."
+      },
+      {
+        "decision": "Two waves: rust, ts-contract, pair-view, file-browser and readme first; workspace second.",
+        "rationale": "WorkspaceShell consumes the contracts of ts-contract, pair-view and file-browser. Wave 1 tolerates tsc errors in WorkspaceShell.tsx, and wave 2 is the first full typecheck gate."
+      },
+      {
+        "decision": "The workspace grep is word-bounded (grep -rnwE) and sourceOrderPaths / source_order_paths is retained (PCW-GREP-SOURCEORDER-01).",
+        "rationale": "sourceOrderPaths belongs to the 9aa3772 explicit_file_set contract. Only the rejected standalone sourceOrder option, prop and field are removed."
+      }
+    ],
+    "intentionalTradeoffs": [
+      "Pair list has no filter or sort; command-line order is the only order.",
+      "Users with a custom workspace keymap section that replaces the defaults do not get { / } until they add them.",
+      "GUI launch verification is deferred to the parent session after the workflow; jsdom cannot confirm layout.",
+      "Line-number hints in the plans may drift after wave 1. Re-reading each file and recording sha256 before editing mitigates this."
+    ],
+    "supportedEdgeCases": [
+      "`--compare A..B A..B` and a same-canonical-file variant -> one pair; `A..B B..A` -> two pairs.",
+      "`resolve_compare_spec(\"../x.png..../y.png\", <root>/sub)` -> canonical x and y.",
+      "`a...b` with files a, .b, a. and b -> ambiguity error listing both splits.",
+      "`x..missing`, `nodots`, `file..<dir>`, bare `--compare`, `A --compare B..C`, `A..A` -> exit code 2.",
+      "`--verbose --compare A..B` and `--compare A..B --csv-first-row-header=true` -> FilePairs with options applied.",
+      "`A B` -> one pair; `A A` -> File; `A B C` and `A B A` -> FileSet; dir + file -> the existing usage error.",
+      "Single-pair startup also starts folded; j/k do not wrap; Enter on the current pair is a no-op.",
+      "With the right pane hidden, selecting another pair keeps it hidden, and { is a no-op on the only visible pane.",
+      "{ / } are ignored outside pair mode and in editable fields; r reloads only the shown pair's two paths."
+    ],
+    "outOfScopeEdgeCases": [
+      "Pair view from macOS Finder / open -a delivery.",
+      "Synchronized zoom or scroll between panes.",
+      "Live updates when a paired file changes on disk.",
+      "Comparing directories."
+    ],
+    "residualRisks": [
+      "low: impl-plans/active/pair-compare-file-browser.md:76 greps the substring `sourceOrder`; this is harmless because 9aa3772 src/features/file-view and App.css contain no sourceOrderPaths.",
+      "info: src/features/workspace/CollapsePaneButton.tsx (untracked), src/features/keymap/keymap.ts, src/features/keymap/keymap.vitest.ts, src/features/workspace/workspaceShortcuts.tsx and src/features/pr-diff/PrDiffWorkspace.tsx are accepted-reuse uncommitted changes that no plan owns. The final integration commit must include them.",
+      "info: the impl-plans/README.md index edit is left for serial reconciliation."
+    ],
+    "sourcePaths": [
+      "design-docs/specs/design-pair-view.md",
+      "design-docs/specs/command.md",
+      "design-docs/specs/design-file-viewer-mode.md",
+      "design-docs/user-qa/qa-pair-view.md",
+      "impl-plans/active/pair-compare-rust.md",
+      "impl-plans/active/pair-compare-ts-contract.md",
+      "impl-plans/active/pair-compare-pair-view.md",
+      "impl-plans/active/pair-compare-file-browser.md",
+      "impl-plans/active/pair-compare-readme.md",
+      "impl-plans/active/pair-compare-workspace.md",
+      "src-tauri/src/cli/mod.rs",
+      "src-tauri/src/viewer/types.rs",
+      "src-tauri/src/viewer/service.rs",
+      "src/lib/tauri/document.ts",
+      "src/features/pair-view/pairPaneVisibility.ts",
+      "src/features/pair-view/PairView.tsx",
+      "src/features/file-view/FileBrowserPane.tsx",
+      "src/features/workspace/WorkspaceShell.tsx",
+      "src/features/workspace/CollapsePaneButton.tsx",
+      "README.md"
+    ]
+  },
+  "acceptedDependencies": [],
+  "plans": [
+    {
+      "planId": "pair-compare-rust",
+      "planPath": "impl-plans/active/pair-compare-rust.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src-tauri/src/cli/mod.rs",
+        "src-tauri/src/cli/tests.rs",
+        "src-tauri/src/viewer/types.rs",
+        "src-tauri/src/viewer/service.rs",
+        "src-tauri/src/viewer/service/tests.rs",
+        "src-tauri/src/viewer/service/tests/startup_options_tests.rs",
+        "src-tauri/src/verbose_log.rs",
+        "src-tauri/src/commands/document.rs",
+        "src-tauri/src/viewer/directory_listing.rs",
+        "src-tauri/src/viewer/directory_listing/tests.rs",
+        "impl-plans/active/pair-compare-rust.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "commands/document.rs, viewer/directory_listing.rs and viewer/directory_listing/tests.rs are byte-identical to 9aa3772; the other Rust files carry only the listed edits on top of 9aa3772.",
+        "FilePairPaths and StartupTarget::FilePairs { first, rest } exist, and StartupTarget::FileSet is restored. FilePairEntry and BrowserRoot::FilePair { pairs } serialize as {\"kind\":\"file_pair\",\"pairs\":[{left_file_path,right_file_path}]} with no top-level path keys.",
+        "--compare parsing follows the design: overlapping `..` splits, cwd-relative resolution, the exact error messages with exit code 2, canonical dedup that keeps order, a positional-mix error, and help text updated.",
+        "Positional classification: `A B` -> one pair, `A A` -> File, `A B C` / `A B A` -> FileSet. Directory, GitHub and Git-diff behavior are unchanged.",
+        "All listed tests pass. clippy -D warnings, cargo test and fmt --check exit 0. The progress log records commands, exit codes, log paths and sha256 before and after."
+      ],
+      "verification": [
+        "CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+        "CARGO_TERM_QUIET=true cargo test --manifest-path src-tauri/Cargo.toml",
+        "CARGO_TERM_QUIET=true cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
+        "git diff 9aa3772 -- src-tauri/src/commands/document.rs src-tauri/src/viewer/directory_listing.rs src-tauri/src/viewer/directory_listing/tests.rs"
+      ]
+    },
+    {
+      "planId": "pair-compare-ts-contract",
+      "planPath": "impl-plans/active/pair-compare-ts-contract.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/lib/tauri/document.ts",
+        "src/lib/tauri/document.vitest.ts",
+        "src/lib/tauri/document-invoke.vitest.ts",
+        "impl-plans/active/pair-compare-ts-contract.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "document.ts exports FilePairPaths { left_file_path, right_file_path }. The BrowserRoot file_pair variant is { kind: \"file_pair\", pairs: readonly FilePairPaths[] } with no top-level paths.",
+        "The normalizer accepts snake_case and camelCase pairs and returns fresh snake_case objects. It throws \"Startup file-pair payload is missing required paths\" for a missing, empty or non-array pairs value, a malformed element, or the legacy shape.",
+        "listExplicitFileSet(paths, sort, query, offset, limit) matches 9aa3772 and never sends sourceOrder.",
+        "Owned vitest files and biome pass, and tsc reports no errors in src/lib/tauri/. The progress log records sha256 before and after."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/lib/tauri/document.vitest.ts src/lib/tauri/document-invoke.vitest.ts",
+        "bunx tsc --noEmit 2>&1 | grep \"src/lib/tauri/\"",
+        "bunx biome check src/lib/tauri"
+      ]
+    },
+    {
+      "planId": "pair-compare-pair-view",
+      "planPath": "impl-plans/active/pair-compare-pair-view.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/pair-view/pairPaneVisibility.ts",
+        "src/features/pair-view/pairPaneVisibility.vitest.ts",
+        "src/features/pair-view/PairView.tsx",
+        "src/features/pair-view/PairView.css",
+        "src/features/pair-view/PairView.vitest.tsx",
+        "src/features/pair-view/PairViewHiddenZoom.vitest.tsx",
+        "src/features/pair-view/PairListPane.tsx",
+        "src/features/pair-view/PairListPane.css",
+        "src/features/pair-view/PairListPane.vitest.tsx",
+        "impl-plans/active/pair-compare-pair-view.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "pairPaneVisibility.ts provides PairState { pairs, selectedIndex, visibility }, initialPairState, selectPair (same object for an invalid or current index, never changes visibility), selectedPair and setPairVisibility. activatePairSide, assignPathToActivePane, pairMarkerForPath and PairListMarker are removed.",
+        "PairView has no activeSide or onActivate prop, no --active class, data-pair-active or aria-current. Per-side loads, eye buttons, the restore strip and reload registration are unchanged.",
+        "PairListPane renders a section.pane.pair-list with a CollapsePaneButton, a 'Pairs' title and an 'N pair(s)' count, and a listbox of option buttons 'a.png <-> b.png' with full-path titles, aria-selected and roving tabindex. Click, j/k (no wrap) and Enter call onSelect.",
+        "Pair-view vitest and biome pass, scoped tsc shows no pair-view errors, and the rejected-model grep finds nothing. The progress log records sha256 before and after."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/pair-view",
+        "bunx biome check src/features/pair-view",
+        "bunx tsc --noEmit 2>&1 | grep \"src/features/pair-view/\"",
+        "grep -rn \"activeSide\\|onActivate\\|pair-view__pane--active\\|data-pair-active\\|pairMarkerForPath\" src/features/pair-view"
+      ]
+    },
+    {
+      "planId": "pair-compare-file-browser",
+      "planPath": "impl-plans/active/pair-compare-file-browser.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/file-view/FileBrowserPane.tsx",
+        "src/features/file-view/FileBrowserPane.vitest.tsx",
+        "src/app/App.css",
+        "impl-plans/active/pair-compare-file-browser.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "FileBrowserPane has no pairMarkerForPath or sourceOrder props, marker span or source-order summary or guard. Its diff against 9aa3772 shows only the onCollapse / CollapsePaneButton / pane__header-lead hunks.",
+        "The two rejected-model tests are deleted, and a Collapse-left-pane button test is added for both with and without onCollapse.",
+        "App.css drops .file-browser__pair-marker and keeps .pane__header-lead and .pane__collapse with their hover and focus rules.",
+        "Scoped vitest, biome, grep and tsc checks pass. The progress log records sha256 before and after."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/file-view/FileBrowserPane.vitest.tsx",
+        "bunx biome check src/features/file-view/FileBrowserPane.tsx src/features/file-view/FileBrowserPane.vitest.tsx src/app/App.css",
+        "grep -rn \"pairMarkerForPath\\|sourceOrder\\|pair-marker\\|Order: command line\" src/features/file-view src/app/App.css",
+        "bunx tsc --noEmit 2>&1 | grep \"src/features/file-view/\""
+      ]
+    },
+    {
+      "planId": "pair-compare-readme",
+      "planPath": "impl-plans/active/pair-compare-readme.md",
+      "dependsOn": [],
+      "writePaths": [
+        "README.md",
+        "impl-plans/active/pair-compare-readme.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "README documents: the 2-file pair (0.4.0 facts), `chilla --compare <left>..<right> [...]` with split, error, order and dedup rules, the folded pair list with its fold controls, selection and { / }, and 3+ files as an explicit list.",
+        "No mention of an active pane, the accent border or L / R markers remains. The { / } shortcut and the pair.left.toggle / pair.right.toggle lines are kept.",
+        "The grep and diff --check checks pass, and no emojis are used."
+      ],
+      "verification": [
+        "grep -n \"active pane\\|accent border\\|L\\` / \\`R\\|more files\" README.md",
+        "grep -n -- \"--compare\" README.md",
+        "git diff --check -- README.md"
+      ]
+    },
+    {
+      "planId": "pair-compare-workspace",
+      "planPath": "impl-plans/active/pair-compare-workspace.md",
+      "dependsOn": [
+        "pair-compare-ts-contract",
+        "pair-compare-pair-view",
+        "pair-compare-file-browser"
+      ],
+      "writePaths": [
+        "src/features/workspace/WorkspaceShell.tsx",
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "src/features/workspace/WorkspaceFeedback.vitest.tsx",
+        "src/features/workspace/workspaceDirectoryState.ts",
+        "impl-plans/active/pair-compare-workspace.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Pair startup: setFileTreeOpen(false), initialPairState(browserRoot.pairs) and clearDocumentArea(). There are no listExplicitFileSet, listDirectory or previewSelectedFile calls, and PairView shows selectedPair's left and right paths.",
+        "While the tree is open in pair mode, PairListPane renders with onSelect=selectPair and onCollapse=handleToggleFileTree; FileBrowserPane is not mounted. focusVisiblePane includes .pair-list.",
+        "All activeSide, assignPathToActivePane, pairMarkerForPath, activatePairSide and sourceOrder plumbing is removed. sourceOrderPaths / source_order_paths is retained.",
+        "Rewritten workspace tests cover: two-pair and single-pair folded startup, the header toggle, the expand strip and Shift+L, click and j/k selection, the collapse button, } hiding persisting across selection, a { no-op, { / } inert outside pair mode and in inputs, r reloading only the shown pair, and no rejected-model selectors.",
+        "bun run typecheck, workspace vitest, biome and the word-bounded grep pass. The progress log records sha256 before and after for owned files and consumed contracts."
+      ],
+      "verification": [
+        "bun run typecheck",
+        "bunx vitest run --config vitest.config.ts src/features/workspace",
+        "bunx biome check src/features/workspace",
+        "grep -rnwE \"sourceOrder|activeSide|assignPathToActivePane|pairMarkerForPath|activatePairSide\" src"
+      ]
+    }
+  ],
+  "reconcileVerification": [
+    "CARGO_TERM_QUIET=true cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "mise run test",
+    "bunx biome check src",
+    "chilla-post-edit-launch: build and launch target/debug/chilla --compare a.png..b.png c.png..d.png (GUI check deferred to the parent session if the window is not visible)"
+  ]
+}

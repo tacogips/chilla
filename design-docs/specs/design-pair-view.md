@@ -1,449 +1,359 @@
 # Pair View Design
 
-Side-by-side comparison view for two or more regular-file CLI arguments at
+Side-by-side comparison view for one or more pairs of regular files given at
 launch. The main use is comparing before/after images
-(`chilla before.png after.png`) and stepping through a series of files
-(`chilla v1.png v2.png v3.png`) by loading any of them into either pane.
+(`chilla before.png after.png`) and stepping through several comparisons
+(`chilla --compare a1.png..a2.png b1.png..b2.png`).
 
-This document extends `design-file-viewer-mode.md` (Startup Behavior, Explicit
-File Set View) and `command.md` (positional path forms). Everything not stated
-here keeps the behavior defined in those documents.
+This document extends `design-file-viewer-mode.md` (Startup Behavior) and
+`command.md` (startup forms). Everything not stated here keeps the behavior
+defined in those documents.
 
 Revision history:
 
-- 0.4.0: exactly two positional files open a fixed two-pane view with no file
-  list and mouse-only eye toggles.
-- 0.5 (this revision): two or more distinct files open pair view; the file
-  list is available but starts folded; one pane is active and receives files
-  chosen in the list; `{` / `}` toggle the left / right pane.
+- 0.4.0: exactly two positional files open a fixed two-pane view with no list
+  and mouse-only eye toggles.
+- 0.5 (this revision): pair view shows a list of LEFT/RIGHT pairs. The new
+  `--compare LEFT..RIGHT [SPEC ...]` form opens several pairs; `chilla a b`
+  opens one pair. The pair list starts folded. Choosing a pair shows both of
+  its files. `{` / `}` toggle the left / right pane.
+- Superseded draft: an earlier 0.5 draft (active pane, individual file list
+  with `L` / `R` / `LR` badges, three or more positional files opening pair
+  view, and a `source_order` option on `list_explicit_file_set`) was rejected
+  by the user. None of it is kept except where this document restates it.
 
 ## Scope
 
 In scope:
 
-- CLI startup classification: two or more positional file arguments that
-  resolve to two or more distinct canonical regular files produce the pair
-  target. The pair target carries the full ordered, deduplicated file list.
-- The `file_pair` startup payload gains the ordered file list.
-- An optional `source_order` flag on the existing `list_explicit_file_set`
-  command so the pair list keeps deduplicated CLI order across filtering and
-  pagination.
-- Frontend pair layout with two horizontal panes, each reusing the existing
-  preview renderers and an eye toggle.
-- The left file list (`FileBrowserPane` in `explicit_file_set` listing mode)
-  in pair view, folded at startup.
-- Active pane selection and loading list choices into the active pane, with
-  L / R markers in the list.
-- `{` / `}` keymap actions that toggle the left / right pane.
+- CLI: the `--compare` startup form and its SPEC resolution.
+- CLI classification: exactly two positional files keep the 0.4.0 single-pair
+  behavior; three or more positional files go back to the pre-0.5 explicit
+  file list.
+- The `file_pair` startup payload carries an ordered, non-empty pair list.
+- Frontend pair list pane, pair selection, the fold controls, `{` / `}`, and
+  the existing two-pane `PairView` without an active-pane concept.
 
 Out of scope (behavior unchanged):
 
-- Zero or one unique file argument, directory arguments, mixed directory and
-  file arguments, GitHub diff targets, and local Git diff targets.
+- One file, directory, GitHub diff, and local Git diff startup.
+- Three or more positional files: explicit file-set view exactly as before
+  0.5 (`StartupTarget::FileSet`, `BrowserRoot::ExplicitFileSet`).
 - macOS Finder / Apple Event open-files delivery (`design-macos-file-open.md`)
-  and the frontend picker path (`startupContextForPickedTarget` in
-  `src/features/workspace/openFiles.ts`). These still build directory or
-  frontend-side `explicit_file_set` contexts, even for two or more files.
-- Editing. Pair panes are read-only previews. Markdown editing, TOC, and
-  file-view to markdown-mode switching are not available in pair view.
-- Pane split resizing, synchronized scroll/zoom, live file watching per pane,
-  and persistence of pane assignment, active pane, or visibility.
-- Directory browsing from the pair file list (no parent navigation, tree view
-  of directories, Git-ignored toggle, or recursive search; these are already
-  unavailable in `explicit_file_set` listing mode).
+  and the frontend picker path (`openFiles.ts`).
+- `list_explicit_file_set` and its sort/pagination: no new arguments.
+- Editing, TOC, and markdown mode in pair view (panes are read-only previews).
+- Pane split resizing, synchronized scroll/zoom, file watching, persistence of
+  the selected pair or visibility, filtering or sorting the pair list, and
+  adding or removing pairs at runtime.
+
+## Compare CLI
+
+Grammar (global flags `--verbose` and `--csv-first-row-header=...` are removed
+by `normalize_cli` first, so they may appear anywhere as today):
+
+```text
+chilla [global flags] --compare SPEC [SPEC ...]
+SPEC := LEFT..RIGHT
+```
+
+Placement rules (`parse_normalized_cli`, `src-tauri/src/cli/mod.rs`):
+
+- `--compare` is recognized only as the first user argument after the binary
+  path. The check runs before the GitHub shorthand, single-argument, and
+  Git-diff dispatch, so it is never read as a path or an unsupported flag.
+- Every following argument is a SPEC, including arguments that start with `-`.
+  `--compare` cannot be combined with positional paths, GitHub targets, or
+  `--no-github-diff-cache` (such arguments fail SPEC resolution below).
+- `--compare` with no SPEC is a usage error.
+- `--compare` anywhere other than the first user argument (for example
+  `chilla a.png --compare b..c`) is a usage error stating that `--compare`
+  must come first and cannot be mixed with positional paths.
+
+SPEC resolution (one SPEC at a time, in command-line order):
+
+1. A SPEC must be valid UTF-8 (same rule as other path arguments).
+2. Candidate splits: for every byte index `i` where the SPEC has `..` at
+   `i..i+2` (overlapping occurrences included), the candidate is
+   `LEFT = spec[..i]`, `RIGHT = spec[i+2..]`. Candidates with an empty side are
+   skipped.
+3. A candidate is valid when both sides are existing regular files:
+   `fs::metadata` (follows symlinks, relative paths resolve against the
+   process working directory) succeeds and `is_file()` is true. A side that is
+   a directory, missing, or unreadable makes the candidate invalid.
+4. Exactly one valid candidate is required:
+   - zero valid candidates: usage error naming the SPEC, for example
+     `--compare SPEC "x.png..y.png" does not name two existing files (expected LEFT..RIGHT)`.
+     This covers a missing file and a SPEC without `..`.
+   - two or more valid candidates: usage error naming the SPEC and listing
+     each valid `LEFT` / `RIGHT` split, asking the user to rename or use a
+     different path spelling (for example `./`).
+5. Both sides of the chosen split are canonicalized. If they are the same
+   canonical file, it is a usage error (`both sides of SPEC "..." are the same
+   file`), matching the 0.4.0 rule that a pair needs two distinct files.
+6. Deduplication: a pair whose canonical `(left, right)` equals an earlier
+   pair is dropped; the first occurrence keeps its position. `a..b` and `b..a`
+   are different pairs.
+
+All errors use `AppError::cli_usage(..., 2)` and fail before the window opens.
+Verbose I/O recording uses the existing `verbose_log::record_io` calls for
+the `metadata` / `canonicalize` operations it performs.
+
+Example: `../x.png..../y.png` has `..` at indices 0, 8, 9, and 10. Index 0
+has an empty left side. Index 8 gives `../x.png` / `../y.png`. Indices 9 and
+10 give `../x.png.` / `./y.png` and `../x.png..` / `/y.png`, which are valid
+only if those files exist. With only `../x.png` and `../y.png` present, the
+SPEC resolves to them.
+
+Help text: the usage block gains
+`{binary_name} [--verbose] [--csv-first-row-header=true|false] --compare <left>..<right> [<left>..<right> ...]`.
+The sentence about two or more file paths is replaced with: "If two file paths
+are provided, chilla shows them side by side. If three or more file paths are
+provided, chilla opens file view mode with the left pane limited to those
+files. --compare LEFT..RIGHT [LEFT..RIGHT ...] opens each pair in a pair list;
+each SPEC must split at exactly one `..` into two existing files."
 
 ## Startup Classification
 
-Classification stays in `resolve_explicit_file_startup`
-(`src-tauri/src/cli/mod.rs`). It runs only after the existing GitHub and local
-Git-diff detection has declined the arguments. Canonicalization, the directory
-rejection message, the non-regular-file error, and first-occurrence
-deduplication are unchanged.
-
-`U` is the number of unique canonical regular files after first-occurrence
-deduplication. Only the final match changes; the positional-argument count no
-longer matters:
+Positional-file classification in `resolve_explicit_file_startup` returns to
+the 0.4.0 rule (revert the uncommitted change):
 
 | Condition | Startup target |
 |-----------|----------------|
-| `U == 0` | existing usage error (unchanged) |
-| `U == 1` (for example `a a`, `a ./a`, `a a a`) | `StartupTarget::File` (unchanged) |
-| `U >= 2` (for example `a b`, `a b c`, `a b a`) | `StartupTarget::FilePair` with the unique files in first-occurrence order (changed) |
+| no unique file | existing usage error |
+| one unique file (`a`, `a a`, `a ./a`) | `StartupTarget::File` |
+| exactly two positional arguments and two unique files (`a b`) | pair target with one pair `(a, b)` |
+| any other case with two or more unique files (`a b c`, `a b a`) | `StartupTarget::FileSet` (explicit file list) |
 
-Rules:
+`StartupTarget` (Rust):
 
-- `StartupTarget::FilePair` keeps the "at least two" invariant in its type:
-  `FilePair { left, right, rest }`, where `left` is the first unique file,
-  `right` the second, and `rest` the remaining unique files in order (empty
-  for two files). A pair with fewer than two files cannot be represented.
-- `a b a` produces `FilePair { left: a, right: b, rest: [] }`.
-- Any directory argument among two or more paths still fails with the existing
-  `multi-path startup only accepts regular files` usage error (exit code 2).
-- `StartupTarget::FileSet` is no longer produced by the CLI and has no other
-  constructor; it is removed. `BrowserRoot::ExplicitFileSet` (Rust) is only
-  built from `FileSet` and is removed with it. The frontend-built
-  `explicit_file_set` context, its TypeScript union variant, its normalizer
-  branch, and the `list_explicit_file_set` command stay, because the macOS
-  open-files and picker paths use them.
-- The CLI help sentence "If two file paths are provided, chilla shows them side
-  by side. If three or more file paths are provided, chilla opens file view
-  mode with the left pane limited to those files." is replaced with: "If two or
-  more file paths are provided, chilla shows the first two side by side and
-  lists all of them in the folded left pane; a file chosen in the list opens in
-  the active pane."
+- `FileSet(Vec<PathBuf>)` is restored as at HEAD `9aa3772`.
+- The pair target holds a non-empty ordered pair list whose type keeps the
+  "at least one pair" invariant, for example
+  `FilePairs { first: FilePairPaths, rest: Vec<FilePairPaths> }` with
+  `FilePairPaths { left: PathBuf, right: PathBuf }`. Both `chilla a b` and
+  `--compare` produce it. Exact names are left to the implementation plan.
 
-## Rust Consumers
+Rust consumers (exhaustive matches flag each one):
 
-All `StartupTarget` matches are exhaustive, so the compiler flags every
-consumer:
-
-| Location | Behavior for `FilePair` |
-|----------|-------------------------|
-| `viewer/service.rs` startup context | Builds `initial_mode: FileView` and `BrowserRoot::FilePair` (below). All display paths come from the canonical paths. The `FileSet` arm is removed. |
-| `verbose_log.rs` startup-load path | Returns `left` (unchanged). The `FileSet` arm is removed. |
-| `cli/mod.rs` (`run_outcome` and the other startup plumbing) | Passes the target through unchanged. |
+| Location | Pair target behavior |
+|----------|----------------------|
+| `viewer/service.rs` startup context | `initial_mode: FileView`, `BrowserRoot::FilePair` with the pair list (below), display paths from canonical paths. The `FileSet` arm is restored. |
+| `verbose_log.rs` startup-load path | Returns the first pair's left path. The `FileSet` arm is restored. |
+| `cli/mod.rs` `run_outcome` | Passes the target through. |
 
 ## Startup Payload Contract
-
-`BrowserRoot::FilePair`, serialized with the existing `kind` tag, gains one
-field:
 
 ```text
 BrowserRoot
 - file_pair:
   - kind: "file_pair"
-  - left_file_path          (unchanged; equals source_order_paths[0])
-  - right_file_path         (unchanged; equals source_order_paths[1])
-  - source_order_paths      (new; all unique files in CLI order, length >= 2)
+  - pairs: [ { left_file_path, right_file_path }, ... ]   (length >= 1, CLI order, deduplicated)
+- explicit_file_set: restored exactly as at HEAD 9aa3772
 ```
 
-- The existing two fields stay so the initial pane assignment is explicit and
-  the 0.4.0 field names keep working; `source_order_paths` is the list shown
-  in the file list.
-- `StartupContext.initial_mode` is `file_view` and `file_open_options` is
-  passed through unchanged.
-- The TypeScript `BrowserRoot` `file_pair` variant in
-  `src/lib/tauri/document.ts` gains `source_order_paths: readonly string[]`.
-  The normalizer accepts `source_order_paths` / `sourceOrderPaths` and rejects
-  a pair payload when either path field is missing, when `source_order_paths`
-  is missing, not an array of strings, or shorter than two, or when its first
-  two entries differ from `left_file_path` / `right_file_path`.
-- No new Tauri command is added. Panes load with the existing
-  `open_file_preview` command and `file_open_options`. The file list loads with
-  the existing `list_explicit_file_set` command, given `source_order_paths`
-  and the source-order flag below.
-- Rust and TypeScript change together (tauri-development skill). The frontend
-  and backend ship in one bundle, so there is no mixed-version case.
-
-## Source-Order Listing Contract
-
-The pair list must show rows in deduplicated CLI order. Today
-`list_explicit_file_set` always sorts by the requested `DirectoryListSort`
-(the frontend default is name ascending, `src/features/file-view/sort.ts`)
-before it paginates (`src-tauri/src/viewer/directory_listing.rs`, sort then
-`page_bounds`). Sorting each returned page on the frontend afterwards would
-not work: rows would still be out of order across pages. The command
-therefore gains one optional argument:
-
-```text
-list_explicit_file_set(paths, sort?, query?, offset?, limit?, source_order?)
-- source_order: Option<bool>, default false
-```
-
-Rules (Rust: `src-tauri/src/commands/document.rs`,
-`src-tauri/src/viewer/service.rs`, `src-tauri/src/viewer/directory_listing.rs`):
-
-- `source_order` absent or `false`: behavior unchanged (sort by `sort`, then
-  paginate). Directory, macOS open-files, and picker explicit lists never send
-  `true`, so their order is unchanged.
-- `source_order == true`: records keep first-occurrence canonical order of
-  `paths` (the existing dedup loop already builds that order), the query
-  filter is applied as today, the sort step is skipped, and then pages are
-  cut with the existing `page_bounds`. `sort` is ignored. Every page is
-  therefore a contiguous slice of one fixed order, so concatenating pages
-  always reproduces the source order.
-
-TypeScript (`src/lib/tauri/document.ts`): `listExplicitFileSet` gains an
-optional trailing options argument `{ sourceOrder?: boolean }`, sent as the
-Tauri invoke key `sourceOrder` (Tauri maps the Rust `source_order` argument to
-camelCase). Existing call sites pass nothing and behave as before.
-
-Frontend state (`src/features/workspace/WorkspaceShell.tsx`): the
-explicit-file-set `LoadedDirectoryState` gets a `sourceOrder: boolean` field.
-The pair startup sets it to `true`. Every later explicit-list request for that
-state (load more, query change, `explicit_file_set` reload) reuses the stored
-flag, so pagination and filtering stay in source order. Other explicit-list
-loads set it to `false`.
-
-Sorting in the pair list: while `sourceOrder` is `true`, sort changes
-(`sort.*` and `sort.reset` actions, sort UI) are ignored by
-`handleChangeDirectorySort`. `FileBrowserPane` gets an optional
-`sourceOrder?: boolean` prop. When it is `true`, the sort summary shows
-"Order: command line" instead of `describeFileTreeSort`, and sort actions are
-not dispatched. Without the prop, rendering and sorting are unchanged.
-
-Expected order example: `chilla z.png a.png m.png z.png` deduplicates to
-`[z.png, a.png, m.png]`. Rows are `z.png, a.png, m.png`; the left pane shows
-`z.png` (marker `L`), the right pane shows `a.png` (marker `R`), and `m.png`
-has no marker. With a filter that matches only `z.png` and `m.png`, rows are
-`z.png, m.png`.
+- The 0.4.0 top-level `left_file_path` / `right_file_path` fields are removed;
+  the first pair is `pairs[0]`. Frontend and backend ship in one bundle, so
+  there is no mixed-version case.
+- TypeScript (`src/lib/tauri/document.ts`): the `file_pair` variant becomes
+  `{ kind: "file_pair"; pairs: readonly FilePairPaths[] }` with
+  `FilePairPaths = { left_file_path: string; right_file_path: string }`. The
+  normalizer accepts `pairs` and per-pair `left_file_path` / `leftFilePath`
+  and `right_file_path` / `rightFilePath`, and rejects a payload whose `pairs`
+  is missing, not an array, empty, or has an entry with a missing or
+  non-string path.
+- `list_explicit_file_set` (Rust command and `listExplicitFileSet` in TS)
+  returns to its HEAD signature: the `source_order` / `sourceOrder` option and
+  the `LoadedDirectoryState.sourceOrder` field are removed.
+- No new Tauri command. Panes load with the existing `open_file_preview` and
+  `file_open_options`.
 
 ## Frontend Behavior
 
 ### State Ownership
 
-`WorkspaceShell` owns the pair state, because the file list, the header, the
-keymap, and the panes all read or change it. The state is a pure TypeScript
-module in `src/features/pair-view/` (extending `pairPaneVisibility.ts` or a
-sibling module) with unit tests:
+`WorkspaceShell` owns the pair state because the pair list, header, keymap,
+and panes read or change it. A pure module in `src/features/pair-view/`
+(extending `pairPaneVisibility.ts`) holds the transitions and has unit tests:
 
 ```text
 PairState
-- leftPath: string
-- rightPath: string
-- activeSide: "left" | "right"
-- visibility: PairPaneVisibility ("both" | "left_only" | "right_only")
+- pairs: readonly FilePairPaths[]   (from the startup payload, never changes)
+- selectedIndex: number             (0 at startup)
+- visibility: PairPaneVisibility    ("both" | "left_only" | "right_only")
 ```
 
-Initial state: `leftPath = source_order_paths[0]`,
-`rightPath = source_order_paths[1]`, `activeSide = "left"`,
-`visibility = "both"`. Nothing is persisted.
+- `selectPair(state, index)` returns the state with `selectedIndex` set when
+  `index` is in range and otherwise returns the state unchanged. Visibility is
+  never changed by selection (a hidden pane stays hidden).
+- `togglePairPane(visibility, side)`: shows the side if hidden, otherwise
+  hides it; hiding the only visible pane is a no-op. "Both hidden" cannot be
+  represented. The 0.4.0 transition table (hide left from `both` gives
+  `right_only`, and so on) is unchanged.
+- Nothing is persisted.
 
-`PairView` becomes a controlled component. It receives `leftPath`,
-`rightPath`, `activeSide`, and `visibility`, and reports `onActivate(side)` and
-`onChangeVisibility(next)`. It keeps owning each pane's `FilePreview | null`,
-loading flag, and error, and it exposes `reload()` as today.
+`PairView` is controlled: it receives `leftPath` / `rightPath` (from
+`pairs[selectedIndex]`) and `visibility`, and reports
+`onChangeVisibility(next)`. It owns each pane's preview, loading flag, and
+error, and exposes `reload()` as today. It is not keyed on the paths: when a
+selection changes only one side's path (for example `a..b` to `a..c`), only
+that pane reloads; the per-side request counter discards stale results when
+the selection changes quickly.
+
+### Active-Pane Removal
+
+The active-pane concept is removed entirely. The following must not exist
+after the change, and their code, CSS, and tests are deleted:
+
+- `activeSide` state, `onActivate`, pointerdown/focusin activation handlers.
+- `pair-view__pane--active`, `data-pair-active`, the pane `aria-current`
+  marker, and the accent-border CSS for them (`PairView.css`, `App.css`).
+- `pairMarkerForPath`, the `L` / `R` / `LR` badges and their accessible-name
+  suffixes in `FileBrowserPane`, and the `sourceOrder` prop and
+  "Order: command line" summary.
+- Assignment of a single list file into one pane.
+
+### Pair List Pane
+
+A new component `src/features/pair-view/PairListPane.tsx` renders the left
+slot in pair mode. `FileBrowserPane` is not used in pair mode, because its
+rows are files with sort/filter/pagination semantics that do not apply to
+pairs.
+
+- Header: `CollapsePaneButton` (aria-label "Collapse left pane"), the title
+  "Pairs", and the count (`N pairs`, singular `1 pair`).
+- One row per pair in `pairs` order. The row is a button whose text is
+  `basename(left) <-> basename(right)` and whose `title` is
+  `fullLeft <-> fullRight`.
+- The selected row has `aria-selected="true"` and a selected class; others
+  have `aria-selected="false"`. Exactly one row is selected.
+- Click on a row: `selectPair`.
+- Keyboard: the component registers the existing `file` keymap context,
+  enabled only while the list is expanded and the workspace is in pair mode.
+  It accepts `cursor.down` / `cursor.up` (move selection by one and show that
+  pair; clamped at the ends, no wrap), and `open` / `enter` (show the
+  highlighted pair; a no-op re-select when already shown). All other `file`
+  actions (parent, filter, sort, view, search, ignored, directory info) are
+  not accepted in pair mode. Selecting the already selected pair does not
+  reload panes (reload stays on `r`).
+- The selected row scrolls into view on selection change.
+- While the list is folded, `j` / `k` keep their existing workspace meaning
+  and do not change the pair.
 
 ### Workspace Integration
 
 The `file_pair` startup branch in `WorkspaceShell`:
 
-- Sets the file tree folded (`setFileTreeOpen(false)`).
-- Loads the file list with the existing `loadExplicitFileSetState`
-  (`source_order_paths`, selected path = `left_file_path`) in source-order mode
-  (see Source-Order Listing Contract), so `directoryState().listingKind` is
-  `explicit_file_set` and rows follow deduplicated CLI order. It does not call
-  `previewSelectedFile`; the single-document area stays empty.
-- Initializes `PairState`.
+- Folds the left slot (`setFileTreeOpen(false)`) for every pair count,
+  including one pair.
+- Initializes `PairState` with `selectedIndex = 0` and `visibility = "both"`.
+- Does not load any directory or explicit file-set listing and does not call
+  `previewSelectedFile`.
 
-Layout in pair mode:
+Layout and controls in pair mode:
 
-- The viewer grid renders `FileBrowserPane` (when the tree is open) followed by
-  `PairView` in the document column. `TocPane` and `WorkspaceDocumentColumn`
-  for the single document are not rendered.
-- `PairView` is not keyed on the pane paths. Changing one pane's path reloads
-  only that pane; the other pane keeps its preview, scroll, and zoom state.
-- The `isPairMode()` guards in `handleToggleFileTree` and `showExpandTab` are
-  removed. The header toggle, the `.workspace__expand-tab` left-edge strip, and
-  `Shift+L` (`sidebar.toggle`) expand and fold the list in pair mode exactly as
-  in other file-view modes, including the existing focus handoff
-  (`focusVisiblePane`).
-- Header controls that act on the single active document stay hidden or
-  disabled in pair view, as in 0.4.0.
-- Reload (`r`, `document.reload`) keeps the pair branch: it re-runs
-  `open_file_preview` for the two currently assigned paths. It does not re-list
-  the file list.
-- `WorkspaceFeedback.tsx` `loadingMessage` keeps its `file_pair` branch.
+- The viewer grid renders `PairListPane` (when expanded) followed by
+  `PairView`. `TocPane` and the single-document column are not rendered.
+- The header sidebar toggle, the full-height `.workspace__expand-tab`
+  left-edge strip, `CollapsePaneButton`, and `Shift+L` (`sidebar.toggle`)
+  fold and expand the pair list, with the existing focus handoff
+  (`focusVisiblePane`, whose selector includes the pair list so the selected
+  row receives focus on expand).
+- Header controls that act on a single document stay hidden or disabled, as
+  in 0.4.0.
+- Reload (`r`, `document.reload`) re-runs `open_file_preview` for the
+  currently shown pair only.
+- `WorkspaceFeedback.tsx` keeps its `file_pair` loading message.
+- `CollapsePaneButton` in `FileBrowserPane` and `PrDiffWorkspace` headers
+  (already implemented in the working tree) is kept; it only calls the same
+  fold handler.
 
-### Pane Rendering
+### Pane Rendering And Visibility
 
-Unchanged from 0.4.0 except for the active marker:
-
-- Each pane renders its preview with the existing `WorkspaceDocumentColumn`
-  (`markdownDoc = null`, CSV `formatted` when available, structured data and
-  HTML at their existing defaults). No renderer is duplicated.
-- One pane failing to load shows its error inside that pane and does not
-  block the other pane.
-- Each pane header shows the file basename (full path in `title`) and the eye
-  toggle.
-- When a pane's path changes, that pane's preview is replaced the same way the
-  single-file view replaces a preview when another file is opened. No extra
-  zoom preservation or reset logic is added.
-
-### Active Pane
-
-- Exactly one side is active at any time (`activeSide`). The initial active
-  side is `left`.
-- The active pane's `section` gets the class `pair-view__pane--active` and
-  `data-pair-active="true"`; the inactive pane gets neither. The active pane
-  shows an accent border and an accented header, and its header shows a small
-  "Active" text label so the marker does not rely on color alone.
-- A `pointerdown` inside a pane's `section` (capture phase, without
-  `preventDefault` or `stopPropagation`) sets that side active, so pan, wheel
-  zoom, and right-drag handlers in the preview are unaffected. Keyboard
-  `focusin` inside the section also activates it.
-- The pane header eye button and the restore strip button do not change the
-  active side. Hiding a pane does not change the active side, so the active
-  pane can be hidden.
-
-### Loading A List Choice Into The Active Pane
-
-In pair mode, `FileBrowserPane` callbacks are routed as follows:
-
-| List interaction | Existing callback | Pair-mode effect |
-|------------------|-------------------|------------------|
-| Cursor move (`j` / `k` / arrows) | `onSelectEntry(entry)` | Moves the list highlight only. No pane load and no debounced preview. |
-| Click, `Enter` / `open`, or a request with `immediatePreview: true` | `onConfirmEntry` / `onSelectEntry(entry, { immediatePreview: true })` | Moves the highlight and assigns `entry.path` to the active side. |
-
-Assignment rules:
-
-- If the active pane is hidden, it is shown (`visibility` becomes `both`)
-  as part of the same assignment.
-- If `entry.path` already equals the active side's path, the pane is not
-  re-fetched (reload stays on `r`); only the visibility rule applies.
-- The same file may be shown in both panes. Choosing the file shown in the
-  other pane loads it into the active pane too; panes are not swapped.
-- The active side does not change on assignment.
-- Entries are always files in this listing mode; there is no directory
-  handling path in pair mode.
-
-### List Markers
-
-- `FileBrowserPane` gains one optional prop that maps a path to a marker
-  (`"L"`, `"R"`, or `"LR"` when both panes show it). It is passed only in pair
-  mode; without it, rendering is unchanged for directory and explicit-file-set
-  modes.
-- A row whose path is marked shows a small badge after the file name (`L`,
-  `R`, or `L R`), and its accessible name gets a suffix such as
-  ", shown in left pane", ", shown in right pane", or ", shown in both panes".
-- Markers reflect the current `leftPath` / `rightPath`, independent of
-  visibility and of the list highlight.
-
-### Pane Visibility State
-
-The three-value union from 0.4.0 stays; "both hidden" cannot be represented:
-
-```text
-PairPaneVisibility = "both" | "left_only" | "right_only"
-```
-
-| Current | Action | Next |
-|---------|--------|------|
-| `both` | hide left | `right_only` |
-| `both` | hide right | `left_only` |
-| `right_only` | show left | `both` |
-| `left_only` | show right | `both` |
-| `left_only` | hide left | `left_only` (no-op) |
-| `right_only` | hide right | `right_only` (no-op) |
-
-A new pure function `togglePairPane(state, side)` returns `showPairPane` when
-the side is hidden and `hidePairPane` otherwise, so toggling the only visible
-pane is a no-op.
-
-UI rules (unchanged from 0.4.0): the sole visible pane's eye button is
-`aria-disabled="true"` with tooltip "Cannot hide the only visible pane"; the
-restore strip is always rendered on the hidden side; buttons use the
-accessible names "Hide left pane", "Hide right pane", "Show left pane", and
-"Show right pane" with `aria-pressed`; glyphs are inline SVG.
-
-Hidden-pane shortcut suppression is unchanged: `PreviewPane`,
-`PdfFilePreviewPane`, and `MediaFilePreviewPane` ignore window keydown when
-inside a `.pane--hidden, [hidden], [aria-hidden='true']` ancestor, so `+` / `-`
-zoom affects only visible panes.
+Unchanged from 0.4.0: each pane renders through `WorkspaceDocumentColumn`; a
+pane error does not block the other pane; each pane header shows the basename
+(full path in `title`) and the eye button; the sole visible pane's eye button
+is `aria-disabled="true"` with tooltip "Cannot hide the only visible pane";
+the restore strip is rendered on the hidden side; accessible names are
+"Hide left pane", "Hide right pane", "Show left pane", "Show right pane" with
+`aria-pressed`. Hidden-pane keyboard suppression in `PreviewPane`,
+`PdfFilePreviewPane`, and `MediaFilePreviewPane` is unchanged, so `+` / `-`
+zoom only visible panes.
 
 ### Pane Toggle Shortcuts
 
-- Two workspace keymap actions are added to `WORKSPACE_ACTIONS` in
-  `src/features/keymap/keymap.ts`: `pair.left.toggle` and `pair.right.toggle`.
-- Default workspace bindings: `b("{", "pair.left.toggle", "Toggle left
-  comparison pane (pair view)")` and `b("}", "pair.right.toggle", "Toggle
-  right comparison pane (pair view)")`.
-- Bindings match the produced character. `eventKey` already returns `{` / `}`
-  for Shift+`[` / Shift+`]` on US layouts, and returns the same characters on
-  any layout (for example JIS) whose key produces them. No `<S-...>` mapping is
-  added. Users rebind them through the existing keymap configuration.
-- `WorkspaceShell` registers both actions in its existing workspace
-  `keymap.register` call. The handlers apply `togglePairPane` when
-  `isPairMode()` is true and do nothing otherwise.
-- Editable fields and modal dialogs are already excluded by the
-  `KeymapProvider` dispatcher for non-modifier workspace bindings; no extra
-  guard is added. The file-browser (`file`) and diff contexts have no `{` / `}`
-  bindings, so there is no conflict. Pair panes are read-only and contain no
-  markdown editor.
-- The keyboard help overlay lists workspace bindings from the effective keymap
-  (`ShortcutSectionList`), so the new bindings appear automatically. The static
-  fallback list `SHORTCUT_SECTIONS` in `workspaceShortcuts.tsx` also gets the
-  two entries.
+- Workspace keymap actions `pair.left.toggle` and `pair.right.toggle` with
+  default bindings `{` and `}` (already in `keymap.ts` in the working tree;
+  kept). They are rebindable through the existing keymap configuration and
+  appear in keyboard help (`ShortcutSectionList` and the static
+  `SHORTCUT_SECTIONS` fallback in `workspaceShortcuts.tsx`).
+- Handlers apply `togglePairPane` only in pair mode; otherwise they do
+  nothing. Editable fields and modal dialogs are already excluded by the
+  `KeymapProvider` dispatcher for non-modifier workspace bindings.
 
 ## Validation
 
 Rust (`src-tauri/src/cli/tests.rs`, `src-tauri/src/viewer/service/tests.rs`
-and/or `service/tests/startup_options_tests.rs`, `src-tauri/src/verbose_log.rs`):
+and/or `service/tests/startup_options_tests.rs`, `src-tauri/src/verbose_log.rs`),
+using temp directories as test working roots or absolute paths:
 
-- `a b` produces `FilePair { left: a, right: b, rest: [] }`; `b a` produces
-  the reverse.
-- `a b c` produces `FilePair { left: a, right: b, rest: [c] }`.
-- `a b a` produces `FilePair { left: a, right: b, rest: [] }`.
-- `a a`, `a ./a`, and `a a a` produce `File(a)`.
-- A directory together with a file still fails with the existing usage error
-  and exit code 2.
-- A local Git directory plus a commit-ish still resolves to `GitDiff`.
-- The startup context for a three-file pair serializes as `kind: "file_pair"`
-  with `left_file_path`, `right_file_path`, `source_order_paths` (three
-  entries, CLI order), and `initial_mode: "file_view"`.
-- The startup-load marker arms the left path for `FilePair`.
-- Tests that asserted `FileSet` / `BrowserRoot::ExplicitFileSet` from CLI
-  startup are rewritten to the pair expectations.
-- `z a m z` (unsorted, with a duplicate) produces
-  `FilePair { left: z, right: a, rest: [m] }`, and its startup context has
-  `source_order_paths = [z, a, m]`.
-- `src-tauri/src/viewer/directory_listing/tests.rs` (or
-  `viewer/service/tests.rs`): `list_explicit_file_set` with paths
-  `[z.png, a.png, m.png, z.png]`, `source_order = true`, and a name-ascending
-  `sort` returns rows `z.png, a.png, m.png`. With `limit = 2`, offset 0
-  returns `z.png, a.png` and offset 2 returns `m.png`, with
-  `total_entry_count = 3`. A query matching `z` and `m` returns `z.png, m.png`.
-  The same paths with `source_order` absent or `false` still return
-  `a.png, m.png, z.png` (existing sort unchanged).
+- `--compare a..b c..d` gives pairs `[(a,b), (c,d)]` in order.
+- `--compare a..b a..b` and `--compare a..b ./a..b` give one pair;
+  `--compare a..b b..a` gives two pairs.
+- A SPEC with `..` path components (`../x.png..../y.png`, from a nested
+  working directory) resolves to the two parent-directory files.
+- Ambiguous SPEC: with files `a`, `.b`, `a.`, and `b` present, `a...b` has
+  two valid splits (`a` / `.b` and `a.` / `b`) and fails with exit code 2 and
+  a message containing both splits.
+- No valid split (missing file, no `..`, a directory side) fails with exit
+  code 2 and names the SPEC.
+- `--compare` alone fails with exit code 2; `a --compare b..c` fails with exit
+  code 2; `--compare a..a` fails with exit code 2.
+- `--verbose --compare a..b` and `--compare a..b --csv-first-row-header=true`
+  still resolve the pair with the global options applied.
+- Positional: `a b` gives one pair; `a a` gives `File`; `a b c` and `a b a`
+  give `FileSet` (restored tests); a directory among several paths keeps the
+  existing usage error.
+- Startup context for a two-pair target serializes as `kind: "file_pair"` with
+  `pairs` (two entries, CLI order, canonical paths) and
+  `initial_mode: "file_view"`; for `FileSet` it serializes the restored
+  `explicit_file_set` root.
+- The verbose startup-load path returns the first pair's left path.
+- `list_explicit_file_set` source-order tests are removed with the option.
 
 TypeScript (vitest):
 
-- `document.vitest.ts`: the normalizer accepts `file_pair` / `filePair` with
-  `source_order_paths` / `sourceOrderPaths`, and rejects missing paths, a
-  missing or short list, and a list whose first two entries mismatch.
-- Pair state module: every visibility transition including the two no-ops;
-  `togglePairPane` for each state and side; no sequence reaches "both hidden";
-  assignment shows a hidden active pane, keeps the active side, and allows the
-  same path on both sides.
-- `PairView.vitest.tsx`: left/right order, eye buttons and the disabled sole
-  visible button, restore strip, per-pane error with the other pane rendered,
-  active marker on the active side only, `pointerdown` inside a pane reporting
-  `onActivate`, eye/restore buttons not reporting `onActivate`, and a path
-  change reloading only that pane.
-- `PairViewHiddenZoom.vitest.tsx`: existing hidden-pane zoom cases still pass.
-- `FileBrowserPane.vitest.tsx`: L / R / both markers and accessible-name
-  suffixes render only when the marker prop is supplied; with
-  `sourceOrder` the summary shows "Order: command line" and sort keys do not
-  call `onChangeSort`; without it, sort behavior is unchanged.
-- `document.vitest.ts`: `listExplicitFileSet` sends `sourceOrder: true` only
-  when the option is given, and sends no `sourceOrder` key otherwise.
-- `keymap.vitest.ts`: default workspace bindings include `{` and `}` mapped to
-  the new actions; a Shift+`[` event with `key: "{"` resolves to `{`.
+- `document.vitest.ts`: the normalizer accepts `file_pair` with `pairs`
+  (snake and camel case) and rejects missing, empty, or malformed `pairs`;
+  `listExplicitFileSet` sends no `sourceOrder` key.
+- Pair state module: `selectPair` in range, out of range, and with a hidden
+  pane (visibility unchanged); every visibility transition including the two
+  no-ops; no sequence reaches both hidden.
+- `PairListPane` DOM tests (new vitest file): row text and `title`, order,
+  exactly one `aria-selected="true"`, click selects, `j` / `k` move and clamp,
+  `Enter` selects, non-accepted `file` actions do nothing, the count label,
+  and the collapse button calling `onCollapse`.
+- `PairView.vitest.tsx`: left/right order, eye buttons and disabled sole
+  visible button, restore strip, per-pane error, path change of one side
+  reloading only that pane; active-pane tests removed and no element has
+  `data-pair-active`, `pair-view__pane--active`, or `aria-current`.
+- `PairViewHiddenZoom.vitest.tsx`: hidden-pane zoom cases still pass.
+- `FileBrowserPane.vitest.tsx`: marker and source-order tests removed;
+  `CollapsePaneButton` tests kept.
+- `keymap.vitest.ts`: `{` and `}` default bindings kept.
 - `WorkspaceShell.vitest.tsx`:
-  - Two-file and three-file `file_pair` startup renders the pair view with
-    `open_file_preview` called once per assigned path, calls
-    `list_explicit_file_set` with `source_order_paths`, and starts with the
-    file list folded and the expand strip shown.
-  - A `file_pair` startup with `source_order_paths = [z.png, a.png, m.png]`
-    calls `list_explicit_file_set` with `sourceOrder: true`; the expanded
-    list shows rows `z.png, a.png, m.png` in that order, with `L` on `z.png`,
-    `R` on `a.png`, and no marker on `m.png`. Load-more and query-change
-    requests for that list also send `sourceOrder: true`, and a sort action
-    sends no new list request.
-  - Non-pair `explicit_file_set` startup and picker loads do not send
-    `sourceOrder`.
-  - The header toggle, the expand strip, and `Shift+L` expand and fold the
-    list in pair mode.
-  - With the right pane activated, confirming the third list entry calls
-    `open_file_preview` for it and shows it in the right pane; the left pane
-    is not reloaded; markers update.
-  - Confirming an entry while the active pane is hidden shows that pane.
-  - A cursor move in the list does not load any pane.
-  - `{` and `}` hide and restore panes, are no-ops for the sole visible pane,
-    do nothing outside pair mode, and do nothing while focus is in an
-    editable field.
-  - Existing `explicit_file_set`, directory, and single-file startup tests
-    still pass.
+  - A two-pair `file_pair` startup shows pair 1 (`open_file_preview` once per
+    path), starts folded with the expand strip shown, and calls no listing
+    command.
+  - Expanding (header toggle, expand strip, `Shift+L`) shows two rows; clicking
+    or `Enter` on the second row shows pair 2; `j` / `k` change the shown pair;
+    `CollapsePaneButton` and `Shift+L` fold the list again.
+  - A single-pair startup also starts folded and lists one row.
+  - With the right pane hidden, selecting another pair keeps it hidden.
+  - `{` / `}` hide and restore panes, are no-ops for the sole visible pane,
+    do nothing outside pair mode, and do nothing in an editable field.
+  - `r` reloads only the shown pair.
+  - Restored `explicit_file_set` startup tests (three files) still pass.
 
 Commands:
 
@@ -451,26 +361,24 @@ Commands:
 - `mise run test` (cargo tests, `bun run typecheck`, `bun run test`, and the
   vitest DOM suite)
 - `bunx biome check src`
-- Runtime: chilla-post-edit-launch skill. Rebuild, then launch
-  `target/debug/chilla <a.png> <b.png> <c.png>`; confirm a/b side by side with
-  the list folded, expand the list, activate the right pane, choose c.png, and
-  check that `{` / `}` toggle panes. If no GUI verification is possible, report
-  this check as partial.
+- Runtime: chilla-post-edit-launch skill (`target/debug/chilla --compare
+  a.png..b.png c.png..d.png`). If the implementer cannot see the window, this
+  check is reported as not performed; the parent session performs the GUI
+  check after the workflow.
 
 ## Rollout Constraints
 
-- The payload change is additive within the `file_pair` variant, and frontend
-  and backend ship in one bundle.
-- User-visible changes:
-  - Launches with three or more positional files resolving to two or more
-    unique files (including `a b a`) now open pair view instead of the
-    explicit-file-set single-document view. This intentionally replaces the
-    previous behavior.
-  - Two-file launches gain the folded file list, active pane, and `{` / `}`.
-- Single-file, directory, GitHub/Git diff, macOS open-files, and picker
-  launches are unchanged.
+- The `file_pair` payload shape changes (`pairs` replaces the two top-level
+  fields); Rust and TypeScript change in the same change set.
+- User-visible changes relative to 0.4.0: two-file launches gain the folded
+  one-row pair list and `{` / `}`; the new `--compare` form is added. Three or
+  more positional files keep the pre-0.5 explicit file list.
 - Users with a custom `workspace` keymap section that replaces the defaults do
-  not get `{` / `}` until they add them; this is the existing keymap
-  configuration behavior.
+  not get `{` / `}` until they add them (existing keymap behavior).
+- The `impl-plans/active/pair-multi-*.md` plans and
+  `impl-plans/active/pair-multi-20261116-01-dispatch.json` describe the
+  rejected model and are superseded by new plans derived from this document.
+- `README.md` documents `--compare`, the pair list, the fold controls, and
+  `{` / `}`, and drops the active pane and `L` / `R` markers.
 - Default decisions still open for user confirmation are listed in
   `design-docs/user-qa/qa-pair-view.md`. They do not block implementation.

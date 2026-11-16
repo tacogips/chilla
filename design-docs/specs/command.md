@@ -22,7 +22,9 @@ The target command surface defines no named subcommands. The binary accepts eith
 | `chilla <git_dir> <commit>` | Local Git repository directory and one commit-ish | Open local Git diff viewer mode for one commit compared with its first parent |
 | `chilla <git_dir> <base>..<head>` | Local Git repository directory and two-dot range | Open local Git diff viewer mode for a direct base-to-head comparison |
 | `chilla <git_dir> <base>...<head>` | Local Git repository directory and three-dot range | Open local Git diff viewer mode for merge-base-to-head comparison |
-| `chilla <file_path> <file_path> ...` | Two or more positional file arguments that resolve to two or more distinct canonical regular files (for example `a b`, `a b c`, `a b a`) | Open pair view: first unique file on the left, second on the right, all unique files in the folded left list; a file chosen in the list opens in the active pane; see `design-pair-view.md` |
+| `chilla <file_path> <file_path>` | Exactly two positional file arguments that resolve to two distinct canonical regular files | Open pair view with one pair: the two files side by side, first on the left; see `design-pair-view.md` |
+| `chilla <file_path> <file_path> <file_path> ...` | Three or more positional file paths resolving to two or more unique files (for example `a b a`) | Open file view mode with the left pane constrained to the provided files only |
+| `chilla --compare <left>..<right> [<left>..<right> ...]` | One or more compare SPECs, each naming two existing regular files | Open pair view with one entry per pair in the folded left list; the first pair is shown; see `design-pair-view.md` |
 | `chilla --verbose [startup arguments]` | Global diagnostic flag plus any supported startup form | Start normally and record verbose startup and file-I/O diagnostics |
 | `chilla --help` | None | Show CLI help |
 | `chilla --version` | None | Show application version |
@@ -39,6 +41,7 @@ The positional arguments are named `path` in product messaging and accept relati
 | `--verbose` | boolean | `false` | Write startup and file-I/O diagnostics to `~/Library/Logs/chilla/chilla-verbose-<pid>[-<collision>].log`; also mirror the same records to an attached terminal |
 | `--no-github-diff-cache` | boolean | `false` | Bypass the GitHub diff cache for a GitHub diff URL startup target |
 | `--no-pr-diff-cache` | boolean | `false` | Compatibility alias for `--no-github-diff-cache` |
+| `--compare` | marker followed by one or more `LEFT..RIGHT` SPECs | absent | Open pair view for the listed file pairs; must be the first startup argument after global flags; see `design-pair-view.md`, Compare CLI |
 
 ### Environment Variables
 
@@ -66,7 +69,9 @@ The positional arguments are named `path` in product messaging and accept relati
 - `chilla <git_dir> <commit>` starts in local Git diff viewer mode for the selected commit against its first parent.
 - `chilla <git_dir> <base>..<head>` starts in local Git diff viewer mode for a direct base-to-head range.
 - `chilla <git_dir> <base>...<head>` starts in local Git diff viewer mode for a merge-base-to-head range.
-- `chilla <file_a> <file_b> ...` starts in file view mode with an explicit file-set selector that contains only the canonicalized requested files.
+- `chilla <file_a> <file_b>` with two distinct regular files starts in pair view with one pair (0.4.0 behavior).
+- `chilla <file_a> <file_b> <file_c> ...` (three or more positional files) starts in file view mode with an explicit file-set selector that contains only the canonicalized requested files.
+- `chilla --compare SPEC [SPEC ...]` starts in pair view with the resolved, deduplicated pairs in command-line order. SPEC resolution and its errors (exit code 2) are defined in `design-pair-view.md`, Compare CLI.
 - `--verbose` is a global modifier for app-starting invocations. It may appear before, between, or after startup arguments and must be removed before the existing argument-count and target-classification rules run.
 - Removing `--verbose` must leave every existing startup form unchanged, including bare, single-file, directory, multi-file, GitHub URL, local Git revision, and `--no-github-diff-cache` invocations.
 - Only the long form `--verbose` is defined. `-v` remains unsupported so it cannot be confused with version behavior or acquire an undocumented compatibility contract.
