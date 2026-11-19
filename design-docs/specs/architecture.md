@@ -386,6 +386,7 @@ See `design-docs/specs/design-markdown-workbench.md` for the detailed workspace 
 See `design-docs/specs/design-file-viewer-mode.md` for the file browser, startup-mode, and typed file preview contract.
 See `design-docs/specs/design-csv-viewer.md` for CSV-specific preview detection, contracts, and table rendering behavior.
 See `design-docs/specs/design-epub-navigation.md` for EPUB TOC extraction, reader navigation, and reading-location persistence.
+See `design-docs/specs/design-link-navigation-history.md` for preview link classification (local, anchor, external), the Back/Forward navigation history, and its toolbar, keyboard, and mouse triggers.
 
 ---
 

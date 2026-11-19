@@ -1,0 +1,331 @@
+{
+  "taskId": "link-nav-history-20261119-01",
+  "workflowMode": "issue-resolution",
+  "issueReference": "workflowInput:chilla-preview-link-navigation-history",
+  "implementationBranch": "main",
+  "baseBranch": "main",
+  "remote": "origin",
+  "gitPush": false,
+  "originalHead": "d14629db1471c4f17ac273bf7a62e751ec147552",
+  "evidenceRoot": "tmp/link-nav-history-20261119-01",
+  "designDocPaths": [
+    "design-docs/specs/design-link-navigation-history.md",
+    "design-docs/user-qa/qa-link-navigation-history.md",
+    "design-docs/specs/architecture.md",
+    "design-docs/user-qa/README.md"
+  ],
+  "reviewContext": {
+    "issueReference": "workflowInput:chilla-preview-link-navigation-history (workflowExecutionId opus-terra-design-and-implement-review-loop-session-865; plans accepted comm-019011 from step5-impl-plan-review)",
+    "userProblem": "Clicking links in the rendered Markdown preview does not reliably navigate: local links can make the webview navigate away from the app, digit-leading anchors throw in querySelector, encoded filenames containing %23/%3F are mis-split, and mailto links are sanitized to '#'. After following a link there is no way to go Back or Forward to the previous file and scroll position.",
+    "requiredOutcomes": [
+      "Relative (./, ../, subdirectory), URL-encoded (including %23 and %3F), same-file anchor, cross-file anchor and absolute local links navigate in-app to the correct file and position; http(s), mailto and tel links open in the system browser and never inside the webview.",
+      "Back and Forward toolbar icon buttons exist in the workspace header, are disabled when there is no history (and in diff mode), and restore the file plus scroll/anchor position.",
+      "Keyboard: Cmd+[ / Ctrl+[ and Alt+Left go back; Cmd+] / Ctrl+] and Alt+Right go forward; not triggered while an input, textarea, select or contenteditable has focus.",
+      "Mouse buttons 3/4 trigger back/forward where the webview delivers them; actual delivery in macOS WKWebView is recorded during launch verification.",
+      "Any successful user open (tree select/confirm/reveal, initial load, Open Files, native open, link) pushes an entry and truncates the forward stack; reload, refresh, watcher snapshots and history restore never push.",
+      "History works in single view and pair/compare view; pair { / } pane toggles keep working.",
+      "bun run typecheck, bun run test, bun run test:dom, mise run lint, and cargo check/clippy/nextest pass; target/debug/chilla builds and launches per the chilla-post-edit-launch skill."
+    ],
+    "nonGoals": [
+      "No history persistence across sessions and no history list UI.",
+      "No unsaved-edit guard on navigation.",
+      "No file: URLs, Windows paths, tel/ftp in Rust link sanitizer, or GitHub duplicate-slug suffix emulation.",
+      "No changes to PR diff workspace, EpubPreviewPane, HtmlRenderedPreviewPane, raw HTML sanitizers, media URL rules, Tauri commands, capabilities, Cargo.toml or Cargo.lock.",
+      "Do not touch or commit pubpage/**, design-docs/references/**, design-docs/specs/design-product-website.md, impl-plans/completed/website-current-features.md, or .riela/**."
+    ],
+    "constraints": [
+      "Each worker edits only its plan's writePaths, reads files fresh, and records sha256 before and after each edit in its own plan progress log. Evidence (data only) goes under tmp/link-nav-history-20261119-01/<planId>/<attempt>/ and stays untracked.",
+      "Mutating git commands (checkout, restore, stash, reset, add, commit) are forbidden for workers.",
+      "Do not hijack Cmd/Ctrl+[ ] or Alt+arrows while an editable element has focus; do not add history actions to the KeymapProvider editable-guard exception list or the key-repeat list; do not conflict with { / } pair toggles.",
+      "Percent-decoding happens exactly once after splitting the still-encoded href on the first literal # and ?; decoded text is never re-split (DESIGN-001).",
+      "preventDefault is called synchronously for every primary a[href] click in PreviewPane before any await.",
+      "Use CARGO_TERM_QUIET=true for cargo; NEXTEST_STATUS_LEVEL=fail NEXTEST_FAILURE_OUTPUT=immediate-final NEXTEST_HIDE_PROGRESS_BAR=1 for nextest. No emojis. No AI attribution in commit messages.",
+      "Workspace-wide gates (bun run test, bun run test:dom, mise run lint, cargo clippy/nextest, debug launch) and impl-plans/README.md index update run in serial reconciliation, not per plan."
+    ],
+    "designDecisionsAndRationale": [
+      {
+        "decision": "Pure classifier classifyPreviewLink in src/features/preview/previewLinks.ts plus resolveDocumentPathname in preview-assets.ts that does no splitting or decoding.",
+        "rationale": "resolveDocumentResource re-splits on literal ?/#, which breaks decoded names like chapter#one.md (review finding DESIGN-001); isolating join/normalize keeps existing media behavior identical."
+      },
+      {
+        "decision": "findFragmentTarget compares id values (exact, then slugifyHeading fallback) instead of building a CSS selector.",
+        "rationale": "querySelector(`#${id}`) throws for digit-leading ids such as 2024-notes, and CSS.escape may be missing in jsdom."
+      },
+      {
+        "decision": "Single immutable history (navigationHistory.ts) holding single or pair snapshots, capped at 100 entries, with duplicate-target suppression ignoring scrollTop.",
+        "rationale": "Mirrors browser semantics (push truncates forward stack) and keeps pair view as one snapshot timeline rather than per-pane histories (QA decision)."
+      },
+      {
+        "decision": "Push only inside the previewSelectedFile requestId success branch; historyMode 'none' for reload, refresh and restore; pair pushes only from the explicit PairListPane onSelect handler, never from an effect.",
+        "rationale": "previewSelectedFile returns null on both stale and success paths, so pushing from the return value could record stale requests; effect-driven pushes would fire on restore."
+      },
+      {
+        "decision": "Keymap actions history.back/history.forward with both <D-[>/<C-[>/<A-Left> and <D-]>/<C-]>/<A-Right> defaults; the existing editable guard is relied upon.",
+        "rationale": "Configurable and listed in help; both Ctrl and Cmd variants per QA decision; editable guard prevents hijacking editor keys."
+      },
+      {
+        "decision": "Rust sanitize_markdown_link_url accepts mailto (case-insensitive); media URLs stay http/https/data.",
+        "rationale": "mailto links rendered as href='#' today; opener:default already permits mailto."
+      },
+      {
+        "decision": "Scroll restore retries via requestAnimationFrame for up to 1000 ms with a run-id cancel counter, then forces a final set.",
+        "rationale": "Content height is not available immediately after async render; cancelling prevents stale restores from overriding a newer navigation."
+      }
+    ],
+    "intentionalTradeoffs": [
+      "In pair mode a link push happens before PairView confirms the side loaded; on load failure the entry holds the failed path, PairView shows its per-pane error, and Back still restores the prior path (accepted low finding, link-nav-workspace-shell.md:120).",
+      "PairListPane open/enter both call onSelect with the same index; Enter on the current pair resets a link-overridden side to the pair's paths; duplicate suppression covers the push. Record the behavior during implementation (accepted low finding, link-nav-workspace-shell.md:150).",
+      "A local relative path that looks like a scheme (a:b.md) is ignored by the generic-scheme rule.",
+      "Debounced tree previews push history when the debounced preview succeeds (QA decision).",
+      "Same-file anchor hops push history entries (QA decision)."
+    ],
+    "supportedEdgeCases": [
+      "./b.md, ../a/b.md?x=1#Sec, sub/c.md, my%20doc.md, chapter%23one.md, chapter%3Fone.md#heading, name%253F.md (decoded once), /abs/x.md, #%E6%97%A5, malformed percent sequences kept raw.",
+      "https, MAILTO (case-insensitive), tel -> external; javascript:, ftp:, //host, #, empty -> ignored.",
+      "Digit-leading anchors (#2024-notes) and slug fallback (a_b -> a-b).",
+      "History cap of 100 with index kept on the newest entry; push after Back truncates forward entries.",
+      "Middle click and clicks inside [role=dialog] are not handled as navigation.",
+      "Diff target active: Back/Forward disabled and history actions are no-ops."
+    ],
+    "outOfScopeEdgeCases": [
+      "file: URLs and Windows drive paths.",
+      "Cross-session history persistence.",
+      "GitHub duplicate heading suffixes (-1, -2).",
+      "Unsaved-edit prompts before navigating away.",
+      "Guaranteed mouse button 3/4 delivery on platforms whose webview does not deliver them."
+    ],
+    "sourcePaths": [
+      "design-docs/specs/design-link-navigation-history.md",
+      "design-docs/user-qa/qa-link-navigation-history.md",
+      "impl-plans/active/link-nav-rust-mailto.md",
+      "impl-plans/active/link-nav-preview-links.md",
+      "impl-plans/active/link-nav-history-model.md",
+      "impl-plans/active/link-nav-keymap-actions.md",
+      "impl-plans/active/link-nav-header-controls.md",
+      "impl-plans/active/link-nav-preview-pane.md",
+      "impl-plans/active/link-nav-workspace-shell.md",
+      "src/features/workspace/WorkspaceShell.tsx",
+      "src/features/preview/PreviewPane.tsx",
+      "src/features/preview/preview-assets.ts",
+      "src/features/pair-view/PairView.tsx",
+      "src/features/pair-view/PairListPane.tsx",
+      "src/features/keymap/keymap.ts",
+      "src-tauri/src/markdown/mod.rs"
+    ],
+    "residualRisks": [
+      "The WorkspaceShell integration is large; it relies on the stale-request push guard and on edits staying localized.",
+      "Mouse button 3/4 delivery in macOS WKWebView must be recorded during launch verification.",
+      "Scroll-restore with rAF retry needs rAF stubs or fake timers in jsdom tests.",
+      "impl-plans/README.md index update is deferred to serial reconciliation."
+    ],
+    "reconciliationVerification": [
+      "bun run typecheck",
+      "bun run test",
+      "bun run test:dom",
+      "mise run lint",
+      "cd src-tauri && CARGO_TERM_QUIET=true cargo check",
+      "cd src-tauri && CARGO_TERM_QUIET=true cargo clippy --all-targets -- -D warnings",
+      "cd src-tauri && NEXTEST_STATUS_LEVEL=fail NEXTEST_FAILURE_OUTPUT=immediate-final NEXTEST_HIDE_PROGRESS_BAR=1 CARGO_TERM_QUIET=true cargo nextest run",
+      "build and launch target/debug/chilla per .agents/skills/chilla-post-edit-launch/SKILL.md"
+    ]
+  },
+  "plans": [
+    {
+      "planId": "link-nav-rust-mailto",
+      "planPath": "impl-plans/active/link-nav-rust-mailto.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src-tauri/src/markdown/mod.rs",
+        "impl-plans/active/link-nav-rust-mailto.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Link sanitizer accepts mailto case-insensitively; media sanitizer unchanged (mailto image src sanitized to empty).",
+        "Five new tests pass: mailto kept, MAILTO kept, javascript -> '#', mailto image rejected, ./other.md#sec kept.",
+        "cargo check, clippy and nextest exit 0."
+      ],
+      "verification": [
+        "cd src-tauri && CARGO_TERM_QUIET=true cargo check",
+        "cd src-tauri && CARGO_TERM_QUIET=true cargo clippy --all-targets -- -D warnings",
+        "cd src-tauri && NEXTEST_STATUS_LEVEL=fail NEXTEST_FAILURE_OUTPUT=immediate-final NEXTEST_HIDE_PROGRESS_BAR=1 CARGO_TERM_QUIET=true cargo nextest run markdown",
+        "cd src-tauri && CARGO_TERM_QUIET=true cargo fmt --check"
+      ]
+    },
+    {
+      "planId": "link-nav-preview-links",
+      "planPath": "impl-plans/active/link-nav-preview-links.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/preview/preview-assets.ts",
+        "src/features/preview/preview-assets.test.ts",
+        "src/features/preview/previewLinks.ts",
+        "src/features/preview/previewLinks.test.ts",
+        "src/features/preview/previewFragment.ts",
+        "src/features/preview/previewFragment.vitest.ts",
+        "package.json",
+        "impl-plans/active/link-nav-preview-links.md"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [
+        {
+          "path": "package.json",
+          "intendedEdit": "Append ./src/features/preview/previewLinks.test.ts to the test script file list only; no other script or dependency change and no lockfile regeneration."
+        }
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "resolveDocumentPathname, classifyPreviewLink, slugifyHeading, PreviewLinkNavigation, PreviewLinkTarget and findFragmentTarget exist with the pinned signatures.",
+        "resolveDocumentResource output unchanged for all existing inputs.",
+        "All listed classifier, slug, pathname and fragment test cases pass.",
+        "package.json test script includes previewLinks.test.ts.",
+        "typecheck and biome clean for owned files."
+      ],
+      "verification": [
+        "bun test ./src/features/preview/previewLinks.test.ts ./src/features/preview/preview-assets.test.ts",
+        "bunx vitest run --config vitest.config.ts src/features/preview/previewFragment.vitest.ts",
+        "bun run typecheck",
+        "bunx biome check src/features/preview/preview-assets.ts src/features/preview/previewLinks.ts src/features/preview/previewFragment.ts src/features/preview/previewLinks.test.ts src/features/preview/previewFragment.vitest.ts src/features/preview/preview-assets.test.ts"
+      ]
+    },
+    {
+      "planId": "link-nav-history-model",
+      "planPath": "impl-plans/active/link-nav-history-model.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/workspace/navigationHistory.ts",
+        "src/features/workspace/navigationHistory.vitest.ts",
+        "impl-plans/active/link-nav-history-model.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "navigationHistory.ts exports match the pinned contract exactly and never mutate inputs.",
+        "All 9 listed test cases pass (including cap of 100 with index 99 and forward truncation).",
+        "typecheck and biome clean."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/workspace/navigationHistory.vitest.ts",
+        "bun run typecheck",
+        "bunx biome check src/features/workspace/navigationHistory.ts src/features/workspace/navigationHistory.vitest.ts"
+      ]
+    },
+    {
+      "planId": "link-nav-keymap-actions",
+      "planPath": "impl-plans/active/link-nav-keymap-actions.md",
+      "dependsOn": [],
+      "writePaths": [
+        "src/features/keymap/keymap.ts",
+        "src/features/keymap/keymap.vitest.ts",
+        "src/features/keymap/KeymapProvider.vitest.tsx",
+        "README.md",
+        "impl-plans/active/link-nav-keymap-actions.md"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [
+        {
+          "path": "README.md",
+          "intendedEdit": "Add history.back and history.forward to the Workspace actions sentence and one sentence listing default keys and mouse back/forward; edit only that paragraph."
+        }
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "history.back and history.forward appended to WORKSPACE_ACTIONS with six default bindings (<D-[>, <C-[>, <A-Left>, <D-]>, <C-]>, <A-Right>).",
+        "KeymapProvider.tsx unchanged; editable guard blocks the new actions in textarea/input.",
+        "README actions list updated.",
+        "New keymap and provider tests pass; existing keymap tests unchanged and passing."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/keymap",
+        "bun run typecheck",
+        "bunx biome check src/features/keymap/keymap.ts src/features/keymap/keymap.vitest.ts src/features/keymap/KeymapProvider.vitest.tsx"
+      ]
+    },
+    {
+      "planId": "link-nav-header-controls",
+      "planPath": "impl-plans/active/link-nav-header-controls.md",
+      "dependsOn": [
+        "link-nav-keymap-actions"
+      ],
+      "writePaths": [
+        "src/features/workspace/WorkspaceHeader.tsx",
+        "src/features/workspace/WorkspaceHeader.vitest.tsx",
+        "src/features/workspace/workspaceGlyphs.tsx",
+        "src/features/workspace/workspaceShortcuts.tsx",
+        "impl-plans/active/link-nav-header-controls.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Optional props canGoBack, canGoForward, onGoBack, onGoForward added to WorkspaceHeaderProps.",
+        "Back and Forward icon buttons render before the Open Files button, disabled unless the corresponding can* prop is true.",
+        "BackGlyph/ForwardGlyph and SHORTCUT_LABELS goBack/goForward added.",
+        "Header tests pass."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/workspace/WorkspaceHeader.vitest.tsx",
+        "bun run typecheck",
+        "bunx biome check src/features/workspace/WorkspaceHeader.tsx src/features/workspace/WorkspaceHeader.vitest.tsx src/features/workspace/workspaceGlyphs.tsx src/features/workspace/workspaceShortcuts.tsx"
+      ]
+    },
+    {
+      "planId": "link-nav-preview-pane",
+      "planPath": "impl-plans/active/link-nav-preview-pane.md",
+      "dependsOn": [
+        "link-nav-preview-links"
+      ],
+      "writePaths": [
+        "src/features/preview/PreviewPane.tsx",
+        "src/features/preview/PreviewPane.vitest.tsx",
+        "src/features/workspace/WorkspaceDocumentColumn.tsx",
+        "src/features/workspace/WorkspaceDocumentColumn.vitest.tsx",
+        "src/features/pair-view/PairView.tsx",
+        "src/features/pair-view/PairView.vitest.tsx",
+        "impl-plans/active/link-nav-preview-pane.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Every primary a[href] click is preventDefault'ed synchronously; external links go to openUrl; local and anchor links call onNavigateLink.",
+        "Digit-leading selectedAnchorId no longer throws (findFragmentTarget).",
+        "onNavigateLink threaded through WorkspaceDocumentColumn (both PreviewPanes) and PairView (side-aware).",
+        "Listed PreviewPane, column and PairView tests pass; existing pair visibility tests pass."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/preview/PreviewPane.vitest.tsx src/features/workspace/WorkspaceDocumentColumn.vitest.tsx src/features/pair-view",
+        "bun run typecheck",
+        "bunx biome check src/features/preview/PreviewPane.tsx src/features/preview/PreviewPane.vitest.tsx src/features/workspace/WorkspaceDocumentColumn.tsx src/features/workspace/WorkspaceDocumentColumn.vitest.tsx src/features/pair-view/PairView.tsx src/features/pair-view/PairView.vitest.tsx"
+      ]
+    },
+    {
+      "planId": "link-nav-workspace-shell",
+      "planPath": "impl-plans/active/link-nav-workspace-shell.md",
+      "dependsOn": [
+        "link-nav-history-model",
+        "link-nav-keymap-actions",
+        "link-nav-header-controls",
+        "link-nav-preview-pane",
+        "link-nav-preview-links"
+      ],
+      "writePaths": [
+        "src/features/workspace/WorkspaceShell.tsx",
+        "src/features/workspace/WorkspaceShell.vitest.tsx",
+        "src/features/workspace/activeDocumentNavigation.ts",
+        "impl-plans/active/link-nav-workspace-shell.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "History pushed on all successful user opens (inside the requestId success branch), never on reload, refresh, watcher snapshots or restore.",
+        "Back/Forward restore file plus scroll (rAF retry up to 1000 ms with run-id cancel) in single and pair view; pair restore does not trigger a selection push.",
+        "Toolbar, keymap (history.back/forward) and mouse button 3/4 triggers wired; disabled and no-op in diff mode.",
+        "Pair { / } toggles unaffected; listed WorkspaceShell tests pass and existing ones still pass."
+      ],
+      "verification": [
+        "bunx vitest run --config vitest.config.ts src/features/workspace",
+        "bun run typecheck",
+        "bunx biome check src/features/workspace/WorkspaceShell.tsx src/features/workspace/WorkspaceShell.vitest.tsx src/features/workspace/activeDocumentNavigation.ts"
+      ]
+    }
+  ]
+}
