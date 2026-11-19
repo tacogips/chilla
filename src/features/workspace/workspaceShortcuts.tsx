@@ -8,6 +8,8 @@ export type ShortcutDefinition = {
 
 export const SHORTCUT_LABELS = {
   openFiles: "Ctrl+O / Cmd+O",
+  goBack: "Cmd/Ctrl+[ / Alt+Left",
+  goForward: "Cmd/Ctrl+] / Alt+Right",
   copyPath: "Y",
   reload: "R",
   toggleToc: "Shift+T",
@@ -30,6 +32,14 @@ export const SHORTCUT_SECTIONS: readonly {
       { keys: ["?"], description: "Show this help" },
       { keys: ["Esc"], description: "Close help" },
       { keys: ["Q"], description: "Quit application" },
+      {
+        keys: ["Cmd/Ctrl", "["],
+        description: "Go back in link history (also Alt+Left)",
+      },
+      {
+        keys: ["Cmd/Ctrl", "]"],
+        description: "Go forward in link history (also Alt+Right)",
+      },
       {
         keys: ["Ctrl", "O"],
         description: "Open one or more files (also Cmd+O on macOS)",

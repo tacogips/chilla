@@ -3,7 +3,7 @@ import { EPUB_PAGINATION_STEP_EVENT } from "../preview/EpubPreviewPane";
 
 const SMALL_MEDIA_SEEK_SECONDS = 5;
 
-function getActiveDocumentScrollBody(): HTMLElement | null {
+export function getActiveDocumentScrollBody(): HTMLElement | null {
   const column = document.querySelector(".workspace__document-column");
 
   if (column === null) {
@@ -17,6 +17,14 @@ function getActiveDocumentScrollBody(): HTMLElement | null {
   }
 
   return pane.querySelector<HTMLElement>(".pane__body");
+}
+
+export function getPairPaneScrollBody(
+  side: "left" | "right",
+): HTMLElement | null {
+  return document.querySelector<HTMLElement>(
+    `[data-pair-pane="${side}"] .pane__body`,
+  );
 }
 
 function getActiveDocumentMediaElement(): HTMLMediaElement | null {

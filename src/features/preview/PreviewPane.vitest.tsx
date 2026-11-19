@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
+import * as pathApi from "@tauri-apps/api/path";
+import * as opener from "@tauri-apps/plugin-opener";
 import { render } from "solid-js/web";
 import { readFileSync } from "node:fs";
 import {
@@ -56,6 +58,96 @@ describe("PreviewPane", () => {
     rootStyle.removeProperty("--markdown-border");
     rootStyle.removeProperty("--font-sans");
     document.body.innerHTML = "";
+  });
+
+  it("intercepts primary links and routes their targets", async () => {
+    const root = document.getElementById("root");
+    if (!root) throw new Error("missing test root");
+    vi.spyOn(pathApi, "normalize").mockImplementation(async (path) =>
+      path.replace("/./", "/"),
+    );
+    const open = vi.spyOn(opener, "openUrl");
+    const navigate = vi.fn();
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath="/docs/a.md"
+          fileName="a.md"
+          html={
+            '<a href="./b.md#Sec">local</a><a href="#2024-notes">anchor</a><a href="https://example.com">external</a><a href="#">ignored</a>'
+          }
+          onNavigateLink={navigate}
+          selectedAnchorId={null}
+          visible={true}
+        />
+      ),
+      root,
+    );
+    const links = root.querySelectorAll("a");
+    const click = (index: number, button = 0) => {
+      const link = links[index];
+      if (!link) throw new Error("missing link");
+      const event = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button,
+      });
+      link.dispatchEvent(event);
+      return event;
+    };
+    expect(click(0).defaultPrevented).toBe(true);
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({
+        path: "/docs/b.md",
+        fragment: "Sec",
+      }),
+    );
+    navigate.mockClear();
+    expect(click(1).defaultPrevented).toBe(true);
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({
+        path: "/docs/a.md",
+        fragment: "2024-notes",
+      }),
+    );
+    navigate.mockClear();
+    expect(click(2).defaultPrevented).toBe(true);
+    await waitFor(() =>
+      expect(open).toHaveBeenCalledWith("https://example.com"),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+    open.mockClear();
+    expect(click(3).defaultPrevented).toBe(true);
+    expect(click(0, 1).defaultPrevented).toBe(false);
+    await Promise.resolve();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("scrolls to a digit-leading selected anchor", async () => {
+    const root = document.getElementById("root");
+    if (!root) throw new Error("missing test root");
+    const scroll = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scroll,
+    });
+    dispose = render(
+      () => (
+        <PreviewPane
+          colorScheme="dark"
+          documentPath="/docs/a.md"
+          fileName="a.md"
+          html={'<h2 id="2024-notes">Notes</h2>'}
+          selectedAnchorId="2024-notes"
+          visible={true}
+        />
+      ),
+      root,
+    );
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
   });
 
   it("gives source one inset code scroll area and keeps metadata outside zoom", () => {

@@ -1,6 +1,7 @@
 # Link Navigation: Toolbar Back/Forward Buttons Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
+**Completion**: 2026-11-19. Adversarial review accepted (comm-019097). Serial reconciliation gates passed (`tmp/link-nav-history-20261119-01/serial-reconcile-wave-001/`). Archived to `impl-plans/completed/link-nav-header-controls.md`.
 **Plan ID**: link-nav-header-controls
 **Wave**: 2 (depends on link-nav-keymap-actions)
 **Design Reference**: design-docs/specs/design-link-navigation-history.md#triggers (Toolbar)
@@ -85,12 +86,22 @@ readonly onGoForward?: () => void;
 
 ## Completion Criteria
 
-- [ ] Optional props added; buttons render with the correct disabled state
-- [ ] Glyphs and labels added
-- [ ] Header tests pass
+- [x] Optional props added; buttons render with the correct disabled state
+- [x] Glyphs and labels added
+- [x] Header tests pass
 
 ## Progress Log
 
 ### Session: 2026-11-19
 **Tasks Completed**: Plan created
 **Notes**: Record file hashes before and after editing.
+
+### Session: 2026-11-19 — implementation
+**Tasks Completed**: Header controls, glyphs, shortcut labels and focused tests.
+**Verification**: Scoped Vitest 15/15, typecheck and scoped Biome passed on the shared tree; logs in `tmp/link-nav-history-20261119-01/link-nav-header-controls/check-agent/`. Formal review and integration remain downstream.
+**Per-edit SHA-256 (before → after)**:
+- `WorkspaceHeader.tsx`: `17f02e7ff0ddc9a2c6869409ecc16d084f2083704f96b4522e5de319730bd455` → `29b398d7915fc9fe782cde6046d51c31d6ef86602e09be372ab1e14523153015`.
+- `WorkspaceHeader.vitest.tsx`: `d11bf11789914316a94c8dd8d7fd3f05cc8fd5dfd3979d932e82798b8fd5b498` → `8651c78281c80e14f5443b603d2545d5499baa13191639b039d6ce6aed333105` → formatted `e4f5279fc4ec224ee47273c8f587bf632a93f1da3127da8142443c2820e82ad6`.
+- `workspaceGlyphs.tsx`: `8ee287909502852e3b706c4ab6b12b9f9396e1214c402f7d673dcf66a1c1fa52` → `1d9f25d4abec101e55594dab7d7d85b6449f14d8667dbe423aeee7f34835334f` → formatted `2e2a45b68c2ee16b7a2348fc39c112e9055278c3a5156c6ce2eb639a206563e0`.
+- `workspaceShortcuts.tsx`: `36d084963025a9eb0bc0aac636ac1b85f7fa052f8d96d7392c70938f2f3912c1` → `95889ab01b58c1d41e0778f3d4a40affd2c68fcd858830168a9c7e8f20409678` → formatted `860a92450be0b6a6e6a507e9e531da90546b501d0e77f209122e2145335b64b3`.
+- This plan's before/after hashes and intent are recorded in `tmp/link-nav-history-20261119-01/link-nav-header-controls/plan-update/`; detailed source intents and formatting hashes are in `ts-agent/`.

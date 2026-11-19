@@ -1,6 +1,7 @@
 # Link Navigation: Rust mailto Sanitizer Fix Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
+**Completion**: 2026-11-19. Adversarial review accepted (comm-019097). Serial reconciliation gates passed (`tmp/link-nav-history-20261119-01/serial-reconcile-wave-001/`). Archived to `impl-plans/completed/link-nav-rust-mailto.md`.
 **Plan ID**: link-nav-rust-mailto
 **Wave**: 1 (no dependencies)
 **Design Reference**: design-docs/specs/design-link-navigation-history.md#rust-change
@@ -83,9 +84,9 @@ Record each command's exit status in the progress log.
 
 ## Completion Criteria
 
-- [ ] Link sanitizer accepts mailto; media sanitizer unchanged
-- [ ] 5 new tests pass
-- [ ] cargo check, clippy and nextest exit 0
+- [x] Link sanitizer accepts mailto; media sanitizer unchanged
+- [x] 5 new tests pass
+- [x] cargo check, clippy and nextest exit 0
 
 ## Progress Log
 
@@ -94,3 +95,17 @@ Record each command's exit status in the progress log.
 **Notes**: Edit only `src-tauri/src/markdown/mod.rs`. Read the file fresh
 before editing and record its hash before and after the edit. If the file
 changed unexpectedly, stop and report the drift.
+
+
+### Session: 2026-11-19 implementation
+**Tasks Completed**: Case-insensitive mailto links, unchanged media rules, and five regression tests. Formal review and integration remain downstream.
+
+**Source edit SHA256** (`src-tauri/src/markdown/mod.rs`):
+- Initial implementation: `13b0e3da8381768b02db804d7a9897d49eedf8d9ed6a0c9ae53521d734a51f79` -> `a49e918bd978e7a33b9ad46415e35a20a68ca828d7525bb568681fdb97670919`.
+- Test import: `a49e918bd978e7a33b9ad46415e35a20a68ca828d7525bb568681fdb97670919` -> `6bef5708898c2a8db2fa149dbbbebfd0b5694d17da316b5bfa44e97330fe5eed`.
+- Assertion type correction: `6bef5708898c2a8db2fa149dbbbebfd0b5694d17da316b5bfa44e97330fe5eed` -> `f150588a4597a466430928f97037c8866e923b71713bf3cda244a02883aab862`.
+- An independently observed formatting-only change produced final source hash `1daa2158b2199696fc7e0c4d03136c5fd1d96bb81400166aba2a70b967ab4369`; its origin was not established. Fresh diff review confirmed the intended assertion formatting and no lost changes.
+
+**Verification**: With `CARGO_TARGET_DIR=/tmp/chilla-link-nav-rust-mailto-check` and `CARGO_TERM_QUIET=true`, `cargo check` and `cargo clippy --all-targets -- -D warnings` exited 0; `cargo nextest run markdown` with the prescribed nextest environment exited 0 (27 passed, 0 failed). `CARGO_TERM_QUIET=true cargo fmt --check` exited 0. Complete final and prior logs are in `tmp/link-nav-history-20261119-01/link-nav-rust-mailto/check-unique/`. All checks ran on a shared moving tree; serial reconciliation owns final workspace-wide gates.
+
+**Plan edit SHA256**: before `bd29d019716c1ce104cd74f11745904526d6b2734724be1e4a7542d5c9be63b6`; after hash recorded in `tmp/link-nav-history-20261119-01/link-nav-rust-mailto/plan-update-01/after.sha256` to avoid a self-referential hash.

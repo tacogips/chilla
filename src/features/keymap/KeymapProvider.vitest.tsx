@@ -54,6 +54,8 @@ function setup() {
     "git.toggle": vi.fn(),
     "theme.toggle": vi.fn(),
     "scroll.down": vi.fn(),
+    "history.back": vi.fn(),
+    "pair.left.toggle": vi.fn(),
   };
   let controller: KeymapController | undefined;
   dispose = render(() => {
@@ -114,6 +116,33 @@ function setup() {
 }
 
 describe("keymap controller", () => {
+  it("dispatches history outside editables and preserves pair toggles", async () => {
+    const test = setup();
+    await settle();
+    document.body.focus();
+    expect(
+      test.press("[", { code: "BracketLeft", metaKey: true }, document.body)
+        .defaultPrevented,
+    ).toBe(true);
+    expect(test.workspace["history.back"]).toHaveBeenCalledOnce();
+    const textarea = document.createElement("textarea");
+    test.container.append(textarea);
+    textarea.focus();
+    expect(
+      test.press("[", { code: "BracketLeft", metaKey: true }, textarea)
+        .defaultPrevented,
+    ).toBe(false);
+    test.input.focus();
+    expect(
+      test.press("ArrowLeft", { altKey: true }, test.input).defaultPrevented,
+    ).toBe(false);
+    expect(test.workspace["history.back"]).toHaveBeenCalledOnce();
+    test.button.focus();
+    test.press("{", { shiftKey: true });
+    expect(test.workspace["pair.left.toggle"]).toHaveBeenCalledOnce();
+    expect(test.workspace["history.back"]).toHaveBeenCalledOnce();
+  });
+
   it("keeps search independent from theme with and without an active browser", async () => {
     const test = setup();
     await settle();

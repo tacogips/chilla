@@ -2,6 +2,7 @@
 
 This directory contains implementation plans that translate design documents into actionable implementation specifications.
 
+- Link Navigation History (2026-11-19): in-app preview link navigation and Back/Forward history across seven completed `link-nav-*` plans; see [design](../design-docs/specs/design-link-navigation-history.md).
 - [macOS 0.4.0 Release](completed/macos-release-0.4.0.md): pair view, left-edge expand strip and new branding; signed public assets, Homebrew cask and Apple review submission.
 
 - [macOS 0.3.7 Release](completed/macos-release-0.3.7.md): PDF shortcuts, pointer-anchored zoom and momentum drag pan; signed public assets, Homebrew cask and Apple review submission.
@@ -71,6 +72,13 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan                           | Completed  | Design Reference                                             |
 | ------------------------------ | ---------- | ------------------------------------------------------------ |
+| [Link Nav Rust mailto Sanitizer](completed/link-nav-rust-mailto.md) | 2026-11-19 | [Link navigation history](../design-docs/specs/design-link-navigation-history.md) |
+| [Link Nav Link Classification and Fragment Lookup](completed/link-nav-preview-links.md) | 2026-11-19 | [Link navigation history](../design-docs/specs/design-link-navigation-history.md) |
+| [Link Nav History Model](completed/link-nav-history-model.md) | 2026-11-19 | [Link navigation history](../design-docs/specs/design-link-navigation-history.md) |
+| [Link Nav Keymap Actions](completed/link-nav-keymap-actions.md) | 2026-11-19 | [Link navigation history](../design-docs/specs/design-link-navigation-history.md) |
+| [Link Nav Toolbar Back/Forward Buttons](completed/link-nav-header-controls.md) | 2026-11-19 | [Link navigation history](../design-docs/specs/design-link-navigation-history.md) |
+| [Link Nav Preview Link Click Handling](completed/link-nav-preview-pane.md) | 2026-11-19 | [Link navigation history](../design-docs/specs/design-link-navigation-history.md) |
+| [Link Nav Workspace History Integration](completed/link-nav-workspace-shell.md) | 2026-11-19 | [Link navigation history](../design-docs/specs/design-link-navigation-history.md) |
 | [Pair Compare Rust CLI](completed/pair-compare-rust.md) | 2026-11-16 | [Compare CLI](../design-docs/specs/design-pair-view.md#compare-cli) |
 | [Pair Compare TS Contract](completed/pair-compare-ts-contract.md) | 2026-11-16 | [Startup payload contract](../design-docs/specs/design-pair-view.md#startup-payload-contract) |
 | [Pair Compare PairView and PairListPane](completed/pair-compare-pair-view.md) | 2026-11-16 | [Pair list pane](../design-docs/specs/design-pair-view.md#pair-list-pane) |

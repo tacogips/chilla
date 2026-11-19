@@ -13,6 +13,7 @@ import {
   type FilePreview,
 } from "../../lib/tauri/document";
 import type { ColorScheme } from "../../lib/theme";
+import type { PreviewLinkNavigation } from "../preview/previewLinks";
 import { WorkspaceDocumentColumn } from "../workspace/WorkspaceDocumentColumn";
 import { EyeGlyph, EyeOffGlyph } from "../workspace/workspaceGlyphs";
 import {
@@ -37,6 +38,10 @@ export interface PairViewProps {
     path: string,
     options: FileOpenOptions,
   ) => Promise<FilePreview>;
+  readonly onNavigateLink?: (
+    side: PairPaneSide,
+    request: PreviewLinkNavigation,
+  ) => void;
   readonly onReloadReady?: (reload: (() => Promise<void>) | null) => void;
 }
 
@@ -168,6 +173,7 @@ export function PairView(props: PairViewProps): JSX.Element {
               ? {}
               : { localResourceGeneration: props.localResourceGeneration })}
             hasOpenDocument={preview() !== null || loading() || error() !== ""}
+            onNavigateLink={(request) => props.onNavigateLink?.(side, request)}
             onMarkdownEditorInput={() => {}}
             onCsvFirstRowAsHeaderChange={() => {}}
             onRelocateEpub={() => {}}

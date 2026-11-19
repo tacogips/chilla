@@ -9,6 +9,58 @@ import {
 } from "./keymap";
 
 describe("keymap compilation", () => {
+  it("registers configurable history shortcuts without duplicate defaults", () => {
+    const defaults = compileKeymap({});
+    for (const [key, action] of [
+      ["<D-[>", "history.back"],
+      ["<C-[>", "history.back"],
+      ["<A-Left>", "history.back"],
+      ["<D-]>", "history.forward"],
+      ["<C-]>", "history.forward"],
+      ["<A-Right>", "history.forward"],
+    ] as const) {
+      expect(matchingBindings(defaults.workspace, [key])[0]?.actions).toEqual([
+        action,
+      ]);
+    }
+    for (const context of ["file", "diff", "workspace"] as const) {
+      const sequences = DEFAULT_KEYMAP_INPUT[context].map((binding) =>
+        JSON.stringify(
+          (typeof binding.on === "string" ? [binding.on] : binding.on).map(
+            normalizeKey,
+          ),
+        ),
+      );
+      expect(new Set(sequences).size).toBe(sequences.length);
+    }
+    const custom = compileKeymap({
+      workspace: { append_keymap: [{ on: "z", run: "history.forward" }] },
+    });
+    expect(matchingBindings(custom.workspace, ["z"])[0]?.actions).toEqual([
+      "history.forward",
+    ]);
+    expect(() =>
+      compileKeymap({
+        mgr: { append_keymap: [{ on: "z", run: "history.back" }] },
+      }),
+    ).toThrow();
+    expect(normalizeKey("<D-[>")).toBe("<D-[>");
+    expect(
+      eventKey(
+        new KeyboardEvent("keydown", {
+          key: "[",
+          code: "BracketLeft",
+          metaKey: true,
+        }),
+      ),
+    ).toBe("<D-[>");
+    expect(
+      eventKey(
+        new KeyboardEvent("keydown", { key: "ArrowLeft", altKey: true }),
+      ),
+    ).toBe("<A-Left>");
+  });
+
   it("has no shadowed defaults or unrelated browser/workspace prefix collisions", () => {
     const defaults = compileKeymap({});
     for (const context of ["file", "diff", "workspace"] as const) {

@@ -2,6 +2,7 @@ import { dirname } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   Show,
+  batch,
   createMemo,
   createSignal,
   onCleanup,
@@ -61,6 +62,17 @@ import {
 } from "../file-view/paneResize";
 import { DEFAULT_FILE_TREE_SORT, DIRECTORY_PAGE_SIZE } from "../file-view/sort";
 import { LARGE_MEDIA_SEEK_SECONDS } from "../preview/MediaFilePreviewPane";
+import { findFragmentTarget } from "../preview/previewFragment";
+import type { PreviewLinkNavigation } from "../preview/previewLinks";
+import {
+  EMPTY_NAVIGATION_HISTORY,
+  canGoBack,
+  canGoForward,
+  pushNavigationLocation,
+  stepNavigationHistory,
+  updateCurrentNavigationLocation,
+  type NavigationPaneLocation,
+} from "./navigationHistory";
 import { WorkspaceDocumentColumn } from "./WorkspaceDocumentColumn";
 import {
   MarkdownConflictBanner,
@@ -81,6 +93,8 @@ import {
 } from "./openFiles";
 import type { WorkspaceSelection } from "./state";
 import {
+  getActiveDocumentScrollBody,
+  getPairPaneScrollBody,
   hasActiveDocumentMediaElement,
   hasActiveEpubPreview,
   nudgeActiveDocumentPane,
@@ -130,10 +144,86 @@ export function WorkspaceShell() {
   let fileOpenQueue = Promise.resolve();
   let directoryRequestId = 0;
   let previewRequestId = 0;
+  let scrollRunId = 0;
+  const [history, setHistory] = createSignal(EMPTY_NAVIGATION_HISTORY);
+  const [pairDisplayedPaths, setPairDisplayedPaths] = createSignal<{
+    left: string;
+    right: string;
+  } | null>(null);
+  const captureScroll = () =>
+    setHistory((state) =>
+      updateCurrentNavigationLocation(state, (current) => {
+        if (current.kind === "single")
+          return {
+            ...current,
+            scrollTop:
+              getActiveDocumentScrollBody()?.scrollTop ?? current.scrollTop,
+          };
+        return {
+          ...current,
+          left: {
+            ...current.left,
+            scrollTop:
+              getPairPaneScrollBody("left")?.scrollTop ??
+              current.left.scrollTop,
+          },
+          right: {
+            ...current.right,
+            scrollTop:
+              getPairPaneScrollBody("right")?.scrollTop ??
+              current.right.scrollTop,
+          },
+        };
+      }),
+    );
+  const applyRestoredScroll = (
+    getBody: () => HTMLElement | null,
+    location: NavigationPaneLocation,
+    run: number,
+  ) => {
+    const started = performance.now();
+    const attempt = () => {
+      if (scrollRunId !== run || isWorkspaceDisposed) return;
+      const body = getBody();
+      const expired = performance.now() - started >= 1000;
+      if (
+        body &&
+        location.scrollTop !== null &&
+        (body.scrollHeight - body.clientHeight >= location.scrollTop || expired)
+      ) {
+        body.scrollTop = location.scrollTop;
+        return;
+      }
+      if (body && location.scrollTop === null && location.fragment !== null) {
+        const target = findFragmentTarget(body, location.fragment);
+        if (target) {
+          target.scrollIntoView({ block: "start" });
+          return;
+        }
+      }
+      if (
+        !expired &&
+        (location.scrollTop !== null || location.fragment !== null)
+      )
+        requestAnimationFrame(attempt);
+    };
+    requestAnimationFrame(attempt);
+  };
   let launchCsvFirstRowAsHeader = false;
   let selectionPreviewDebounceTimer: number | undefined;
   const [startupContext, setStartupContext] =
     createSignal<StartupContext | null>(null);
+  let pairStartupContext: StartupContext | null = null;
+  let singleStartupContext: StartupContext | null = null;
+  const rememberStartupContext = (context: StartupContext) => {
+    if (context.browser_root.kind === "file_pair") pairStartupContext = context;
+    else if (
+      context.browser_root.kind !== "git_diff" &&
+      context.browser_root.kind !== "github_pr"
+    )
+      singleStartupContext = context;
+    setStartupContext(context);
+  };
   const [activeGitDiffTarget, setActiveGitDiffTarget] =
     createSignal<DiffWorkspaceTarget | null>(null);
   const [directoryState, setDirectoryState] =
@@ -579,9 +669,14 @@ export function WorkspaceShell() {
     clearOnFailure = false,
     fileOpenOptions?: FileOpenOptions,
     preserveCsvState = false,
+    historyMode: "push" | "none" = "push",
+    fragment: string | null = null,
+    captureBeforePush = true,
   ): Promise<string | null> => {
     if (isWorkspaceDisposed) return null;
+    if (historyMode === "push") ++scrollRunId;
     const requestId = ++previewRequestId;
+    const previousPath = currentOpenPath();
     const resolvedFileOpenOptions: FileOpenOptions = {
       csv_first_row_as_header:
         fileOpenOptions?.csv_first_row_as_header ?? launchCsvFirstRowAsHeader,
@@ -595,6 +690,7 @@ export function WorkspaceShell() {
           return null;
         }
 
+        if (historyMode === "push" && captureBeforePush) captureScroll();
         startTransition(() => {
           applyMarkdownSnapshot(doc);
           setFilePreview(null);
@@ -622,6 +718,7 @@ export function WorkspaceShell() {
           return null;
         }
 
+        if (historyMode === "push" && captureBeforePush) captureScroll();
         startTransition(() => {
           setMarkdownDoc(null);
           setMarkdownEditorBuffer("");
@@ -643,6 +740,27 @@ export function WorkspaceShell() {
         });
       }
 
+      if (historyMode === "push") {
+        const run = ++scrollRunId;
+        const location = {
+          kind: "single" as const,
+          path,
+          scrollTop: null,
+          fragment,
+        };
+        setHistory((state) => pushNavigationLocation(state, location));
+        if (fragment !== null) {
+          if (tocItems().some((item) => item.anchorId === fragment))
+            setSelection({ anchorId: fragment, lineStart: null });
+          applyRestoredScroll(getActiveDocumentScrollBody, location, run);
+        } else if (previousPath !== path) {
+          applyRestoredScroll(
+            getActiveDocumentScrollBody,
+            { ...location, scrollTop: 0 },
+            run,
+          );
+        }
+      }
       return null;
     } catch (error: unknown) {
       if (requestId !== previewRequestId) {
@@ -706,6 +824,7 @@ export function WorkspaceShell() {
         false,
         { csv_first_row_as_header: csvFirstRowAsHeader() },
         true,
+        "none",
       );
     }
   };
@@ -754,7 +873,7 @@ export function WorkspaceShell() {
       if (isWorkspaceDisposed) return;
       launchCsvFirstRowAsHeader =
         nextStartupContext.file_open_options?.csv_first_row_as_header ?? false;
-      setStartupContext(nextStartupContext);
+      rememberStartupContext(nextStartupContext);
 
       const browserRoot = nextStartupContext.browser_root;
 
@@ -791,7 +910,31 @@ export function WorkspaceShell() {
       } else if (browserRoot.kind === "file_pair") {
         setActiveGitDiffTarget(null);
         setFileTreeOpen(false);
-        setPairState(initialPairState(browserRoot.pairs));
+        const state = initialPairState(browserRoot.pairs);
+        const pair = selectedPair(state);
+        if (pair) {
+          setPairDisplayedPaths({
+            left: pair.left_file_path,
+            right: pair.right_file_path,
+          });
+          setHistory((history) =>
+            pushNavigationLocation(history, {
+              kind: "pair",
+              pairIndex: state.selectedIndex,
+              left: {
+                path: pair.left_file_path,
+                scrollTop: null,
+                fragment: null,
+              },
+              right: {
+                path: pair.right_file_path,
+                scrollTop: null,
+                fragment: null,
+              },
+            }),
+          );
+        }
+        setPairState(state);
         clearDocumentArea();
       }
     } catch (error: unknown) {
@@ -877,6 +1020,7 @@ export function WorkspaceShell() {
           false,
           { csv_first_row_as_header: csvFirstRowAsHeader() },
           true,
+          "none",
         );
         if (previewError !== null) {
           errors.push(previewError);
@@ -902,6 +1046,8 @@ export function WorkspaceShell() {
         return;
       }
 
+      captureScroll();
+      ++scrollRunId;
       setLoading(true);
       setDirectoryQuery("");
       setErrorMessage(null);
@@ -910,7 +1056,7 @@ export function WorkspaceShell() {
       stopWatchingCurrentDocument();
       clearDocumentArea();
       setActiveGitDiffTarget(null);
-      setStartupContext(
+      rememberStartupContext(
         startupContextForPickedTarget(target, {
           csv_first_row_as_header: launchCsvFirstRowAsHeader,
         }),
@@ -935,7 +1081,7 @@ export function WorkspaceShell() {
             return;
           // Powerbox may grant the selected file without its parent directory.
           const filePaths = [target.filePath];
-          setStartupContext(
+          rememberStartupContext(
             startupContextForPickedTarget(
               {
                 kind: "file_set",
@@ -959,7 +1105,15 @@ export function WorkspaceShell() {
           ownedDirectoryRequestId !== directoryRequestId
         )
           return;
-        await previewSelectedFile(target.filePath);
+        await previewSelectedFile(
+          target.filePath,
+          false,
+          undefined,
+          false,
+          "push",
+          null,
+          false,
+        );
       } else {
         setFileTreeOpen(true);
         const fileSetLoad = loadExplicitFileSetState(
@@ -975,7 +1129,15 @@ export function WorkspaceShell() {
           ownedDirectoryRequestId !== directoryRequestId
         )
           return;
-        await previewSelectedFile(target.selectedFilePath);
+        await previewSelectedFile(
+          target.selectedFilePath,
+          false,
+          undefined,
+          false,
+          "push",
+          null,
+          false,
+        );
       }
     } catch (error: unknown) {
       if (
@@ -1635,6 +1797,164 @@ export function WorkspaceShell() {
     setFileTreeOpen((value) => !value);
     queueMicrotask(focusVisiblePane);
   };
+  const handleNavigateLink = (
+    request: PreviewLinkNavigation,
+    side?: "left" | "right",
+  ) => {
+    if (diffTarget() !== null) return;
+    if (isPairMode() && side) {
+      ++previewRequestId;
+      const state = pairState();
+      const paths = pairDisplayedPaths();
+      if (!state || !paths) return;
+      captureScroll();
+      const current = history().entries[history().index];
+      const left =
+        current?.kind === "pair"
+          ? current.left
+          : { path: paths.left, scrollTop: null, fragment: null };
+      const right =
+        current?.kind === "pair"
+          ? current.right
+          : { path: paths.right, scrollTop: null, fragment: null };
+      const location = {
+        kind: "pair" as const,
+        pairIndex: state.selectedIndex,
+        left,
+        right,
+        [side]: {
+          path: request.path,
+          fragment: request.fragment,
+          scrollTop: null,
+        },
+      };
+      const run = ++scrollRunId;
+      setPairDisplayedPaths({ ...paths, [side]: request.path });
+      setHistory((value) => pushNavigationLocation(value, location));
+      if (request.fragment !== null)
+        applyRestoredScroll(() => pairBodyWhenReady(side), location[side], run);
+      else if (paths[side] !== request.path)
+        applyRestoredScroll(
+          () => pairBodyWhenReady(side),
+          { ...location[side], scrollTop: 0 },
+          run,
+        );
+      return;
+    }
+    if (request.path === currentOpenPath()) {
+      ++previewRequestId;
+      captureScroll();
+      const location = {
+        kind: "single" as const,
+        path: request.path,
+        fragment: request.fragment,
+        scrollTop: null,
+      };
+      setHistory((value) => pushNavigationLocation(value, location));
+      const run = ++scrollRunId;
+      if (request.fragment !== null) {
+        if (tocItems().some((item) => item.anchorId === request.fragment))
+          setSelection({ anchorId: request.fragment, lineStart: null });
+        applyRestoredScroll(getActiveDocumentScrollBody, location, run);
+      }
+    } else {
+      ++scrollRunId;
+      void previewSelectedFile(
+        request.path,
+        false,
+        undefined,
+        false,
+        "push",
+        request.fragment,
+      );
+    }
+  };
+  const pairBodyWhenReady = (side: "left" | "right") => {
+    const pane = document.querySelector(`[data-pair-pane="${side}"]`);
+    if (
+      Array.from(pane?.children ?? []).some(
+        (child) =>
+          child.tagName === "SPAN" && child.textContent === "Loading...",
+      )
+    )
+      return null;
+    return getPairPaneScrollBody(side);
+  };
+  const stepHistory = async (direction: -1 | 1) => {
+    if (diffTarget() !== null || isShortcutsHelpOpen()) return;
+    captureScroll();
+    const step = stepNavigationHistory(history(), direction);
+    if (!step) return;
+    const run = ++scrollRunId;
+    ++previewRequestId;
+    setHistory(step.state);
+    const location = step.location;
+    if (location.kind === "single") {
+      if (isPairMode() && singleStartupContext !== null)
+        setStartupContext(singleStartupContext);
+      if (currentOpenPath() !== location.path) {
+        const error = await previewSelectedFile(
+          location.path,
+          false,
+          undefined,
+          false,
+          "none",
+        );
+        if (error !== null || run !== scrollRunId) return;
+        setSelectedBrowserPath(location.path);
+      }
+      applyRestoredScroll(getActiveDocumentScrollBody, location, run);
+    } else {
+      batch(() => {
+        if (pairStartupContext !== null) setStartupContext(pairStartupContext);
+        setPairState((state) => state && selectPair(state, location.pairIndex));
+        setPairDisplayedPaths({
+          left: location.left.path,
+          right: location.right.path,
+        });
+      });
+      applyRestoredScroll(() => pairBodyWhenReady("left"), location.left, run);
+      applyRestoredScroll(
+        () => pairBodyWhenReady("right"),
+        location.right,
+        run,
+      );
+    }
+  };
+  const goBack = () => {
+    void stepHistory(-1);
+  };
+  const goForward = () => {
+    void stepHistory(1);
+  };
+  const handlePairSelect = (index: number) => {
+    const state = pairState();
+    if (!state) return;
+    const next = selectPair(state, index);
+    const pair = selectedPair(next);
+    if (!pair) return;
+    captureScroll();
+    ++scrollRunId;
+    batch(() => {
+      setPairState(next);
+      setPairDisplayedPaths({
+        left: pair.left_file_path,
+        right: pair.right_file_path,
+      });
+      setHistory((value) =>
+        pushNavigationLocation(value, {
+          kind: "pair",
+          pairIndex: next.selectedIndex,
+          left: { path: pair.left_file_path, scrollTop: null, fragment: null },
+          right: {
+            path: pair.right_file_path,
+            scrollTop: null,
+            fragment: null,
+          },
+        }),
+      );
+    });
+  };
   keymap.register({
     context: "workspace",
     enabled: () => !isShortcutsHelpOpen(),
@@ -1642,6 +1962,8 @@ export function WorkspaceShell() {
       `${diffTarget()?.kind ?? "workspace"}:${directoryState()?.current_directory_path ?? ""}:${isFileTreeOpen()}:${currentOpenPath() ?? ""}`,
     accepts: () => true,
     actions: {
+      "history.back": goBack,
+      "history.forward": goForward,
       help: () => setShortcutsHelpOpen(true),
       quit: () => {
         void appWindow?.close().catch(() => {});
@@ -1794,6 +2116,22 @@ export function WorkspaceShell() {
       }
     };
 
+    const handleMouseHistory = (event: MouseEvent) => {
+      if (
+        (event.button !== 3 && event.button !== 4) ||
+        (event.target instanceof Element &&
+          event.target.closest('[role="dialog"]'))
+      )
+        return;
+      event.preventDefault();
+      if (event.type === "mouseup") {
+        if (event.button === 3) goBack();
+        else goForward();
+      }
+    };
+    window.addEventListener("mousedown", handleMouseHistory);
+    window.addEventListener("mouseup", handleMouseHistory);
+    window.addEventListener("auxclick", handleMouseHistory);
     window.addEventListener("keydown", handleGlobalKeyDown);
 
     onCleanup(() => {
@@ -1803,6 +2141,10 @@ export function WorkspaceShell() {
       finishInitialization();
       disposeListener?.();
       disposeNativeListener?.();
+      ++scrollRunId;
+      window.removeEventListener("mousedown", handleMouseHistory);
+      window.removeEventListener("mouseup", handleMouseHistory);
+      window.removeEventListener("auxclick", handleMouseHistory);
       window.removeEventListener("keydown", handleGlobalKeyDown);
       clearSelectionPreviewDebounce();
     });
@@ -1820,6 +2162,10 @@ export function WorkspaceShell() {
         </Portal>
         <div class="workspace__frame">
           <WorkspaceHeader
+            canGoBack={diffTarget() === null && canGoBack(history())}
+            canGoForward={diffTarget() === null && canGoForward(history())}
+            onGoBack={goBack}
+            onGoForward={goForward}
             isFileTreeOpen={isFileTreeOpen()}
             onToggleFileTree={handleToggleFileTree}
             activeGitDiff={activeGitDiffTarget() !== null}
@@ -2012,12 +2358,7 @@ export function WorkspaceShell() {
                         <PairListPane
                           pairs={state().pairs}
                           selectedIndex={state().selectedIndex}
-                          onSelect={(index) =>
-                            setPairState(
-                              (current) =>
-                                current && selectPair(current, index),
-                            )
-                          }
+                          onSelect={handlePairSelect}
                           onCollapse={handleToggleFileTree}
                         />
                       )}
@@ -2039,6 +2380,7 @@ export function WorkspaceShell() {
                         </Show>
 
                         <WorkspaceDocumentColumn
+                          onNavigateLink={handleNavigateLink}
                           colorScheme={colorScheme()}
                           csvFirstRowAsHeader={csvFirstRowAsHeader()}
                           csvPaneMode={csvPaneMode()}
@@ -2069,8 +2411,13 @@ export function WorkspaceShell() {
                   >
                     {(pair) => (
                       <PairView
-                        leftPath={pairLeftPath()}
-                        rightPath={pairRightPath()}
+                        leftPath={pairDisplayedPaths()?.left ?? pairLeftPath()}
+                        rightPath={
+                          pairDisplayedPaths()?.right ?? pairRightPath()
+                        }
+                        onNavigateLink={(side, request) =>
+                          handleNavigateLink(request, side)
+                        }
                         visibility={pair().visibility}
                         onChangeVisibility={(visibility) =>
                           setPairState(

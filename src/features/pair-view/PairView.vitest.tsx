@@ -74,6 +74,54 @@ async function flush(): Promise<void> {
   await Promise.resolve();
 }
 
+describe("PairView link navigation", () => {
+  it("forwards right pane navigation with its side", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const navigate = vi.fn();
+    dispose = render(
+      () => (
+        <PairView
+          leftPath="/docs/left.md"
+          rightPath="/docs/right.md"
+          visibility="both"
+          onChangeVisibility={() => undefined}
+          colorScheme="dark"
+          fileOpenOptions={options}
+          loadPreview={async (path) => ({
+            kind: "markdown",
+            mime_type: "text/markdown",
+            path,
+            file_name: path.split("/").pop() ?? "",
+            source_text: "",
+            source_html: "",
+            html: '<a href="#heading">heading</a>',
+            headings: [],
+            revision_token: "rev",
+            last_modified: "now",
+          })}
+          onNavigateLink={navigate}
+        />
+      ),
+      root,
+    );
+    await vi.waitFor(() =>
+      expect(root.querySelector('[data-pair-pane="right"] a')).not.toBeNull(),
+    );
+    const link = root.querySelector('[data-pair-pane="right"] a');
+    if (!link) throw new Error("missing right link");
+    link.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+    await vi.waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith("right", {
+        path: "/docs/right.md",
+        fragment: "heading",
+      }),
+    );
+  });
+});
+
 describe("PairView", () => {
   it("loads both previews in order and preserves each mounted pane through symmetric hide and restore", async () => {
     const load = vi.fn(async (path: string) => preview(path));

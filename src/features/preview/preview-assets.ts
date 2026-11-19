@@ -82,16 +82,28 @@ export async function resolveDocumentResource(
 
   const { pathname, suffix } = splitResourcePath(trimmedResourcePath);
 
-  const absolutePath = isAbsoluteLocalPath(pathname)
-    ? await pathApi.normalize(pathname)
-    : await pathApi.normalize(
-        await pathApi.join(await pathApi.dirname(documentPath), pathname),
-      );
+  const absolutePath = await resolveDocumentPathname(
+    pathname,
+    documentPath,
+    pathApi,
+  );
 
   return {
     path: absolutePath,
     url: `${pathApi.convertFileSrc(absolutePath)}${suffix}`,
   };
+}
+
+export async function resolveDocumentPathname(
+  pathname: string,
+  documentPath: string,
+  pathApi: Pick<PreviewPathApi, "dirname" | "join" | "normalize">,
+): Promise<string> {
+  return isAbsoluteLocalPath(pathname)
+    ? pathApi.normalize(pathname)
+    : pathApi.normalize(
+        await pathApi.join(await pathApi.dirname(documentPath), pathname),
+      );
 }
 
 function splitResourcePath(resourcePath: string): {

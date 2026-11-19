@@ -7,5 +7,6 @@ export default defineConfig({
     name: "dom",
     environment: "jsdom",
     include: ["src/**/*.vitest.{ts,tsx}"],
+    setupFiles: ["./src/lib/testing/vitestStorageSetup.ts"],
   },
 });

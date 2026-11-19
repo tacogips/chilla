@@ -12,6 +12,7 @@ import { HtmlRenderedPreviewPane } from "../preview/HtmlRenderedPreviewPane";
 import { MediaFilePreviewPane } from "../preview/MediaFilePreviewPane";
 import { PdfFilePreviewPane } from "../preview/PdfFilePreviewPane";
 import { PreviewPane } from "../preview/PreviewPane";
+import type { PreviewLinkNavigation } from "../preview/previewLinks";
 import type { WorkspaceSelection } from "./state";
 import type { HtmlPresentationMode } from "./workspacePreviewModel";
 import {
@@ -47,6 +48,7 @@ interface WorkspaceDocumentColumnProps {
   readonly videoAutoplayRequestId: number;
   readonly localResourceGeneration?: number;
   readonly hasOpenDocument: boolean;
+  readonly onNavigateLink?: (request: PreviewLinkNavigation) => void;
   readonly onMarkdownEditorInput: (value: string) => void;
   readonly onCsvFirstRowAsHeaderChange: (value: boolean) => void;
   readonly onRelocateEpub: (anchorId: string | null) => void;
@@ -104,6 +106,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
           fileName={props.markdownDoc?.file_name ?? ""}
           html={props.markdownDoc?.html ?? ""}
           localResourceGeneration={props.localResourceGeneration}
+          onNavigateLink={(request) => props.onNavigateLink?.(request)}
           selectedAnchorId={props.selection.anchorId}
           {...(props.markdownIsDirty
             ? {
@@ -170,6 +173,7 @@ export function WorkspaceDocumentColumn(props: WorkspaceDocumentColumnProps) {
               : undefined
           }
           localResourceGeneration={props.localResourceGeneration}
+          onNavigateLink={(request) => props.onNavigateLink?.(request)}
           selectedAnchorId={null}
           subtitle={previewSubtitle(props.filePreview)}
           visible={true}

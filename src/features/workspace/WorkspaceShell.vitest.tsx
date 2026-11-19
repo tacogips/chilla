@@ -376,6 +376,362 @@ describe("WorkspaceShell numeric view shortcuts", () => {
     document.body.innerHTML = "";
   });
 
+  it("navigates links, restores history and scroll, truncates forward, and honors mouse buttons", async () => {
+    const a = "/workspace/note.md";
+    const b = "/workspace/next.md";
+    const c = "/workspace/third.md";
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(a),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPageWithPaths([a, b, c]),
+    );
+    documentMocks.openDocument.mockImplementation(async (path: string) => ({
+      ...markdownSnapshot(),
+      path,
+      file_name: path.split("/").pop() ?? "note.md",
+      html: `<h1 id="note">Note</h1><a href="/workspace/next.md">next</a><a href="#note">anchor</a>`,
+    }));
+    dispose = renderWorkspace();
+    await waitFor(() =>
+      expect(
+        document.querySelector('a[href="/workspace/next.md"]'),
+      ).not.toBeNull(),
+    );
+    const back = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Back"]',
+    );
+    const forward = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Forward"]',
+    );
+    expect(back?.disabled).toBe(true);
+    const body = document.querySelector<HTMLElement>(
+      ".workspace__document-column .pane:not(.pane--hidden) .pane__body",
+    );
+    if (!body) throw new Error("missing scroll body");
+    Object.defineProperty(body, "scrollHeight", {
+      configurable: true,
+      value: 2000,
+    });
+    body.scrollTop = 120;
+    document
+      .querySelector<HTMLAnchorElement>('a[href="/workspace/next.md"]')
+      ?.click();
+    await waitFor(() =>
+      expect(documentMocks.openDocument).toHaveBeenCalledWith(b),
+    );
+    await waitFor(() => expect(back?.disabled).toBe(false));
+    await waitFor(() => expect(body.scrollTop).toBe(0));
+    documentMocks.reloadDocument.mockResolvedValue({
+      ...markdownSnapshot(),
+      path: b,
+    });
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "r", bubbles: true }),
+    );
+    await waitFor(() =>
+      expect(documentMocks.reloadDocument).toHaveBeenCalledWith(b),
+    );
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    document.body.append(dialog);
+    dialog.dispatchEvent(
+      new MouseEvent("mouseup", { button: 3, bubbles: true, cancelable: true }),
+    );
+    expect(documentMocks.openDocument).toHaveBeenLastCalledWith(b);
+    dialog.remove();
+    window.dispatchEvent(
+      new MouseEvent("mouseup", { button: 3, bubbles: true, cancelable: true }),
+    );
+    await waitFor(() =>
+      expect(documentMocks.openDocument).toHaveBeenLastCalledWith(a),
+    );
+    await waitFor(() => expect(body.scrollTop).toBe(120));
+    expect(forward?.disabled).toBe(false);
+    window.dispatchEvent(
+      new MouseEvent("mouseup", { button: 4, bubbles: true, cancelable: true }),
+    );
+    await waitFor(() =>
+      expect(documentMocks.openDocument).toHaveBeenLastCalledWith(b),
+    );
+    await waitFor(() => expect(forward?.disabled).toBe(true));
+    const textarea = document.createElement("textarea");
+    document.body.append(textarea);
+    textarea.focus();
+    textarea.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "[", metaKey: true, bubbles: true }),
+    );
+    expect(documentMocks.openDocument).toHaveBeenLastCalledWith(b);
+    textarea.remove();
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "[", metaKey: true, bubbles: true }),
+    );
+    await waitFor(() =>
+      expect(documentMocks.openDocument).toHaveBeenLastCalledWith(a),
+    );
+    document
+      .querySelector<HTMLButtonElement>('button[aria-label="Expand left pane"]')
+      ?.click();
+    const third = document.querySelector<HTMLButtonElement>(
+      `button[data-path="${c}"]`,
+    );
+    expect(third).not.toBeNull();
+    third?.click();
+    await waitFor(() =>
+      expect(documentMocks.openDocument).toHaveBeenLastCalledWith(c),
+    );
+    await waitFor(() => expect(forward?.disabled).toBe(true));
+  });
+
+  it("records same-file anchors and leaves history unchanged on failed link opens", async () => {
+    const a = "/workspace/note.md";
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(a),
+    );
+    documentMocks.listDirectory.mockResolvedValue(directoryPage(a));
+    documentMocks.openDocument.mockImplementation(async (path: string) => {
+      if (path !== a) throw new Error("link failed");
+      return {
+        ...markdownSnapshot(),
+        html: '<h1 id="note">Note</h1><a href="#note">anchor</a><a href="/workspace/missing.md">missing</a>',
+      };
+    });
+    dispose = renderWorkspace();
+    await waitFor(() =>
+      expect(document.querySelector('a[href="#note"]')).not.toBeNull(),
+    );
+    document.querySelector<HTMLAnchorElement>('a[href="#note"]')?.click();
+    const back = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Back"]',
+    );
+    await waitFor(() => expect(back?.disabled).toBe(false));
+    expect(documentMocks.openDocument).toHaveBeenCalledTimes(1);
+    document
+      .querySelector<HTMLAnchorElement>('a[href="/workspace/missing.md"]')
+      ?.click();
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("link failed"),
+    );
+    back?.click();
+    await waitFor(() => expect(back?.disabled).toBe(true));
+    expect(documentMocks.openDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it("restores linked pair paths and pair selections while retaining pane toggles", async () => {
+    const pairs = [
+      { left_file_path: "/workspace/a.md", right_file_path: "/workspace/b.md" },
+      { left_file_path: "/workspace/c.md", right_file_path: "/workspace/d.md" },
+    ];
+    documentMocks.getStartupContext.mockResolvedValue({
+      initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
+      browser_root: { kind: "file_pair", pairs },
+    });
+    documentMocks.openFilePreview.mockImplementation(async (path: string) => ({
+      ...markdownSnapshot(),
+      kind: "markdown",
+      mime_type: "text/markdown",
+      path,
+      html: '<a href="/workspace/x.md">next</a>',
+    }));
+    dispose = renderWorkspace();
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-pair-pane="left"] a'),
+      ).not.toBeNull(),
+    );
+    const pairBody = document.querySelector<HTMLElement>(
+      '[data-pair-pane="left"] .pane__body',
+    );
+    if (!pairBody) throw new Error("missing pair scroll body");
+    Object.defineProperty(pairBody, "scrollHeight", {
+      configurable: true,
+      value: 2000,
+    });
+    pairBody.scrollTop = 90;
+    document
+      .querySelector<HTMLAnchorElement>('[data-pair-pane="left"] a')
+      ?.click();
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-pair-pane="left"] .pair-view__name')
+          ?.textContent,
+      ).toBe("x.md"),
+    );
+    await waitFor(() => expect(pairBody.scrollTop).toBe(0));
+    expect(
+      document.querySelector('[data-pair-pane="right"] .pair-view__name')
+        ?.textContent,
+    ).toBe("b.md");
+    document
+      .querySelector<HTMLButtonElement>('button[aria-label="Back"]')
+      ?.click();
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-pair-pane="left"] .pair-view__name')
+          ?.textContent,
+      ).toBe("a.md"),
+    );
+    await waitFor(() => expect(pairBody.scrollTop).toBe(90));
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "{", shiftKey: true, bubbles: true }),
+    );
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-pair-restore="left"]'),
+      ).not.toBeNull(),
+    );
+    document
+      .querySelector<HTMLButtonElement>('button[aria-label="Expand left pane"]')
+      ?.click();
+    const rows = () =>
+      document.querySelectorAll<HTMLButtonElement>(
+        '.pair-list [role="option"]',
+      );
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    rows()[1]?.click();
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-pair-pane="right"] .pair-view__name')
+          ?.textContent,
+      ).toBe("d.md"),
+    );
+    document
+      .querySelector<HTMLButtonElement>('button[aria-label="Back"]')
+      ?.click();
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-pair-pane="right"] .pair-view__name')
+          ?.textContent,
+      ).toBe("b.md"),
+    );
+  });
+
+  it("preserves scroll when Open Files clears the outgoing document", async () => {
+    const a = "/workspace/note.md";
+    const b = "/workspace/next.md";
+    documentMocks.getStartupContext.mockResolvedValue(
+      directoryStartupContext(a),
+    );
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPageWithPaths([a, b]),
+    );
+    documentMocks.openDocument.mockImplementation(async (path: string) => ({
+      ...markdownSnapshot(),
+      path,
+    }));
+    dialogMocks.open.mockResolvedValue(b);
+    dispose = renderWorkspace();
+    await waitFor(() =>
+      expect(documentMocks.openDocument).toHaveBeenCalledWith(a),
+    );
+    const body = document.querySelector<HTMLElement>(
+      ".workspace__document-column .pane:not(.pane--hidden) .pane__body",
+    );
+    if (!body) throw new Error("missing body");
+    Object.defineProperty(body, "scrollHeight", {
+      configurable: true,
+      value: 2000,
+    });
+    body.scrollTop = 140;
+    document
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label="Open one or more files"]',
+      )
+      ?.click();
+    await waitFor(() =>
+      expect(documentMocks.openDocument).toHaveBeenLastCalledWith(b),
+    );
+    document
+      .querySelector<HTMLButtonElement>('button[aria-label="Back"]')
+      ?.click();
+    await waitFor(() =>
+      expect(documentMocks.openDocument).toHaveBeenLastCalledWith(a),
+    );
+    await waitFor(() => expect(body.scrollTop).toBe(140));
+  });
+
+  it("restores pair and single modes across Open Files history", async () => {
+    const pairs = [
+      { left_file_path: "/workspace/a.md", right_file_path: "/workspace/b.md" },
+    ];
+    documentMocks.getStartupContext.mockResolvedValue({
+      initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
+      browser_root: { kind: "file_pair", pairs },
+    });
+    documentMocks.listDirectory.mockResolvedValue(
+      directoryPage("/workspace/note.md"),
+    );
+    documentMocks.openFilePreview.mockImplementation(async (path: string) => ({
+      ...markdownSnapshot(),
+      kind: "markdown",
+      mime_type: "text/markdown",
+      path,
+    }));
+    documentMocks.openDocument.mockResolvedValue(markdownSnapshot());
+    dialogMocks.open.mockResolvedValue("/workspace/note.md");
+    dispose = renderWorkspace();
+    await waitFor(() =>
+      expect(document.querySelector('[data-pair-pane="left"]')).not.toBeNull(),
+    );
+    document
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label="Open one or more files"]',
+      )
+      ?.click();
+    await waitFor(() =>
+      expect(documentMocks.openDocument).toHaveBeenCalledWith(
+        "/workspace/note.md",
+      ),
+    );
+    expect(document.querySelector('[data-pair-pane="left"]')).toBeNull();
+    document
+      .querySelector<HTMLButtonElement>('button[aria-label="Back"]')
+      ?.click();
+    await waitFor(() =>
+      expect(document.querySelector('[data-pair-pane="left"]')).not.toBeNull(),
+    );
+    document
+      .querySelector<HTMLButtonElement>('button[aria-label="Forward"]')
+      ?.click();
+    await waitFor(() =>
+      expect(document.querySelector('[data-pair-pane="left"]')).toBeNull(),
+    );
+    expect(
+      document.querySelector(".workspace__document-column h1")?.textContent,
+    ).toBe("Note");
+  });
+
+  it("disables and ignores history navigation in diff mode", async () => {
+    documentMocks.getStartupContext.mockResolvedValue({
+      initial_mode: "file_view",
+      file_open_options: { csv_first_row_as_header: false },
+      browser_root: {
+        kind: "git_diff",
+        target: { repo_path: "/workspace", source: { kind: "worktree" } },
+      },
+    });
+    documentMocks.loadGitDiff.mockRejectedValue(new Error("diff unavailable"));
+    dispose = renderWorkspace();
+    await waitFor(() => expect(documentMocks.loadGitDiff).toHaveBeenCalled());
+    expect(
+      document.querySelector<HTMLButtonElement>('button[aria-label="Back"]')
+        ?.disabled,
+    ).toBe(true);
+    expect(
+      document.querySelector<HTMLButtonElement>('button[aria-label="Forward"]')
+        ?.disabled,
+    ).toBe(true);
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "[", metaKey: true, bubbles: true }),
+    );
+    window.dispatchEvent(
+      new MouseEvent("mouseup", { button: 3, bubbles: true, cancelable: true }),
+    );
+    expect(documentMocks.openDocument).not.toHaveBeenCalled();
+  });
+
   it("stacks workspace errors and keymap warnings outside panes with native dismiss controls", async () => {
     documentMocks.getStartupContext.mockRejectedValue(
       new Error("This directory is not inside a Git repository."),

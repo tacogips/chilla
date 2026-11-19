@@ -12,7 +12,9 @@ import {
   type StructuredTextPreview,
 } from "./workspacePreviewModel";
 import {
+  BackGlyph,
   CloseWindowGlyph,
+  ForwardGlyph,
   FileViewGlyph,
   GitDiffGlyph,
   MaximizeWindowGlyph,
@@ -56,6 +58,10 @@ interface WorkspaceHeaderProps {
   readonly hasTocDocument: boolean;
   readonly isTocOpen: boolean;
   readonly canReloadCurrent: boolean;
+  readonly canGoBack?: boolean;
+  readonly canGoForward?: boolean;
+  readonly onGoBack?: () => void;
+  readonly onGoForward?: () => void;
   readonly colorScheme: ColorScheme;
   readonly appWindow: WorkspaceWindowControls | null;
   readonly onSelectMarkdownPane: (pane: MarkdownPane) => void;
@@ -430,6 +436,27 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
             <FileViewGlyph />
           </button>
         </Show>
+
+        <button
+          class="button button--ghost workspace__icon-button"
+          type="button"
+          aria-label="Back"
+          title={title("Back", "history.back", SHORTCUT_LABELS.goBack)}
+          disabled={props.canGoBack !== true}
+          onClick={() => props.onGoBack?.()}
+        >
+          <BackGlyph />
+        </button>
+        <button
+          class="button button--ghost workspace__icon-button"
+          type="button"
+          aria-label="Forward"
+          title={title("Forward", "history.forward", SHORTCUT_LABELS.goForward)}
+          disabled={props.canGoForward !== true}
+          onClick={() => props.onGoForward?.()}
+        >
+          <ForwardGlyph />
+        </button>
 
         <button
           class="button workspace__icon-button"

@@ -61,6 +61,8 @@ export const WORKSPACE_ACTIONS = [
   "scroll.down",
   "document.previous",
   "document.next",
+  "history.back",
+  "history.forward",
 ] as const;
 export type KeymapAction =
   | (typeof MGR_ACTIONS)[number]
@@ -138,6 +140,12 @@ export const DEFAULT_KEYMAP_INPUT: Readonly<
     b("q", "quit", "Quit application"),
     b("<C-o>", "files.open", "Open files"),
     b("<D-o>", "files.open", "Open files"),
+    b("<D-[>", "history.back", "Go back in link navigation history"),
+    b("<C-[>", "history.back", "Go back in link navigation history"),
+    b("<A-Left>", "history.back", "Go back in link navigation history"),
+    b("<D-]>", "history.forward", "Go forward in link navigation history"),
+    b("<C-]>", "history.forward", "Go forward in link navigation history"),
+    b("<A-Right>", "history.forward", "Go forward in link navigation history"),
     b("<C-s>", "document.save", "Save Markdown"),
     b("<D-s>", "document.save", "Save Markdown"),
     b("<C-d>", "scroll.down", "Scroll document down"),

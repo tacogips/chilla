@@ -97,6 +97,51 @@ function iconButton(label: string): HTMLButtonElement {
   return button;
 }
 
+describe("link history controls", () => {
+  it("renders disabled controls before Open Files by default", () => {
+    const onGoBack = vi.fn();
+    dispose = render(
+      () => <WorkspaceHeader {...headerProps()} onGoBack={onGoBack} />,
+      document.body,
+    );
+    const back = iconButton("Back");
+    const forward = iconButton("Forward");
+    const open = iconButton("Open one or more files");
+    expect(back.disabled).toBe(true);
+    expect(forward.disabled).toBe(true);
+    expect(back.title).toContain("Cmd/Ctrl+[");
+    expect(back.nextElementSibling).toBe(forward);
+    expect(forward.nextElementSibling).toBe(open);
+    back.click();
+    expect(onGoBack).not.toHaveBeenCalled();
+  });
+
+  it("enables each available direction and invokes its callback", () => {
+    const onGoBack = vi.fn();
+    const onGoForward = vi.fn();
+    dispose = render(
+      () => (
+        <WorkspaceHeader
+          {...headerProps()}
+          canGoBack
+          canGoForward
+          onGoBack={onGoBack}
+          onGoForward={onGoForward}
+        />
+      ),
+      document.body,
+    );
+    const back = iconButton("Back");
+    const forward = iconButton("Forward");
+    expect(back.disabled).toBe(false);
+    expect(forward.disabled).toBe(false);
+    back.click();
+    forward.click();
+    expect(onGoBack).toHaveBeenCalledOnce();
+    expect(onGoForward).toHaveBeenCalledOnce();
+  });
+});
+
 describe("compact workspace toolbar", () => {
   it("keeps accessible labels, shortcut tooltips and click handlers for icons", () => {
     const props = headerProps();

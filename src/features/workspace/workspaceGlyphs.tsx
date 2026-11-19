@@ -64,6 +64,36 @@ export function RawSourceGlyph() {
   );
 }
 
+export function BackGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M15 18l-6-6 6-6"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}
+
+export function ForwardGlyph() {
+  return (
+    <WorkspaceHeaderIcon>
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M9 18l6-6-6-6"
+      />
+    </WorkspaceHeaderIcon>
+  );
+}
+
 export function OpenFilesGlyph() {
   return (
     <WorkspaceHeaderIcon>

@@ -1,6 +1,7 @@
 # Link Navigation: History Model Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
+**Completion**: 2026-11-19. Adversarial review accepted (comm-019097). Serial reconciliation gates passed (`tmp/link-nav-history-20261119-01/serial-reconcile-wave-001/`). Archived to `impl-plans/completed/link-nav-history-model.md`.
 **Plan ID**: link-nav-history-model
 **Wave**: 1 (no dependencies)
 **Design Reference**: design-docs/specs/design-link-navigation-history.md#navigation-history-model
@@ -106,12 +107,23 @@ export function canGoForward(state: NavigationHistoryState): boolean;
 
 ## Completion Criteria
 
-- [ ] Module exports match the pinned contract exactly
-- [ ] All 9 test cases pass
-- [ ] typecheck and biome clean
+- [x] Module exports match the pinned contract exactly
+- [x] All 9 test cases pass
+- [x] typecheck and biome clean
 
 ## Progress Log
 
 ### Session: 2026-11-19
 **Tasks Completed**: Plan created
 **Notes**: New files only. Record their hashes after writing.
+
+### Session: 2026-11-19 — implementation
+**Tasks Completed**: Immutable history model and nine focused tests. Vitest: 9 passed; Biome: clean.
+**Blockers**: `bun run typecheck` exits 2 on sibling `src/features/preview/previewLinks.test.ts:68` (TS2769); serial reconciliation or its owner must fix it and rerun typecheck. Formal review remains pending.
+**Edit hashes (SHA-256)**: `navigationHistory.ts`: absent -> `7b7e5def7b761681749071252d7a37e9bf83e12a31d5fdf6d417d5a60dedd075` -> formatted `7f478d244b653c6edf8979c7a611453dd125abaa598a64442de9e6bdcecb9d61`; `navigationHistory.vitest.ts`: absent -> `0ef055896b05b2e47a6b9ffe242f2fd063bf0bffc4c1a3aa83939d2d78cfc7a1` -> formatted `14ed32aa3281e42b4b09e2e390826570ec149dedf5bc20d09c47a9d0a3f0ea9a` -> type fix `841344471b03ee56024e001763bebb12ae08c52312d083632ad9bb5a8f415d7d`. Plan before this edit: `7f4db2bd55cfdedbf303ebee23abff71681d1eca5499707da9fcd5eba949daa9`; its after-edit hash is recorded in the plan-local evidence to avoid a self-referential hash.
+**Evidence**: `tmp/link-nav-history-20261119-01/link-nav-history-model/attempt-1/` and `attempt-2/`.
+
+### Session: 2026-11-19 — continuation
+**Tasks Completed**: Reran required gates on the current shared tree: typecheck exited 0, Vitest passed 9/9, and Biome exited 0. The prior sibling typecheck failure is resolved. Formal review remains pending.
+**Edit hashes (SHA-256)**: Plan before and after this edit are recorded in `tmp/link-nav-history-20261119-01/link-nav-history-model/attempt-3/plan-before.sha256` and `plan-after.sha256`, respectively, avoiding a self-referential hash. Source hashes remain `7f478d244b653c6edf8979c7a611453dd125abaa598a64442de9e6bdcecb9d61` and `841344471b03ee56024e001763bebb12ae08c52312d083632ad9bb5a8f415d7d`.
+**Evidence**: `tmp/link-nav-history-20261119-01/link-nav-history-model/attempt-3/`.

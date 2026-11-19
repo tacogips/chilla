@@ -16,6 +16,60 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+describe("WorkspaceDocumentColumn link navigation", () => {
+  it("forwards a Markdown anchor navigation request", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const navigate = vi.fn();
+    dispose = render(
+      () => (
+        <WorkspaceDocumentColumn
+          colorScheme="dark"
+          markdownDoc={{
+            path: "/docs/a.md",
+            file_name: "a.md",
+            source_text: "",
+            source_html: "",
+            html: '<a href="#heading">heading</a>',
+            headings: [],
+            revision_token: "rev",
+            last_modified: "now",
+          }}
+          markdownPane="preview"
+          markdownEditorBuffer=""
+          markdownIsDirty={false}
+          selection={{ lineStart: null, anchorId: null }}
+          filePreview={null}
+          epubToc={[]}
+          csvPreview={null}
+          csvFirstRowAsHeader={false}
+          csvPaneMode="raw"
+          structuredDataMode="raw"
+          htmlPresentationMode="raw"
+          videoAutoplayRequestId={0}
+          hasOpenDocument={true}
+          onMarkdownEditorInput={() => undefined}
+          onCsvFirstRowAsHeaderChange={() => undefined}
+          onRelocateEpub={() => undefined}
+          onNavigateLink={navigate}
+        />
+      ),
+      root,
+    );
+    const link = root.querySelector("a");
+    if (!link) throw new Error("missing link");
+    link.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+    await vi.waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({
+        path: "/docs/a.md",
+        fragment: "heading",
+      }),
+    );
+  });
+});
+
 describe("WorkspaceDocumentColumn source mode", () => {
   it("uses source layout for Python and JSON while keeping image layout separate", () => {
     const root = document.createElement("div");

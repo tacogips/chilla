@@ -1,6 +1,7 @@
 # Link Navigation: Link Classification and Fragment Lookup Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
+**Completion**: 2026-11-19. Adversarial review accepted (comm-019097); DESIGN-001 resolved by `resolveDocumentPathname` (no re-split after decoding). Serial reconciliation gates passed (`tmp/link-nav-history-20261119-01/serial-reconcile-wave-001/`). Archived to `impl-plans/completed/link-nav-preview-links.md`.
 **Plan ID**: link-nav-preview-links
 **Wave**: 1 (no dependencies)
 **Design Reference**: design-docs/specs/design-link-navigation-history.md#link-classification, #fragment-resolution
@@ -189,10 +190,10 @@ functions) with `documentPath = /docs/index.md`:
 
 ## Completion Criteria
 
-- [ ] Pinned exports exist with the exact signatures
-- [ ] All listed test cases are implemented and passing
-- [ ] `package.json` test script includes `previewLinks.test.ts`
-- [ ] typecheck and biome are clean for owned files
+- [x] Pinned exports exist with the exact signatures
+- [x] All listed test cases are implemented and passing
+- [x] `package.json` test script includes `previewLinks.test.ts`
+- [x] typecheck and biome are clean for owned files
 
 ## Progress Log
 
@@ -201,3 +202,25 @@ functions) with `documentPath = /docs/index.md`:
 **Notes**: Read each owned file fresh before editing and record its hash
 before and after. `package.json` is touched only for the single test-script
 append.
+
+### Session: 2026-11-19 — implementation
+**Tasks Completed**: Implemented pathname resolution, link classification, slug and fragment lookup, targeted tests, and test script entry.
+**Verification**: Focused Bun tests 13 passed; Vitest 1 passed; typecheck and scoped Biome passed. Complete logs are in `tmp/link-nav-history-20261119-01/link-nav-preview-links/attempt2/`. Earlier fixture and typecheck failures were corrected; logs remain in attempt1. Tests ran on the shared tree during fanout.
+**Next**: Independent review, serial integration and workspace-wide verification remain downstream.
+**Per-edit SHA-256** (intent and pre-edit content in corresponding attempt1 JSON):
+- edit-01.json `src/features/preview/preview-assets.ts`: `b48b272553cec4692685e4963f8d66e90a8970eca1166692ed551572ded067a5` -> `4470266f0de6c0b46bbd822be53f5435f065c431e46a043ecf538c9ae13ad921`
+- edit-02.json `src/features/preview/previewLinks.ts`: `absent` -> `750967ff84bfad4f3e4970cf4d6e44a50255f91b74b83d3d5c9a32a681061a36`
+- edit-03.json `src/features/preview/previewFragment.ts`: `absent` -> `3655f8bb1e8f81621b5929b1063e28a32de5247564d3ac7dc194dc5bf96f6de0`
+- edit-04.json `package.json`: `e635a6fda6d6bee0dd029360c234c1dbc31eb41a961c48889274b65de6787b62` -> `7cd16a7330511ee85a0c73f3ae3ac825a370924f5cd6165812b74c33d1090c21`
+- edit-05.json `src/features/preview/preview-assets.test.ts`: `db7b5ed83031ea44fecc185510183f797a6bf4ca2e370c8dcfec82d04afbaa65` -> `b67bc20de6bcaa35b738c218726594399a4e62974b8d307deab789b804e35431`
+- edit-06.json `src/features/preview/previewLinks.test.ts`: `absent` -> `6c6c919dba0f6d5f09eae09c424e021d9bfd91333055b1047010e0428161d5a3`
+- edit-07.json `src/features/preview/previewFragment.vitest.ts`: `absent` -> `62f47ee19e8dff5528b2f2d44d0ba66b6cd157067c901d53562647c8d774bd6d`
+- edit-08.json `src/features/preview/preview-assets.ts`: `4470266f0de6c0b46bbd822be53f5435f065c431e46a043ecf538c9ae13ad921` -> `b4c2bdfb0bdbb59596032e49582bc804564b735ee25875ce162164a23993c698`
+- edit-09.json `src/features/preview/preview-assets.test.ts`: `b67bc20de6bcaa35b738c218726594399a4e62974b8d307deab789b804e35431` -> `dbba00f4575e91e403d638443cf2107baf2b81e1a4ada98ef85eaf7c5c3ce268`
+- edit-10.json `src/features/preview/previewLinks.ts`: `750967ff84bfad4f3e4970cf4d6e44a50255f91b74b83d3d5c9a32a681061a36` -> `4aaf657c044c5994823bb797cbbfa7d0634279417f0b2aea8cec8a5a43b8cd39`
+- edit-11.json `src/features/preview/previewLinks.test.ts`: `6c6c919dba0f6d5f09eae09c424e021d9bfd91333055b1047010e0428161d5a3` -> `6a1d4dcc73cb7f6676957e043fd43afb3adf70d62ea5ed735bd9ae804aaba5c7`
+- edit-12.json `src/features/preview/previewFragment.ts`: `3655f8bb1e8f81621b5929b1063e28a32de5247564d3ac7dc194dc5bf96f6de0` -> `020a7c5e7a6b6590f6f4f9d1cc262a517e6c32c7e193df6c4a09a460f8e2a5eb`
+- edit-13.json `src/features/preview/previewFragment.vitest.ts`: `62f47ee19e8dff5528b2f2d44d0ba66b6cd157067c901d53562647c8d774bd6d` -> `b2b585d49d018e1ca5d1d4d37d03522d9e8f09051803f588d671207dd1ba3f7a`
+- edit-14.json `src/features/preview/previewFragment.vitest.ts`: `b2b585d49d018e1ca5d1d4d37d03522d9e8f09051803f588d671207dd1ba3f7a` -> `e1ccbe1fe131d2847229faabf5257c9f71d2e3a5441dbe9dc66e282c4f78112a`
+- edit-15.json `src/features/preview/previewLinks.test.ts`: `6a1d4dcc73cb7f6676957e043fd43afb3adf70d62ea5ed735bd9ae804aaba5c7` -> `7db53c8b6ee537510b3eefa7d1e437780bcee0cc5d3be005589c22bc149158e3`
+- This plan edit: before `6f186c80c5561677b3df54b13aabbe66ad8ede38bba234d57d1b0ea32d51c93c`; after hash and intent are recorded in `tmp/link-nav-history-20261119-01/link-nav-preview-links/attempt2/plan-edit.json`.

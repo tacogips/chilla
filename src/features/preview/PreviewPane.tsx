@@ -20,7 +20,12 @@ import {
   resolveDocumentResource,
   type PreviewPathApi,
 } from "./preview-assets";
+import { findFragmentTarget } from "./previewFragment";
 import { PreviewHeader } from "./PreviewHeader";
+import {
+  classifyPreviewLink,
+  type PreviewLinkNavigation,
+} from "./previewLinks";
 import {
   anchorScrollAfterZoom,
   applyWheelZoom,
@@ -35,6 +40,7 @@ interface PreviewPaneProps {
   readonly visible: boolean;
   readonly selectedAnchorId: string | null;
   readonly documentPath: string | null;
+  readonly onNavigateLink?: (request: PreviewLinkNavigation) => void;
   readonly colorScheme: ColorScheme;
   readonly subtitle?: string;
   readonly dragPanEnabled?: boolean;
@@ -654,21 +660,49 @@ export function PreviewPane(props: PreviewPaneProps) {
     const handleClick = (event: MouseEvent) => {
       const target = event.target;
 
-      if (!(target instanceof Element)) {
+      if (
+        event.button !== 0 ||
+        !(target instanceof Element) ||
+        target.closest("[role=dialog]") !== null
+      ) {
         return;
       }
 
       const link = target.closest<HTMLAnchorElement>("a[href]");
       const href = link?.getAttribute("href");
-
-      if (href === null || href === undefined || !isDefaultBrowserUrl(href)) {
+      if (
+        link === null ||
+        !container.contains(link) ||
+        href === null ||
+        href === undefined
+      )
         return;
-      }
 
       event.preventDefault();
-      void openUrl(href).catch(() => {
-        // Leave the link inert if the desktop opener is unavailable.
-      });
+      const documentPath = props.documentPath;
+      void classifyPreviewLink(href, documentPath, {
+        dirname,
+        join,
+        normalize,
+      })
+        .then((result) => {
+          if (result.kind === "external") return openUrl(result.url);
+          if (result.kind === "anchor" && documentPath !== null) {
+            props.onNavigateLink?.({
+              path: documentPath,
+              fragment: result.fragment,
+            });
+          } else if (result.kind === "file") {
+            props.onNavigateLink?.({
+              path: result.path,
+              fragment: result.fragment,
+            });
+          }
+          return undefined;
+        })
+        .catch(() => {
+          // Leave the link inert if classification or the opener fails.
+        });
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -789,7 +823,7 @@ export function PreviewPane(props: PreviewPaneProps) {
       return;
     }
 
-    const target = container.querySelector<HTMLElement>(`#${anchorId}`);
+    const target = findFragmentTarget(container, anchorId);
     target?.scrollIntoView({ block: "start", behavior: "smooth" });
   });
 

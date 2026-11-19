@@ -248,14 +248,14 @@ fn sanitize_markdown_media_url(url: CowStr<'_>) -> CowStr<'_> {
 }
 
 fn is_safe_link_url(value: &str) -> bool {
-    is_safe_url(value, false)
+    is_safe_url(value, false, true)
 }
 
 fn is_safe_media_url(value: &str) -> bool {
-    is_safe_url(value, true)
+    is_safe_url(value, true, false)
 }
 
-fn is_safe_url(value: &str, allow_data_image: bool) -> bool {
+fn is_safe_url(value: &str, allow_data_image: bool, allow_mailto: bool) -> bool {
     let trimmed = value.trim();
     if trimmed.is_empty() || trimmed.starts_with("//") {
         return false;
@@ -269,7 +269,8 @@ fn is_safe_url(value: &str, allow_data_image: bool) -> bool {
     if let Some(scheme_end) = trimmed.find(':') {
         let first_path_boundary = trimmed.find(['/', '?', '#']).unwrap_or(trimmed.len());
         if scheme_end < first_path_boundary {
-            return matches!(&lower[..scheme_end], "http" | "https");
+            return matches!(&lower[..scheme_end], "http" | "https")
+                || (allow_mailto && &lower[..scheme_end] == "mailto");
         }
     }
 
@@ -766,7 +767,7 @@ fn build_heading_tree(flat_headings: &[FlatHeading]) -> Vec<HeadingNode> {
 mod tests {
     use crate::syntax_highlight::SyntaxUiTheme;
 
-    use super::render_markdown;
+    use super::{render_markdown, sanitize_markdown_media_url, CowStr};
 
     #[test]
     fn renders_heading_ids_and_nested_headings() {
@@ -969,6 +970,41 @@ mod tests {
 
         assert!(rendered.html.contains("src=\"data:image/png;base64,AAAA\""));
         assert!(rendered.html.contains("<a href=\"#\">x</a>"));
+    }
+
+    #[test]
+    fn preserves_mailto_markdown_link() {
+        let rendered = render_markdown("[m](mailto:a@b.c)", SyntaxUiTheme::Dark);
+        assert!(rendered.html.contains("href=\"mailto:a@b.c\""));
+    }
+
+    #[test]
+    fn preserves_uppercase_mailto_markdown_link() {
+        let rendered = render_markdown("[m](MAILTO:a@b.c)", SyntaxUiTheme::Dark);
+        assert!(rendered.html.contains("href=\"MAILTO:a@b.c\""));
+    }
+
+    #[test]
+    fn rejects_javascript_markdown_link() {
+        let rendered = render_markdown("[x](javascript:alert(1))", SyntaxUiTheme::Dark);
+        assert!(rendered.html.contains("href=\"#\""));
+    }
+
+    #[test]
+    fn rejects_mailto_markdown_image() {
+        let rendered = render_markdown("![i](mailto:a@b.c)", SyntaxUiTheme::Dark);
+        assert_eq!(
+            sanitize_markdown_media_url(CowStr::from("mailto:a@b.c")).as_ref(),
+            ""
+        );
+        assert!(!rendered.html.contains("<img"));
+        assert!(!rendered.html.contains("mailto:"));
+    }
+
+    #[test]
+    fn preserves_relative_markdown_link_fragment() {
+        let rendered = render_markdown("[r](./other.md#sec)", SyntaxUiTheme::Dark);
+        assert!(rendered.html.contains("href=\"./other.md#sec\""));
     }
 
     #[test]

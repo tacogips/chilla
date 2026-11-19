@@ -184,6 +184,8 @@ Markdown source can be edited in the raw pane and saved back to disk. If the fil
 - File browser with List and Tree views and keyboard navigation inspired by terminal file managers, including toolbar icons for filtering and Git-ignored visibility, compact absolute-path display with full-path hover text, a `Tab` directory-information tree, dedicated symbolic-link icons, and link destinations relative to the current directory with full-path hover text
 - Tree view roots the left pane at the current directory and expands folders inline. Ordinary browsing starts in List; Git and GitHub diffs start in Tree, with changed files grouped into folders. Use the List/Tree controls to switch views.
 - Markdown heading extraction and table of contents
+- In-app Markdown preview links: relative (`./`, `../`, subdirectory), URL-encoded, absolute local paths, and `#anchor` links (same file or another file) open inside chilla at the target heading; `http(s)` and `mailto` links open in the system browser or mail app, never inside the webview
+- Back/Forward navigation history: toolbar Back/Forward buttons (disabled when there is nothing to return to and in diff views), `Cmd/Ctrl+[` / `Alt+Left` and `Cmd/Ctrl+]` / `Alt+Right` (ignored while a text field or editor has focus), and mouse back/forward buttons where the webview delivers them. Each successful open (link, file tree, Open Files, native open) adds an entry and clears the forward stack; reload and refresh do not. Back/Forward restore the file and its scroll position in both single and pair view
 - Direct Markdown view selection with `1` for raw source and `2` for rendered preview
 - Backend-owned Markdown parsing in Rust
 - Mermaid hydration on the frontend after preview render
@@ -419,7 +421,8 @@ Workspace actions: `help`, `quit`, `files.open`, `document.save`,
 `document.reload`, `path.copy`, `sidebar.toggle`, `pair.left.toggle`, `pair.right.toggle`, `git.toggle`, `toc.toggle`,
 `presentation.toggle`, `presentation.raw`, `presentation.rendered`,
 `format.toggle`, `syntax.toggle`, `theme.toggle`, `scroll.up`, `scroll.down`,
-`document.previous`, and `document.next`. `noop` is valid in either context.
+`document.previous`, `document.next`, `history.back`, and `history.forward`. `noop` is valid in either context.
+`Cmd/Ctrl+[` and `Alt+Left` go back; `Cmd/Ctrl+]` and `Alt+Right` go forward; mouse back/forward buttons work where the webview delivers them.
 `presentation.toggle`/`presentation.raw`/`presentation.rendered` also drive
 Raw/Preview for Markdown and HTML (HTML Preview is a sandboxed, script-disabled
 rendered view) and Raw/Formatted for CSV, TSV, JSON, JSON Lines, XML, CSS, and

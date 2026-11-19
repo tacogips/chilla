@@ -1,8 +1,10 @@
+import { posix } from "node:path";
 import { describe, expect, it } from "bun:test";
 import {
   isDefaultBrowserUrl,
   isHeicImageResource,
   isVideoResource,
+  resolveDocumentPathname,
   resolveDocumentResource,
   resolveDocumentResourceUrl,
   shouldResolveLocalResource,
@@ -104,5 +106,28 @@ describe("preview asset helpers", () => {
         stubPathApi,
       ),
     ).resolves.toBe("asset:///docs/notes/./clips/demo.mp4?download=1#t=30");
+  });
+});
+
+describe("pathname resolution", () => {
+  it("does not split decoded delimiters", async () => {
+    const pathApi = {
+      dirname: async (path: string) => posix.dirname(path),
+      join: async (...paths: string[]) => posix.join(...paths),
+      normalize: async (path: string) => posix.normalize(path),
+    };
+    expect(
+      await resolveDocumentPathname(
+        "chapter#one.md",
+        "/docs/index.md",
+        pathApi,
+      ),
+    ).toBe("/docs/chapter#one.md");
+    expect(
+      await resolveDocumentPathname("../x?.md", "/docs/index.md", pathApi),
+    ).toBe("/x?.md");
+    expect(
+      await resolveDocumentPathname("/abs/y.md", "/docs/index.md", pathApi),
+    ).toBe("/abs/y.md");
   });
 });
